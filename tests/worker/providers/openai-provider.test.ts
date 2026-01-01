@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { NullPromptExecutionLogger } from "../../../worker/providers/execution-logger";
 import { OpenAIProvider } from "../../../worker/providers/openai-provider";
 import type { ExecuteRequest } from "../../../worker/providers/base-provider";
+import {NullPromptExecutionLogger} from "../../../worker/providers/logger/null-prompt-execution-logger";
 
 // Mock the OpenAI module
 vi.mock("openai", () => {

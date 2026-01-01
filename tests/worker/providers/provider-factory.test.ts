@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { ProviderFactory } from "../../../worker/providers/provider-factory";
 import { OpenAIProvider } from "../../../worker/providers/openai-provider";
 import { GoogleProvider } from "../../../worker/providers/google-provider";
-import { NullPromptExecutionLogger } from "../../../worker/providers/execution-logger";
+
+import {NullPromptExecutionLogger} from "../../../worker/providers/logger/null-prompt-execution-logger";
 
 describe("ProviderFactory", () => {
   let logger: NullPromptExecutionLogger;

@@ -7,7 +7,8 @@ import { ProjectService } from "../services/project.service";
 import { PromptService } from "../services/prompt.service";
 import { ProviderService } from "../services/provider.service";
 import type { AIMessage } from "../providers/base-provider";
-import { CFPromptExecutionLogger } from "../providers/execution-logger";
+
+import {CFPromptExecutionLogger} from "../providers/logger/c-f-prompt-execution-logger";
 
 const v1 = new Hono<HonoEnv>();
 

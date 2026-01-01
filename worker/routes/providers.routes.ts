@@ -3,7 +3,8 @@ import type { HonoEnv } from "./app";
 import { requireAuth } from "../middleware/auth.middleware";
 import { ProviderService } from "../services/provider.service";
 import type { AIMessage } from "../providers/base-provider";
-import { NullPromptExecutionLogger } from "../providers/execution-logger";
+
+import {NullPromptExecutionLogger} from "../providers/logger/null-prompt-execution-logger";
 
 const providers = new Hono<HonoEnv>();
 

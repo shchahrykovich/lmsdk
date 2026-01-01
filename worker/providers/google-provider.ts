@@ -4,7 +4,7 @@ import {
   type ExecuteRequest,
   type ExecuteResult,
 } from "./base-provider";
-import type { IPromptExecutionLogger } from "./execution-logger";
+import type { IPromptExecutionLogger } from "./logger/execution-logger";
 
 /**
  * Google Gemini provider implementation

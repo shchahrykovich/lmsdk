@@ -1,12 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { env } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
-import { applyMigrations } from "../helpers/db-setup";
-import {
-  NullPromptExecutionLogger,
-  CFPromptExecutionLogger,
-} from "../../../worker/providers/execution-logger";
-import type { ExecutionLogQueueMessage } from "../../../worker/queue/messages";
+import { applyMigrations } from "../../helpers/db-setup";
+import type { ExecutionLogQueueMessage } from "../../../../worker/queue/messages";
+import {CFPromptExecutionLogger} from "../../../../worker/providers/logger/c-f-prompt-execution-logger";
+import {NullPromptExecutionLogger} from "../../../../worker/providers/logger/null-prompt-execution-logger";
 
 // Mock queue for testing
 class MockQueue implements Queue {

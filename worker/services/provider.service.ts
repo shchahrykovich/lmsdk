@@ -1,7 +1,7 @@
 import { ProviderFactory, type ProviderConfig } from "../providers/provider-factory";
 import type { ExecuteRequest, ExecuteResult, AIMessage } from "../providers/base-provider";
 import { getOpenAIModels } from "../utils/openai-models";
-import type { IPromptExecutionLogger } from "../providers/execution-logger";
+import type { IPromptExecutionLogger } from "../providers/logger/execution-logger";
 
 /**
  * Provider metadata for frontend display

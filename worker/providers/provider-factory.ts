@@ -1,7 +1,7 @@
 import { AIProvider } from "./base-provider";
 import { OpenAIProvider } from "./openai-provider";
 import { GoogleProvider } from "./google-provider";
-import type { IPromptExecutionLogger } from "./execution-logger";
+import type { IPromptExecutionLogger } from "./logger/execution-logger";
 
 /**
  * Configuration for creating a provider instance

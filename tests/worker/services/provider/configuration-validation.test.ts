@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { ProviderService } from "../../../../worker/services/provider.service";
-import {NullPromptExecutionLogger} from "../../../../worker/providers/execution-logger";
+
+import {NullPromptExecutionLogger} from "../../../../worker/providers/logger/null-prompt-execution-logger";
 
 describe("ProviderService - Configuration validation", () => {
   it("should create service with valid config", () => {

@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { GoogleProvider } from "../../../worker/providers/google-provider";
 import type { ExecuteRequest } from "../../../worker/providers/base-provider";
-import { NullPromptExecutionLogger } from "../../../worker/providers/execution-logger";
+
+import {NullPromptExecutionLogger} from "../../../worker/providers/logger/null-prompt-execution-logger";
 
 // Mock the Google GenAI module
 vi.mock("@google/genai", () => {
