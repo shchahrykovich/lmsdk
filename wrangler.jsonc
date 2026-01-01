@@ -1,0 +1,82 @@
+/**
+ * For more details on how to configure Wrangler, refer to:
+ * https://developers.cloudflare.com/workers/wrangler/configuration/
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "lmsdk",
+  "main": "worker/index.ts",
+  "compatibility_date": "2025-12-17",
+  "assets": {
+    "directory": "dist",
+    "not_found_handling": "single-page-application"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "upload_source_maps": true,
+  "compatibility_flags": [
+    "nodejs_compat",
+    "global_fetch_strictly_public"
+  ],
+  "preview_urls": false,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "lmsdk-db",
+      "migrations_dir": "drizzle"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "PRIVATE_FILES",
+      "bucket_name": "lmsdk-private-files"
+    }
+  ],
+  "queues": {
+    "consumers": [
+      {
+        "queue": "lmsdk-queue"
+      }
+    ],
+    "producers": [
+      {
+        "queue": "lmsdk-queue",
+        "binding": "NEW_LOGS"
+      }
+    ]
+  },
+  "vars": {
+    "GITHUB_URL": "https://github.com/shchahrykovich/lmsdk",
+    "ALLOW_TO_CREATE_MORE_THAN_ONE_TENANT": "false",
+    "BETTER_AUTH_DISABLED_SIGN_UP": "false"
+  }
+  /**
+   * Smart Placement
+   * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
+   */
+  // "placement": {  "mode": "smart" }
+  /**
+   * Bindings
+   * Bindings allow your Worker to interact with resources on the Cloudflare Developer Platform, including
+   * databases, object storage, AI inference, real-time communication and more.
+   * https://developers.cloudflare.com/workers/runtime-apis/bindings/
+   */
+  /**
+   * Environment Variables
+   * https://developers.cloudflare.com/workers/wrangler/configuration/#environment-variables
+   * Note: Use secrets to store sensitive data.
+   * https://developers.cloudflare.com/workers/configuration/secrets/
+   */
+  // "vars": {  "MY_VARIABLE": "production_value" },
+  /**
+   * Secrets (set using: npx wrangler secret put SECRET_NAME)
+   * OPEN_AI_API_KEY - OpenAI API key for executing prompts
+   * GEMINI_API_KEY - Google Gemini API key for executing prompts
+   */
+  /**
+   * Service Bindings (communicate between multiple Workers)
+   * https://developers.cloudflare.com/workers/wrangler/configuration/#service-bindings
+   */
+  // "services": [  {   "binding": "MY_SERVICE",   "service": "my-service"  } ]
+}
