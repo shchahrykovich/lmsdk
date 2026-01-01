@@ -634,7 +634,7 @@ describe("TraceService - getTraceDetails", () => {
       const result = await traceService.getTraceDetails(1, 42, "trace-123");
 
       expect(result.logs).toHaveLength(1);
-      expect(result.logs[0].span).toBeNull();
+      expect(result.logs[0].trace).toBeNull();
     });
 
     it("returns null span when rawTraceId is invalid", async () => {
@@ -647,7 +647,7 @@ describe("TraceService - getTraceDetails", () => {
       const result = await traceService.getTraceDetails(1, 42, "trace-123");
 
       expect(result.logs).toHaveLength(1);
-      expect(result.logs[0].span).toBeNull();
+      expect(result.logs[0].trace).toBeNull();
     });
 
     it("correctly parses sampled flag from traceFlags", async () => {
@@ -668,10 +668,10 @@ describe("TraceService - getTraceDetails", () => {
       const result = await traceService.getTraceDetails(1, 42, "trace-123");
 
       expect(result.logs).toHaveLength(2);
-      expect(result.logs[0].span?.sampled).toBe(false);
-      expect(result.logs[0].span?.traceFlags).toBe("00");
-      expect(result.logs[1].span?.sampled).toBe(true);
-      expect(result.logs[1].span?.traceFlags).toBe("01");
+      expect(result.logs[0].trace?.sampled).toBe(false);
+      expect(result.logs[0].trace?.traceFlags).toBe("00");
+      expect(result.logs[1].trace?.sampled).toBe(true);
+      expect(result.logs[1].trace?.traceFlags).toBe("01");
     });
 
     it("handles mixed logs with and without rawTraceId", async () => {
@@ -698,16 +698,16 @@ describe("TraceService - getTraceDetails", () => {
       expect(result.logs).toHaveLength(3);
 
       // First log has span
-      expect(result.logs[0].span).not.toBeNull();
-      expect(result.logs[0].span?.spanId).toBe("00f067aa0ba902b7");
+      expect(result.logs[0].trace).not.toBeNull();
+      expect(result.logs[0].trace?.spanId).toBe("00f067aa0ba902b7");
 
       // Second log has no span
-      expect(result.logs[1].span).toBeNull();
+      expect(result.logs[1].trace).toBeNull();
 
       // Third log has span with different ID
-      expect(result.logs[2].span).not.toBeNull();
-      expect(result.logs[2].span?.spanId).toBe("00f067aa0ba902b8");
-      expect(result.logs[2].span?.traceId).toBe("5bf92f3577b34da6a3ce929d0e0e4737");
+      expect(result.logs[2].trace).not.toBeNull();
+      expect(result.logs[2].trace?.spanId).toBe("00f067aa0ba902b8");
+      expect(result.logs[2].trace?.traceId).toBe("5bf92f3577b34da6a3ce929d0e0e4737");
     });
 
     it("preserves all span fields when parsing", async () => {
@@ -721,7 +721,7 @@ describe("TraceService - getTraceDetails", () => {
       const result = await traceService.getTraceDetails(1, 42, "trace-123");
 
       expect(result.logs).toHaveLength(1);
-      const span = result.logs[0].span;
+      const span = result.logs[0].trace;
 
       expect(span).not.toBeNull();
       expect(span?.version).toBe("ff");
@@ -742,7 +742,7 @@ describe("TraceService - getTraceDetails", () => {
       const result = await traceService.getTraceDetails(1, 42, "trace-123");
 
       expect(result.logs).toHaveLength(1);
-      const span = result.logs[0].span;
+      const span = result.logs[0].trace;
 
       expect(span).not.toBeNull();
       expect(span?.traceId).toBe("4BF92F3577B34DA6A3CE929D0E0E4736");
@@ -762,7 +762,7 @@ describe("TraceService - getTraceDetails", () => {
       expect(result.logs).toHaveLength(1);
       // Both rawTraceId and span should be present
       expect(result.logs[0].rawTraceId).toBe(rawTraceId);
-      expect(result.logs[0].span).not.toBeNull();
+      expect(result.logs[0].trace).not.toBeNull();
     });
   });
 

@@ -10,17 +10,6 @@ export interface PromptExecutionContext {
 }
 
 /**
- * Input data for prompt execution
- */
-export interface InputLogData {
-    model: string;
-    messages: Array<{ role: string; content: string }>;
-    response_format?: any;
-    openai_settings?: any;
-}
-
-
-/**
  * Variables used in prompt execution
  */
 export interface VariablesLogData {
@@ -45,7 +34,7 @@ export interface IPromptExecutionLogger {
         projectId?: number;
         promptId?: number;
         version?: number;
-        input: InputLogData;
+        input: unknown;
     }): Promise<void>;
 
     /**

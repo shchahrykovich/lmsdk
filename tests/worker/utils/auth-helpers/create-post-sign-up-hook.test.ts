@@ -153,22 +153,21 @@ describe("createPostSignUpHook", () => {
       expect(tenantCount?.count).toBe(1);
     });
 
-    it("should throw when user with tenantId > 1 tries to create another tenant", async () => {
+    it("should not create tenant when tenants already exist", async () => {
       const db = drizzle(env.DB);
       const userId = `user_${randomBytes(4).toString("hex")}`;
 
       // Create existing tenant first
-      const [existingTenant] = await db.insert(tenants).values({
+      await db.insert(tenants).values({
         isActive: true,
-      }).returning();
+      });
 
-      // Create user with tenantId > 1
+      // Create user with default tenantId
       await db.insert(user).values({
         id: userId,
         email: `${userId}@example.com`,
         name: "Test User",
         emailVerified: false,
-        tenantId: 2, // User already has a tenantId > 1
         createdAt: new Date(),
         updatedAt: new Date(),
       });
@@ -179,13 +178,11 @@ describe("createPostSignUpHook", () => {
         ALLOW_TO_CREATE_MORE_THAN_ONE_TENANT: "false",
       } as Cloudflare.Env);
 
-      // Execute hook should throw because tenantId > 1 and tenants exist
-      await expect(
-        hook({
-          path: "/sign-up",
-          context: { newSession: { user: { id: userId, tenantId: 2 } } },
-        })
-      ).rejects.toThrow("Tenant limit reached: multiple tenants are not allowed");
+      // Execute hook
+      await hook({
+        path: "/sign-up",
+        context: { newSession: { user: { id: userId } } },
+      });
 
       // Verify user tenantId unchanged using SQL
       const updatedUser = await env.DB.prepare(
@@ -194,7 +191,7 @@ describe("createPostSignUpHook", () => {
         .bind(userId)
         .first<{ tenantId: number }>();
 
-      expect(updatedUser?.tenantId).toBe(2);
+      expect(updatedUser?.tenantId).toBe(-1);
 
       // Verify no new tenant created using SQL
       const tenantCount = await env.DB.prepare(
@@ -204,53 +201,6 @@ describe("createPostSignUpHook", () => {
       expect(tenantCount?.count).toBe(1); // Only the pre-existing tenant
     });
 
-    it("should create tenant for new user even if tenants exist (tenantId <= 1)", async () => {
-      const db = drizzle(env.DB);
-      const userId = `user_${randomBytes(4).toString("hex")}`;
-
-      // Create user with default tenantId (-1)
-      await db.insert(user).values({
-        id: userId,
-        email: `${userId}@example.com`,
-        name: "Test User",
-        emailVerified: false,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-
-      // Create existing tenant
-      await db.insert(tenants).values({
-        isActive: true,
-      });
-
-      // Create hook with multiple tenants disabled
-      const hook = createPostSignUpHook(db, {
-        ...env,
-        ALLOW_TO_CREATE_MORE_THAN_ONE_TENANT: "false",
-      } as Cloudflare.Env);
-
-      // Execute hook - should succeed because check only applies when tenantId > 1
-      await hook({
-        path: "/sign-up",
-        context: { newSession: { user: { id: userId } } },
-      });
-
-      // Verify user assigned to new tenant using SQL
-      const updatedUser = await env.DB.prepare(
-        "SELECT tenantId FROM user WHERE id = ?"
-      )
-        .bind(userId)
-        .first<{ tenantId: number }>();
-
-      expect(updatedUser?.tenantId).toBeGreaterThan(0);
-
-      // Verify new tenant created using SQL
-      const tenantCount = await env.DB.prepare(
-        "SELECT COUNT(*) as count FROM Tenants"
-      ).first<{ count: number }>();
-
-      expect(tenantCount?.count).toBe(2); // Original + new tenant
-    });
   });
 
   describe("when path is not sign-up", () => {

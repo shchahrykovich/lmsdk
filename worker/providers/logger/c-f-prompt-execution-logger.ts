@@ -3,14 +3,14 @@ import type {ExecutionLogQueueMessage} from "../../queue/messages.ts";
 import {parseTraceParent} from "../../utils/trace-parser.ts";
 import {promptExecutionLogs} from "../../db/schema.ts";
 import {eq} from "drizzle-orm";
-import type {InputLogData, IPromptExecutionLogger, PromptExecutionContext} from "./execution-logger.ts";
+import type {IPromptExecutionLogger, PromptExecutionContext} from "./execution-logger.ts";
 
 export class CFPromptExecutionLogger implements IPromptExecutionLogger {
     private context?: PromptExecutionContext;
     private db: DrizzleD1Database;
     private r2: R2Bucket;
     private queue: Queue;
-    private inputData?: InputLogData;
+    private inputData?: unknown;
     private outputData?: unknown;
     private resultData?: unknown;
     private responseData?: unknown;
@@ -143,7 +143,7 @@ export class CFPromptExecutionLogger implements IPromptExecutionLogger {
         projectId?: number;
         promptId?: number;
         version?: number;
-        input: InputLogData;
+        input: unknown;
     }): Promise<void> {
         // Just accumulate data - persistence happens in finish
         this.inputData = params.input;

@@ -33,15 +33,6 @@ export class GoogleProvider extends AIProvider {
     const startTime = Date.now();
     const { model, messages, response_format, variables, google_settings } = request;
 
-    // Log input
-    await this.logger.logInput({
-      input: {
-        model,
-        messages,
-        response_format,
-      },
-    });
-
     // Log variables if provided
     if (variables) {
       await this.logger.logVariables({ variables });
@@ -122,6 +113,15 @@ export class GoogleProvider extends AIProvider {
           config.tools = [{ googleSearchRetrieval: {} }];
         }
       }
+
+      // Log input
+      await this.logger.logInput({
+        input: {
+          model: model,
+          config: config,
+          contents: contents,
+        },
+      });
 
       // Execute the request using generateContentStream
       const response: any = await this.client.models.generateContentStream({

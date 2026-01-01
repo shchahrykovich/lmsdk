@@ -275,7 +275,7 @@ describe("Auth Middleware", () => {
       expect(data).toEqual({ error: "Unauthorized - Authentication required" });
     });
 
-    it("should allow user with tenantId = 0 (only checks authentication)", async () => {
+    it("should not allow user with tenantId = 0", async () => {
       const mockUser: AuthenticatedUser = {
         id: "user-123",
         name: "Test User",
@@ -296,10 +296,10 @@ describe("Auth Middleware", () => {
         method: "GET",
       });
 
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(401);
     });
 
-    it("should allow user with tenantId = -1 (only checks authentication)", async () => {
+    it("should not allow user with tenantId = -1", async () => {
       const mockUser: AuthenticatedUser = {
         id: "user-123",
         name: "Test User",
@@ -320,7 +320,7 @@ describe("Auth Middleware", () => {
         method: "GET",
       });
 
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(401);
     });
 
     it("should store user in context for later use", async () => {
@@ -410,7 +410,7 @@ describe("Auth Middleware", () => {
 
       expect(response.status).toBe(401);
       const data = await response.json();
-      expect(data).toEqual({ error: "Unauthorized - Invalid tenant" });
+      expect(data).toEqual({ error: "Unauthorized - Authentication required" });
     });
 
     it("should return 401 when user has tenantId = 0", async () => {

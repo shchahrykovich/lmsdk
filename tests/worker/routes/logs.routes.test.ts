@@ -303,7 +303,7 @@ describe("Logs Routes", () => {
 
     expect(response.status).toBe(401);
     const data = await response.json();
-    expect(data).toEqual({ error: "Unauthorized - Invalid tenant" });
+    expect(data).toEqual({ error: "Unauthorized - Authentication required" });
   });
 
   it("returns 401 when user has no valid tenant", async () => {

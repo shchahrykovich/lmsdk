@@ -241,7 +241,7 @@ export default function SpanWaterfall({ logs, onSpanClick }: SpanWaterfallProps)
           </div>
 
           {/* Date/Time labels */}
-          <div className="relative h-5 mt-1">
+          <div className="relative h-5 mt-1 mb-7">
             <div className="absolute inset-0 flex justify-between items-start text-xs text-muted-foreground">
               <span className="flex flex-col items-start">
                 <span className="font-medium">Start</span>

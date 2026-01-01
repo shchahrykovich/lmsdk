@@ -85,7 +85,6 @@ describe("UserService - createUser", () => {
         name: "Test User",
         email: "test@example.com",
         password: "securepass",
-        tenantId: 5,
       },
     });
   });

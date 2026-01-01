@@ -33,16 +33,6 @@ export class OpenAIProvider extends AIProvider {
     const startTime = Date.now();
     const { model, messages, response_format, openai_settings, variables } = request;
 
-    // Log input
-    await this.logger.logInput({
-      input: {
-        model,
-        messages,
-        response_format,
-        openai_settings,
-      },
-    });
-
     // Log variables if provided
     if (variables) {
       await this.logger.logVariables({ variables });
@@ -93,6 +83,19 @@ export class OpenAIProvider extends AIProvider {
       if (openai_settings?.include_encrypted_reasoning !== false) {
         includeArray.push("reasoning.encrypted_content");
       }
+
+      // Log input
+      await this.logger.logInput({
+        input: {
+          model: model,
+          input: inputMessages as any,
+          text: textFormat,
+          reasoning: reasoningConfig,
+          tools: [],
+          store: openai_settings?.store !== false, // Default to true
+          include: includeArray,
+        },
+      });
 
       // Execute the prompt using responses.create
       const response = await this.client.responses.create({

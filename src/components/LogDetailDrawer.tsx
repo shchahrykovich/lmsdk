@@ -1,4 +1,3 @@
-import { Button } from "@/components/ui/button";
 import {
   Sheet,
   SheetContent,
@@ -7,6 +6,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Clock, Timer, CheckCircle2, AlertCircle } from "lucide-react";
+import JsonSection from "@/components/JsonSection";
 
 interface LogEntry {
   id: number;
@@ -51,28 +51,6 @@ export default function LogDetailDrawer({
     const timestamp =
       typeof value === "number" && value < 1_000_000_000_000 ? value * 1000 : value;
     return new Date(timestamp).toLocaleString();
-  };
-
-  const stringifyData = (data: unknown) => {
-    if (data === null || data === undefined) {
-      return "No data available.";
-    }
-    if (typeof data === "string") {
-      return data;
-    }
-    try {
-      return JSON.stringify(data, null, 2);
-    } catch {
-      return String(data);
-    }
-  };
-
-  const copyToClipboard = async (data: unknown) => {
-    try {
-      await navigator.clipboard.writeText(stringifyData(data));
-    } catch (err) {
-      console.error("Failed to copy log data:", err);
-    }
   };
 
   return (
@@ -147,95 +125,11 @@ export default function LogDetailDrawer({
               {/*  </pre>*/}
               {/*</div>*/}
 
-              {/* Variables */}
-              <div className="rounded-lg border border-border bg-card p-4 group">
-                <div className="flex items-center justify-between gap-3 mb-2">
-                  <h3 className="text-sm font-semibold text-foreground">Variables</h3>
-                  <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs opacity-0 transition-opacity group-hover:opacity-100"
-                      onClick={() => copyToClipboard(files?.variables ?? null)}
-                  >
-                    Copy
-                  </Button>
-                </div>
-                <pre className="text-xs text-muted-foreground whitespace-pre-wrap max-h-48 overflow-y-auto">
-                  {stringifyData(files?.variables ?? null)}
-                </pre>
-              </div>
-
-              {/* Response */}
-              <div className="rounded-lg border border-border bg-card p-4 group">
-                <div className="flex items-center justify-between gap-3 mb-2">
-                  <h3 className="text-sm font-semibold text-foreground">Response</h3>
-                  <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs opacity-0 transition-opacity group-hover:opacity-100"
-                      onClick={() => copyToClipboard(files?.response ?? null)}
-                  >
-                    Copy
-                  </Button>
-                </div>
-                <pre className="text-xs text-muted-foreground whitespace-pre-wrap max-h-48 overflow-y-auto">
-                  {stringifyData(files?.response ?? null)}
-                </pre>
-              </div>
-
-              {/* Result */}
-              <div className="rounded-lg border border-border bg-card p-4 group">
-                <div className="flex items-center justify-between gap-3 mb-2">
-                  <h3 className="text-sm font-semibold text-foreground">Result</h3>
-                  <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs opacity-0 transition-opacity group-hover:opacity-100"
-                      onClick={() => copyToClipboard(files?.result ?? null)}
-                  >
-                    Copy
-                  </Button>
-                </div>
-                <pre className="text-xs text-muted-foreground whitespace-pre-wrap max-h-48 overflow-y-auto">
-                  {stringifyData(files?.result ?? null)}
-                </pre>
-              </div>
-
-              {/* Input */}
-              <div className="rounded-lg border border-border bg-card p-4 group">
-                <div className="flex items-center justify-between gap-3 mb-2">
-                  <h3 className="text-sm font-semibold text-foreground">Input</h3>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-xs opacity-0 transition-opacity group-hover:opacity-100"
-                    onClick={() => copyToClipboard(files?.input ?? null)}
-                  >
-                    Copy
-                  </Button>
-                </div>
-                <pre className="text-xs text-muted-foreground whitespace-pre-wrap max-h-48 overflow-y-auto">
-                  {stringifyData(files?.input ?? null)}
-                </pre>
-              </div>
-
-              {/* Output */}
-              <div className="rounded-lg border border-border bg-card p-4 group">
-                <div className="flex items-center justify-between gap-3 mb-2">
-                  <h3 className="text-sm font-semibold text-foreground">Output</h3>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-xs opacity-0 transition-opacity group-hover:opacity-100"
-                    onClick={() => copyToClipboard(files?.output ?? null)}
-                  >
-                    Copy
-                  </Button>
-                </div>
-                <pre className="text-xs text-muted-foreground whitespace-pre-wrap max-h-48 overflow-y-auto">
-                  {stringifyData(files?.output ?? null)}
-                </pre>
-              </div>
+              <JsonSection title="Variables" data={files?.variables} collapsed={false} compact />
+              <JsonSection title="Response" data={files?.response} collapsed={false} compact />
+              <JsonSection title="Result" data={files?.result} collapsed={2} compact />
+              <JsonSection title="Input" data={files?.input} collapsed={2} compact />
+              <JsonSection title="Output" data={files?.output} collapsed={2} compact />
             </div>
           </>
         ) : (

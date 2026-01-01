@@ -242,7 +242,7 @@ describe("Traces Routes", () => {
 
       expect(response.status).toBe(401);
       const data = await response.json();
-      expect(data).toEqual({ error: "Unauthorized - Invalid tenant" });
+      expect(data).toEqual({ error: "Unauthorized - Authentication required" });
       expect(listProjectTracesMock).not.toHaveBeenCalled();
     });
 
@@ -447,7 +447,7 @@ describe("Traces Routes", () => {
 
       expect(response.status).toBe(401);
       const data = await response.json();
-      expect(data).toEqual({ error: "Unauthorized - Invalid tenant" });
+      expect(data).toEqual({ error: "Unauthorized - Authentication required" });
       expect(getTraceDetailsMock).not.toHaveBeenCalled();
     });
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import ProjectPageHeader from "@/components/ProjectPageHeader";
+import JsonSection from "@/components/JsonSection";
 
 interface Project {
   id: number;
@@ -87,28 +88,6 @@ export default function LogDetail() {
     return new Date(timestamp).toLocaleString();
   };
 
-  const stringifyData = (data: unknown) => {
-    if (data === null || data === undefined) {
-      return "No data available.";
-    }
-    if (typeof data === "string") {
-      return data;
-    }
-    try {
-      return JSON.stringify(data, null, 2);
-    } catch {
-      return String(data);
-    }
-  };
-
-  const copyToClipboard = async (data: unknown) => {
-    try {
-      await navigator.clipboard.writeText(stringifyData(data));
-    } catch (err) {
-      console.error("Failed to copy log data:", err);
-    }
-  };
-
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -182,90 +161,11 @@ export default function LogDetail() {
             )}
           </div>
 
-          <div className="rounded-lg border border-border bg-card p-6 group">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold text-foreground">Variables</h2>
-              <Button
-                  variant="ghost"
-                  size="sm"
-                  className="opacity-0 transition-opacity group-hover:opacity-100"
-                  onClick={() => copyToClipboard(files?.variables ?? null)}
-              >
-                Copy
-              </Button>
-            </div>
-            <pre className="mt-3 text-xs text-muted-foreground whitespace-pre-wrap">
-              {stringifyData(files?.variables ?? null)}
-            </pre>
-          </div>
-
-          <div className="rounded-lg border border-border bg-card p-6 group">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold text-foreground">Response</h2>
-              <Button
-                  variant="ghost"
-                  size="sm"
-                  className="opacity-0 transition-opacity group-hover:opacity-100"
-                  onClick={() => copyToClipboard(files?.response ?? null)}
-              >
-                Copy
-              </Button>
-            </div>
-            <pre className="mt-3 text-xs text-muted-foreground whitespace-pre-wrap">
-              {stringifyData(files?.response ?? null)}
-            </pre>
-          </div>
-
-          <div className="rounded-lg border border-border bg-card p-6 group">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold text-foreground">Result</h2>
-              <Button
-                  variant="ghost"
-                  size="sm"
-                  className="opacity-0 transition-opacity group-hover:opacity-100"
-                  onClick={() => copyToClipboard(files?.result ?? null)}
-              >
-                Copy
-              </Button>
-            </div>
-            <pre className="mt-3 text-xs text-muted-foreground whitespace-pre-wrap">
-              {stringifyData(files?.result ?? null)}
-            </pre>
-          </div>
-
-          <div className="rounded-lg border border-border bg-card p-6 group">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold text-foreground">Input</h2>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="opacity-0 transition-opacity group-hover:opacity-100"
-                onClick={() => copyToClipboard(files?.input ?? null)}
-              >
-                Copy
-              </Button>
-            </div>
-            <pre className="mt-3 text-xs text-muted-foreground whitespace-pre-wrap">
-              {stringifyData(files?.input ?? null)}
-            </pre>
-          </div>
-
-          <div className="rounded-lg border border-border bg-card p-6 group">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold text-foreground">Output</h2>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="opacity-0 transition-opacity group-hover:opacity-100"
-                onClick={() => copyToClipboard(files?.output ?? null)}
-              >
-                Copy
-              </Button>
-            </div>
-            <pre className="mt-3 text-xs text-muted-foreground whitespace-pre-wrap">
-              {stringifyData(files?.output ?? null)}
-            </pre>
-          </div>
+          <JsonSection title="Variables" data={files?.variables} collapsed={false} />
+          <JsonSection title="Response" data={files?.response} collapsed={false} />
+          <JsonSection title="Result" data={files?.result} collapsed={2} />
+          <JsonSection title="Input" data={files?.input} collapsed={2} />
+          <JsonSection title="Output" data={files?.output} collapsed={2} />
         </div>
       </div>
     </div>

@@ -118,13 +118,14 @@ export class ProviderService {
       : request.messages;
 
     // Execute the prompt
-    return await provider.execute({
+    const result = await provider.execute({
       model: request.model,
       messages,
       response_format: request.response_format,
       openai_settings: request.openai_settings,
       variables: request.variables,
     });
+    return result;
   }
 
   /**
