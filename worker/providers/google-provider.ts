@@ -97,8 +97,8 @@ export class GoogleProvider extends AIProvider {
 
         // CRITICAL: Google API only allows ONE of thinking_budget OR thinking_level, not both
         // Priority: thinking_budget > thinking_level > neither
-        if (google_settings.thinking_budget !== undefined && google_settings.thinking_budget > 0) {
-          // Use thinking_budget if explicitly set (> 0)
+        if (google_settings.thinking_budget !== undefined && google_settings.thinking_budget != 0) {
+          // Use thinking_budget if explicitly set (!= 0)
           thinkingConfig.thinkingBudget = google_settings.thinking_budget;
         } else if (google_settings.thinking_level && google_settings.thinking_level !== "THINKING_LEVEL_UNSPECIFIED") {
           // Use thinking_level if it's set to a specific value

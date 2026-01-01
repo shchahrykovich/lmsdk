@@ -577,7 +577,10 @@ describe("GoogleProvider", () => {
         expect(callArgs.config.thinkingConfig.includeThoughts).toBe(false);
       });
 
-      it("should use thinking_budget when set to positive value", async () => {
+      it.each([
+        5000,
+        1
+      ])("should use thinking_budget when set to positive value", async (tokens: number) => {
         const mockStream = createMockStream([{ text: "Response" }]);
         mockGenerateContentStream.mockResolvedValue(mockStream);
 
@@ -585,7 +588,7 @@ describe("GoogleProvider", () => {
           model: "gemini-2.0-flash-thinking-exp-1219",
           messages: [{ role: "user", content: "Test" }],
           google_settings: {
-            thinking_budget: 5000,
+            thinking_budget: tokens,
           },
         };
 
@@ -593,7 +596,7 @@ describe("GoogleProvider", () => {
 
         const callArgs = mockGenerateContentStream.mock.calls[0][0];
         expect(callArgs.config.thinkingConfig).toBeDefined();
-        expect(callArgs.config.thinkingConfig.thinkingBudget).toBe(5000);
+        expect(callArgs.config.thinkingConfig.thinkingBudget).toBe(tokens);
         expect(callArgs.config.thinkingConfig.thinkingLevel).toBeUndefined();
       });
 
