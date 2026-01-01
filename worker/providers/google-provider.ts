@@ -113,7 +113,7 @@ export class GoogleProvider extends AIProvider {
 
         // Add tools if enabled
         if (google_settings.google_search_enabled) {
-          config.tools = [{ googleSearchRetrieval: {} }];
+          config.tools = [{ type: 'google_search' }];
         }
       }
 

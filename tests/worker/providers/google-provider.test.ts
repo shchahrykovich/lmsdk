@@ -521,6 +521,366 @@ describe("GoogleProvider", () => {
     });
   });
 
+  describe("Google-specific settings", () => {
+    let provider: GoogleProvider;
+    let mockGenerateContentStream: any;
+
+    beforeEach(() => {
+      provider = new GoogleProvider("test-api-key", logger);
+      mockGenerateContentStream = (provider as any).client.models.generateContentStream;
+      mockGenerateContentStream.mockReset();
+    });
+
+    // Helper to create async iterator from chunks
+    async function* createMockStream(chunks: Array<{ text?: string }>) {
+      for (const chunk of chunks) {
+        yield chunk;
+      }
+    }
+
+    describe("Thinking configuration", () => {
+      it("should include thoughts when include_thoughts is true", async () => {
+        const mockStream = createMockStream([{ text: "Response with thoughts" }]);
+        mockGenerateContentStream.mockResolvedValue(mockStream);
+
+        const request: ExecuteRequest = {
+          model: "gemini-2.0-flash-thinking-exp-1219",
+          messages: [{ role: "user", content: "Test" }],
+          google_settings: {
+            include_thoughts: true,
+          },
+        };
+
+        await provider.execute(request);
+
+        const callArgs = mockGenerateContentStream.mock.calls[0][0];
+        expect(callArgs.config.thinkingConfig).toBeDefined();
+        expect(callArgs.config.thinkingConfig.includeThoughts).toBe(true);
+      });
+
+      it("should not include thoughts when include_thoughts is false", async () => {
+        const mockStream = createMockStream([{ text: "Response without thoughts" }]);
+        mockGenerateContentStream.mockResolvedValue(mockStream);
+
+        const request: ExecuteRequest = {
+          model: "gemini-2.0-flash-thinking-exp-1219",
+          messages: [{ role: "user", content: "Test" }],
+          google_settings: {
+            include_thoughts: false,
+          },
+        };
+
+        await provider.execute(request);
+
+        const callArgs = mockGenerateContentStream.mock.calls[0][0];
+        expect(callArgs.config.thinkingConfig).toBeDefined();
+        expect(callArgs.config.thinkingConfig.includeThoughts).toBe(false);
+      });
+
+      it("should use thinking_budget when set to positive value", async () => {
+        const mockStream = createMockStream([{ text: "Response" }]);
+        mockGenerateContentStream.mockResolvedValue(mockStream);
+
+        const request: ExecuteRequest = {
+          model: "gemini-2.0-flash-thinking-exp-1219",
+          messages: [{ role: "user", content: "Test" }],
+          google_settings: {
+            thinking_budget: 5000,
+          },
+        };
+
+        await provider.execute(request);
+
+        const callArgs = mockGenerateContentStream.mock.calls[0][0];
+        expect(callArgs.config.thinkingConfig).toBeDefined();
+        expect(callArgs.config.thinkingConfig.thinkingBudget).toBe(5000);
+        expect(callArgs.config.thinkingConfig.thinkingLevel).toBeUndefined();
+      });
+
+      it("should use thinking_level when thinking_budget is 0", async () => {
+        const mockStream = createMockStream([{ text: "Response" }]);
+        mockGenerateContentStream.mockResolvedValue(mockStream);
+
+        const request: ExecuteRequest = {
+          model: "gemini-2.0-flash-thinking-exp-1219",
+          messages: [{ role: "user", content: "Test" }],
+          google_settings: {
+            thinking_budget: 0,
+            thinking_level: "HIGH",
+          },
+        };
+
+        await provider.execute(request);
+
+        const callArgs = mockGenerateContentStream.mock.calls[0][0];
+        expect(callArgs.config.thinkingConfig).toBeDefined();
+        expect(callArgs.config.thinkingConfig.thinkingLevel).toBe("HIGH");
+        expect(callArgs.config.thinkingConfig.thinkingBudget).toBeUndefined();
+      });
+
+      it("should prioritize thinking_budget over thinking_level when both provided", async () => {
+        const mockStream = createMockStream([{ text: "Response" }]);
+        mockGenerateContentStream.mockResolvedValue(mockStream);
+
+        const request: ExecuteRequest = {
+          model: "gemini-2.0-flash-thinking-exp-1219",
+          messages: [{ role: "user", content: "Test" }],
+          google_settings: {
+            thinking_budget: 3000,
+            thinking_level: "MEDIUM",
+          },
+        };
+
+        await provider.execute(request);
+
+        const callArgs = mockGenerateContentStream.mock.calls[0][0];
+        expect(callArgs.config.thinkingConfig).toBeDefined();
+        expect(callArgs.config.thinkingConfig.thinkingBudget).toBe(3000);
+        expect(callArgs.config.thinkingConfig.thinkingLevel).toBeUndefined();
+      });
+
+      it("should not set thinkingConfig when thinking_level is THINKING_LEVEL_UNSPECIFIED and budget is 0", async () => {
+        const mockStream = createMockStream([{ text: "Response" }]);
+        mockGenerateContentStream.mockResolvedValue(mockStream);
+
+        const request: ExecuteRequest = {
+          model: "gemini-1.5-pro",
+          messages: [{ role: "user", content: "Test" }],
+          google_settings: {
+            thinking_budget: 0,
+            thinking_level: "THINKING_LEVEL_UNSPECIFIED",
+          },
+        };
+
+        await provider.execute(request);
+
+        const callArgs = mockGenerateContentStream.mock.calls[0][0];
+        expect(callArgs.config.thinkingConfig).toBeUndefined();
+      });
+
+      it("should support all thinking levels", async () => {
+        const levels: Array<"LOW" | "MEDIUM" | "HIGH" | "MINIMAL"> = ["LOW", "MEDIUM", "HIGH", "MINIMAL"];
+
+        for (const level of levels) {
+          const mockStream = createMockStream([{ text: `Response with ${level}` }]);
+          mockGenerateContentStream.mockResolvedValue(mockStream);
+
+          const request: ExecuteRequest = {
+            model: "gemini-2.0-flash-thinking-exp-1219",
+            messages: [{ role: "user", content: "Test" }],
+            google_settings: {
+              thinking_level: level,
+            },
+          };
+
+          await provider.execute(request);
+
+          const callArgs = mockGenerateContentStream.mock.calls[mockGenerateContentStream.mock.calls.length - 1][0];
+          expect(callArgs.config.thinkingConfig.thinkingLevel).toBe(level);
+        }
+      });
+
+      it("should combine include_thoughts with thinking_budget", async () => {
+        const mockStream = createMockStream([{ text: "Response" }]);
+        mockGenerateContentStream.mockResolvedValue(mockStream);
+
+        const request: ExecuteRequest = {
+          model: "gemini-2.0-flash-thinking-exp-1219",
+          messages: [{ role: "user", content: "Test" }],
+          google_settings: {
+            include_thoughts: true,
+            thinking_budget: 8000,
+          },
+        };
+
+        await provider.execute(request);
+
+        const callArgs = mockGenerateContentStream.mock.calls[0][0];
+        expect(callArgs.config.thinkingConfig).toBeDefined();
+        expect(callArgs.config.thinkingConfig.includeThoughts).toBe(true);
+        expect(callArgs.config.thinkingConfig.thinkingBudget).toBe(8000);
+      });
+
+      it("should combine include_thoughts with thinking_level", async () => {
+        const mockStream = createMockStream([{ text: "Response" }]);
+        mockGenerateContentStream.mockResolvedValue(mockStream);
+
+        const request: ExecuteRequest = {
+          model: "gemini-2.0-flash-thinking-exp-1219",
+          messages: [{ role: "user", content: "Test" }],
+          google_settings: {
+            include_thoughts: false,
+            thinking_level: "LOW",
+          },
+        };
+
+        await provider.execute(request);
+
+        const callArgs = mockGenerateContentStream.mock.calls[0][0];
+        expect(callArgs.config.thinkingConfig).toBeDefined();
+        expect(callArgs.config.thinkingConfig.includeThoughts).toBe(false);
+        expect(callArgs.config.thinkingConfig.thinkingLevel).toBe("LOW");
+      });
+    });
+
+    describe("Google Search tool", () => {
+      it("should add google_search tool when enabled", async () => {
+        const mockStream = createMockStream([{ text: "Search result response" }]);
+        mockGenerateContentStream.mockResolvedValue(mockStream);
+
+        const request: ExecuteRequest = {
+          model: "gemini-1.5-pro",
+          messages: [{ role: "user", content: "What's the weather?" }],
+          google_settings: {
+            google_search_enabled: true,
+          },
+        };
+
+        await provider.execute(request);
+
+        const callArgs = mockGenerateContentStream.mock.calls[0][0];
+        expect(callArgs.config.tools).toBeDefined();
+        expect(callArgs.config.tools).toEqual([{ type: 'google_search' }]);
+      });
+
+      it("should not add tools when google_search is disabled", async () => {
+        const mockStream = createMockStream([{ text: "Response without search" }]);
+        mockGenerateContentStream.mockResolvedValue(mockStream);
+
+        const request: ExecuteRequest = {
+          model: "gemini-1.5-pro",
+          messages: [{ role: "user", content: "Test" }],
+          google_settings: {
+            google_search_enabled: false,
+          },
+        };
+
+        await provider.execute(request);
+
+        const callArgs = mockGenerateContentStream.mock.calls[0][0];
+        expect(callArgs.config.tools).toBeUndefined();
+      });
+
+      it("should not add tools when google_settings is not provided", async () => {
+        const mockStream = createMockStream([{ text: "Response" }]);
+        mockGenerateContentStream.mockResolvedValue(mockStream);
+
+        const request: ExecuteRequest = {
+          model: "gemini-1.5-pro",
+          messages: [{ role: "user", content: "Test" }],
+        };
+
+        await provider.execute(request);
+
+        const callArgs = mockGenerateContentStream.mock.calls[0][0];
+        expect(callArgs.config.tools).toBeUndefined();
+      });
+    });
+
+    describe("Combined Google settings", () => {
+      it("should combine all Google settings together", async () => {
+        const mockStream = createMockStream([{ text: "Full config response" }]);
+        mockGenerateContentStream.mockResolvedValue(mockStream);
+
+        const request: ExecuteRequest = {
+          model: "gemini-2.0-flash-thinking-exp-1219",
+          messages: [{ role: "user", content: "Complex query" }],
+          google_settings: {
+            include_thoughts: true,
+            thinking_budget: 10000,
+            google_search_enabled: true,
+          },
+        };
+
+        await provider.execute(request);
+
+        const callArgs = mockGenerateContentStream.mock.calls[0][0];
+        expect(callArgs.config.thinkingConfig).toBeDefined();
+        expect(callArgs.config.thinkingConfig.includeThoughts).toBe(true);
+        expect(callArgs.config.thinkingConfig.thinkingBudget).toBe(10000);
+        expect(callArgs.config.tools).toEqual([{ type: 'google_search' }]);
+      });
+
+      it("should combine thinking_level with google_search", async () => {
+        const mockStream = createMockStream([{ text: "Response" }]);
+        mockGenerateContentStream.mockResolvedValue(mockStream);
+
+        const request: ExecuteRequest = {
+          model: "gemini-2.0-flash-thinking-exp-1219",
+          messages: [{ role: "user", content: "Research question" }],
+          google_settings: {
+            include_thoughts: false,
+            thinking_level: "HIGH",
+            google_search_enabled: true,
+          },
+        };
+
+        await provider.execute(request);
+
+        const callArgs = mockGenerateContentStream.mock.calls[0][0];
+        expect(callArgs.config.thinkingConfig).toBeDefined();
+        expect(callArgs.config.thinkingConfig.includeThoughts).toBe(false);
+        expect(callArgs.config.thinkingConfig.thinkingLevel).toBe("HIGH");
+        expect(callArgs.config.tools).toEqual([{ type: 'google_search' }]);
+      });
+
+      it("should work with JSON response format and Google settings", async () => {
+        const mockStream = createMockStream([{ text: '{"answer": "structured response"}' }]);
+        mockGenerateContentStream.mockResolvedValue(mockStream);
+
+        const request: ExecuteRequest = {
+          model: "gemini-2.0-flash-thinking-exp-1219",
+          messages: [{ role: "user", content: "Return structured data" }],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              schema: {
+                type: "object",
+                properties: {
+                  answer: { type: "string" },
+                },
+              },
+            },
+          },
+          google_settings: {
+            include_thoughts: true,
+            thinking_level: "MEDIUM",
+            google_search_enabled: true,
+          },
+        };
+
+        await provider.execute(request);
+
+        const callArgs = mockGenerateContentStream.mock.calls[0][0];
+        // Verify JSON response format
+        expect(callArgs.config.responseMimeType).toBe("application/json");
+        expect(callArgs.config.responseSchema).toBeDefined();
+        // Verify Google settings
+        expect(callArgs.config.thinkingConfig).toBeDefined();
+        expect(callArgs.config.thinkingConfig.includeThoughts).toBe(true);
+        expect(callArgs.config.thinkingConfig.thinkingLevel).toBe("MEDIUM");
+        expect(callArgs.config.tools).toEqual([{ type: 'google_search' }]);
+      });
+
+      it("should handle empty google_settings object", async () => {
+        const mockStream = createMockStream([{ text: "Response" }]);
+        mockGenerateContentStream.mockResolvedValue(mockStream);
+
+        const request: ExecuteRequest = {
+          model: "gemini-1.5-pro",
+          messages: [{ role: "user", content: "Test" }],
+          google_settings: {},
+        };
+
+        await provider.execute(request);
+
+        const callArgs = mockGenerateContentStream.mock.calls[0][0];
+        expect(callArgs.config.thinkingConfig).toBeUndefined();
+        expect(callArgs.config.tools).toBeUndefined();
+      });
+    });
+  });
+
   describe("Integration validation", () => {
     it("should be instantiable and callable", () => {
       const provider = new GoogleProvider("test-api-key", logger);

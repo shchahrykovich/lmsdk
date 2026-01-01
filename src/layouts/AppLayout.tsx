@@ -136,42 +136,67 @@ export default function AppLayout() {
 
               return (
                 <div key={item.path}>
-                  <button
-                    onClick={() => {
-                      if (hasSubItems) {
+                  {hasSubItems ? (
+                    <button
+                      onClick={() => {
                         toggleExpanded(item.name);
-                      } else {
-                        void navigate(item.path);
-                      }
-                    }}
-                    className={`
-                      w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium
-                      transition-colors duration-150
-                      ${isSidebarCollapsed ? "justify-center" : ""}
-                      ${isActive
-                        ? "bg-accent text-accent-foreground"
-                        : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-                      }
-                    `}
-                    title={isSidebarCollapsed ? item.name : undefined}
-                  >
-                    <Icon size={18} strokeWidth={2} />
-                    {!isSidebarCollapsed && (
-                      <>
-                        <span>{item.name}</span>
-                        {hasSubItems && (
-                          isExpanded ? (
+                      }}
+                      className={`
+                        w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium
+                        transition-colors duration-150
+                        ${isSidebarCollapsed ? "justify-center" : ""}
+                        ${isActive
+                          ? "bg-accent text-accent-foreground"
+                          : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                        }
+                      `}
+                      title={isSidebarCollapsed ? item.name : undefined}
+                    >
+                      <Icon size={18} strokeWidth={2} />
+                      {!isSidebarCollapsed && (
+                        <>
+                          <span>{item.name}</span>
+                          {isExpanded ? (
                             <ChevronDown size={16} className="ml-auto" strokeWidth={2} />
                           ) : (
                             <ChevronRight size={16} className="ml-auto" strokeWidth={2} />
-                          )
-                        )}
-                        {isActive && !hasSubItems && (
-                          <ChevronRight size={16} className="ml-auto" strokeWidth={2} />
-                        )}
-                      </>
-                    )}
-                  </button>
+                          )}
+                        </>
+                      )}
+                    </button>
+                  ) : (
+                    <a
+                      href={item.path}
+                      onClick={(e) => {
+                        // Allow browser default behavior for Cmd/Ctrl+Click
+                        if (e.metaKey || e.ctrlKey) {
+                          return;
+                        }
+                        e.preventDefault();
+                        void navigate(item.path);
+                      }}
+                      className={`
+                        w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium
+                        transition-colors duration-150
+                        ${isSidebarCollapsed ? "justify-center" : ""}
+                        ${isActive
+                          ? "bg-accent text-accent-foreground"
+                          : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                        }
+                      `}
+                      title={isSidebarCollapsed ? item.name : undefined}
+                    >
+                      <Icon size={18} strokeWidth={2} />
+                      {!isSidebarCollapsed && (
+                        <>
+                          <span>{item.name}</span>
+                          {isActive && (
+                            <ChevronRight size={16} className="ml-auto" strokeWidth={2} />
+                          )}
+                        </>
+                      )}
+                    </a>
+                  )}
 
                   {/* Sub-items */}
                   {!isSidebarCollapsed && hasSubItems && isExpanded && (
@@ -181,9 +206,17 @@ export default function AppLayout() {
                         const isSubActive = location.pathname === subItem.path;
 
                         return (
-                          <button
+                          <a
                             key={subItem.path}
-                            onClick={() => { void navigate(subItem.path); }}
+                            href={subItem.path}
+                            onClick={(e) => {
+                              // Allow browser default behavior for Cmd/Ctrl+Click
+                              if (e.metaKey || e.ctrlKey) {
+                                return;
+                              }
+                              e.preventDefault();
+                              void navigate(subItem.path);
+                            }}
                             className={`
                               w-full flex items-center gap-3 pl-10 pr-3 py-2 rounded-md text-sm font-medium
                               transition-colors duration-150
@@ -198,7 +231,7 @@ export default function AppLayout() {
                             {isSubActive && (
                               <ChevronRight size={16} className="ml-auto" strokeWidth={2} />
                             )}
-                          </button>
+                          </a>
                         );
                       })}
                     </div>
