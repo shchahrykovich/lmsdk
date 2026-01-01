@@ -276,6 +276,12 @@ export default function PromptDetail() {
             if (parsedBody.google_settings.google_search_enabled !== undefined) {
               setGoogleSearchEnabled(parsedBody.google_settings.google_search_enabled);
             }
+          } else {
+            // Set sensible defaults for Google settings if not present
+            setIncludeThoughts(false);
+            setThinkingBudget(0);
+            setThinkingLevel("THINKING_LEVEL_UNSPECIFIED");
+            setGoogleSearchEnabled(false);
           }
         } catch (err) {
           console.error("Error parsing prompt body:", err);
@@ -340,9 +346,15 @@ export default function PromptDetail() {
         // Load Google-specific settings
         if (parsedBody.google_settings) {
           setIncludeThoughts(parsedBody.google_settings.include_thoughts ?? false);
-          setThinkingBudget(parsedBody.google_settings.thinking_budget ?? -1);
-          setThinkingLevel(parsedBody.google_settings.thinking_level || "MEDIUM");
+          setThinkingBudget(parsedBody.google_settings.thinking_budget ?? 0);
+          setThinkingLevel(parsedBody.google_settings.thinking_level || "THINKING_LEVEL_UNSPECIFIED");
           setGoogleSearchEnabled(parsedBody.google_settings.google_search_enabled ?? false);
+        } else {
+          // Set sensible defaults for Google settings if not present
+          setIncludeThoughts(false);
+          setThinkingBudget(0);
+          setThinkingLevel("THINKING_LEVEL_UNSPECIFIED");
+          setGoogleSearchEnabled(false);
         }
       } catch (err) {
         console.error("Error parsing version body:", err);
@@ -756,41 +768,67 @@ export default function PromptDetail() {
                   <div className="relative">
                   </div>
                   <div className="space-y-3">
-                    <div className="grid grid-cols-2 gap-3">
-                      {/* Thinking Level */}
-                      <div>
-                        <Label className="text-xs text-muted-foreground mb-1 block">
-                          Thinking Level
-                        </Label>
-                        <Select value={thinkingLevel} onValueChange={(value: "THINKING_LEVEL_UNSPECIFIED" | "LOW" | "MEDIUM" | "HIGH" | "MINIMAL") => setThinkingLevel(value)}>
-                          <SelectTrigger className="h-8">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="THINKING_LEVEL_UNSPECIFIED">Unspecified</SelectItem>
-                            <SelectItem value="MINIMAL">Minimal</SelectItem>
-                            <SelectItem value="LOW">Low</SelectItem>
-                            <SelectItem value="MEDIUM">Medium</SelectItem>
-                            <SelectItem value="HIGH">High</SelectItem>
-                          </SelectContent>
-                        </Select>
+                    <div className="space-y-2">
+                      <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/40 rounded-md p-2">
+                        <p className="text-[10px] text-amber-800 dark:text-amber-400">
+                          Note: Use either Thinking Budget (for token control) OR Thinking Level (for quality preset), not both.
+                        </p>
                       </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        {/* Thinking Budget - Only show when thinking level is unspecified */}
+                        {thinkingLevel === "THINKING_LEVEL_UNSPECIFIED" && (
+                          <div>
+                            <Label className="text-xs text-muted-foreground mb-1 block">
+                              Thinking Budget (tokens)
+                            </Label>
+                            <input
+                              type="number"
+                              value={thinkingBudget}
+                              onChange={(e) => {
+                                const value = parseInt(e.target.value) || 0;
+                                setThinkingBudget(value);
+                              }}
+                              placeholder="0 (disabled)"
+                              className="w-full h-8 px-3 text-sm rounded-md border border-input bg-background"
+                            />
+                            <span className="text-[10px] text-muted-foreground mt-0.5 block">
+                              0 = disabled (uses level instead)
+                            </span>
+                          </div>
+                        )}
 
-                      {/* Thinking Budget */}
-                      <div>
-                        <Label className="text-xs text-muted-foreground mb-1 block">
-                          Thinking Budget (tokens)
-                        </Label>
-                        <input
-                          type="number"
-                          value={thinkingBudget}
-                          onChange={(e) => setThinkingBudget(parseInt(e.target.value) || -1)}
-                          placeholder="-1 (automatic)"
-                          className="w-full h-8 px-3 text-sm rounded-md border border-input bg-background"
-                        />
-                        <span className="text-[10px] text-muted-foreground mt-0.5 block">
-                          0 = disabled, -1 = automatic
-                        </span>
+                        {/* Thinking Level */}
+                        <div className={thinkingLevel === "THINKING_LEVEL_UNSPECIFIED" ? "" : "col-span-2"}>
+                          <Label className="text-xs text-muted-foreground mb-1 block">
+                            Thinking Level
+                          </Label>
+                          <Select
+                            value={thinkingLevel}
+                            onValueChange={(value: "THINKING_LEVEL_UNSPECIFIED" | "LOW" | "MEDIUM" | "HIGH" | "MINIMAL") => {
+                              setThinkingLevel(value);
+                              // If setting a specific level, clear thinking budget
+                              if (value !== "THINKING_LEVEL_UNSPECIFIED") {
+                                setThinkingBudget(0);
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="h-8">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="THINKING_LEVEL_UNSPECIFIED">Unspecified</SelectItem>
+                              <SelectItem value="MINIMAL">Minimal</SelectItem>
+                              <SelectItem value="LOW">Low</SelectItem>
+                              <SelectItem value="MEDIUM">Medium</SelectItem>
+                              <SelectItem value="HIGH">High</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          {thinkingLevel === "THINKING_LEVEL_UNSPECIFIED" && (
+                            <span className="text-[10px] text-muted-foreground mt-0.5 block">
+                              Active when budget is 0
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -886,6 +924,117 @@ export default function PromptDetail() {
                 ))}
               </div>
             )}
+            {/* Run Test Button */}
+            <div className="flex justify-end pt-2">
+              <Button
+                  onClick={async () => {
+                    try {
+                      setIsTesting(true);
+                      setTestOutput("");
+
+                      // Validate
+                      if (!provider.trim() || !model.trim()) {
+                        setTestOutput("Error: Provider and model must be selected");
+                        return;
+                      }
+
+                      if (!systemMessage.trim() && !userMessage.trim()) {
+                        setTestOutput("Error: At least one message is required");
+                        return;
+                      }
+
+                      // Build messages array (without variable substitution - backend handles it)
+                      const messages = [
+                        systemMessage.trim() && {
+                          role: "system",
+                          content: systemMessage,
+                        },
+                        userMessage.trim() && {
+                          role: "user",
+                          content: userMessage,
+                        },
+                      ].filter(Boolean);
+
+                      // Build request body
+                      const requestBody: Record<string, unknown> = {
+                        provider,
+                        model,
+                        messages,
+                        variables, // Pass variables to backend for substitution
+                      };
+
+                      // Add response format if JSON schema is selected
+                      if (responseType === "json" && jsonSchema.trim()) {
+                        try {
+                          const parsedSchema = JSON.parse(jsonSchema);
+                          requestBody.response_format = {
+                            type: "json_schema",
+                            json_schema: parsedSchema,
+                          };
+                        } catch (err) {
+                          setTestOutput("Error: Invalid JSON schema format");
+                          return;
+                        }
+                      }
+
+                      // Add OpenAI-specific settings (only for openai provider)
+                      if (provider === "openai") {
+                        requestBody.openai_settings = {
+                          reasoning_effort: reasoningEffort,
+                          reasoning_summary: reasoningSummary,
+                          store: storeEnabled,
+                          include_encrypted_reasoning: includeEncryptedReasoning,
+                        };
+                      }
+
+                      // Add Google-specific settings (only for google provider)
+                      if (provider === "google") {
+                        requestBody.google_settings = {
+                          include_thoughts: includeThoughts,
+                          thinking_budget: thinkingBudget,
+                          thinking_level: thinkingLevel,
+                          google_search_enabled: googleSearchEnabled,
+                        };
+                      }
+
+                      // Call the execute endpoint
+                      const response = await fetch("/api/providers/execute", {
+                        method: "POST",
+                        headers: {
+                          "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify(requestBody),
+                      });
+
+                      const data = await response.json();
+
+                      if (!response.ok) {
+                        setTestOutput(`Error: ${data.error || "Failed to execute prompt"}`);
+                        return;
+                      }
+
+                      // Display the result
+                      if (data.success && data.result) {
+                        const result = data.result;
+                        setTestOutput(
+                            `${result.content}\n\n---\nModel: ${result.model}\nTokens: ${result.usage?.total_tokens || "N/A"}`
+                        );
+                      } else {
+                        setTestOutput("Error: Unexpected response format");
+                      }
+                    } catch (err) {
+                      console.error("Error testing prompt:", err);
+                      setTestOutput(`Error: ${err instanceof Error ? err.message : "Failed to test prompt"}`);
+                    } finally {
+                      setIsTesting(false);
+                    }
+                  }}
+                  disabled={isTesting}
+                  size="sm"
+              >
+                {isTesting ? "Running..." : "Run"}
+              </Button>
+            </div>
 
             {/* Test Output */}
             <div>
@@ -903,118 +1052,6 @@ export default function PromptDetail() {
                   </p>
                 )}
               </div>
-            </div>
-
-            {/* Run Test Button */}
-            <div className="flex justify-end pt-2">
-              <Button
-                onClick={async () => {
-                  try {
-                    setIsTesting(true);
-                    setTestOutput("");
-
-                    // Validate
-                    if (!provider.trim() || !model.trim()) {
-                      setTestOutput("Error: Provider and model must be selected");
-                      return;
-                    }
-
-                    if (!systemMessage.trim() && !userMessage.trim()) {
-                      setTestOutput("Error: At least one message is required");
-                      return;
-                    }
-
-                    // Build messages array (without variable substitution - backend handles it)
-                    const messages = [
-                      systemMessage.trim() && {
-                        role: "system",
-                        content: systemMessage,
-                      },
-                      userMessage.trim() && {
-                        role: "user",
-                        content: userMessage,
-                      },
-                    ].filter(Boolean);
-
-                    // Build request body
-                    const requestBody: Record<string, unknown> = {
-                      provider,
-                      model,
-                      messages,
-                      variables, // Pass variables to backend for substitution
-                    };
-
-                    // Add response format if JSON schema is selected
-                    if (responseType === "json" && jsonSchema.trim()) {
-                      try {
-                        const parsedSchema = JSON.parse(jsonSchema);
-                        requestBody.response_format = {
-                          type: "json_schema",
-                          json_schema: parsedSchema,
-                        };
-                      } catch (err) {
-                        setTestOutput("Error: Invalid JSON schema format");
-                        return;
-                      }
-                    }
-
-                    // Add OpenAI-specific settings (only for openai provider)
-                    if (provider === "openai") {
-                      requestBody.openai_settings = {
-                        reasoning_effort: reasoningEffort,
-                        reasoning_summary: reasoningSummary,
-                        store: storeEnabled,
-                        include_encrypted_reasoning: includeEncryptedReasoning,
-                      };
-                    }
-
-                    // Add Google-specific settings (only for google provider)
-                    if (provider === "google") {
-                      requestBody.google_settings = {
-                        include_thoughts: includeThoughts,
-                        thinking_budget: thinkingBudget,
-                        thinking_level: thinkingLevel,
-                        google_search_enabled: googleSearchEnabled,
-                      };
-                    }
-
-                    // Call the execute endpoint
-                    const response = await fetch("/api/providers/execute", {
-                      method: "POST",
-                      headers: {
-                        "Content-Type": "application/json",
-                      },
-                      body: JSON.stringify(requestBody),
-                    });
-
-                    const data = await response.json();
-
-                    if (!response.ok) {
-                      setTestOutput(`Error: ${data.error || "Failed to execute prompt"}`);
-                      return;
-                    }
-
-                    // Display the result
-                    if (data.success && data.result) {
-                      const result = data.result;
-                      setTestOutput(
-                        `${result.content}\n\n---\nModel: ${result.model}\nTokens: ${result.usage?.total_tokens || "N/A"}`
-                      );
-                    } else {
-                      setTestOutput("Error: Unexpected response format");
-                    }
-                  } catch (err) {
-                    console.error("Error testing prompt:", err);
-                    setTestOutput(`Error: ${err instanceof Error ? err.message : "Failed to test prompt"}`);
-                  } finally {
-                    setIsTesting(false);
-                  }
-                }}
-                disabled={isTesting}
-                size="sm"
-              >
-                {isTesting ? "Running..." : "Run"}
-              </Button>
             </div>
           </div>
         </div>

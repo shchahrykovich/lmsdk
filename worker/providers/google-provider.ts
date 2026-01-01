@@ -95,13 +95,16 @@ export class GoogleProvider extends AIProvider {
           thinkingConfig.includeThoughts = google_settings.include_thoughts;
         }
 
-        if (google_settings.thinking_budget !== undefined) {
+        // CRITICAL: Google API only allows ONE of thinking_budget OR thinking_level, not both
+        // Priority: thinking_budget > thinking_level > neither
+        if (google_settings.thinking_budget !== undefined && google_settings.thinking_budget > 0) {
+          // Use thinking_budget if explicitly set (> 0)
           thinkingConfig.thinkingBudget = google_settings.thinking_budget;
-        }
-
-        if (google_settings.thinking_level) {
+        } else if (google_settings.thinking_level && google_settings.thinking_level !== "THINKING_LEVEL_UNSPECIFIED") {
+          // Use thinking_level if it's set to a specific value
           thinkingConfig.thinkingLevel = google_settings.thinking_level;
         }
+        // If thinking_budget is 0 or -1, and thinking_level is unspecified, send neither
 
         // Only add thinkingConfig if it has properties
         if (Object.keys(thinkingConfig).length > 0) {
