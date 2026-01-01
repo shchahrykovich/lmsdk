@@ -123,6 +123,7 @@ export class ProviderService {
       messages,
       response_format: request.response_format,
       openai_settings: request.openai_settings,
+      google_settings: request.google_settings,
       variables: request.variables,
     });
     return result;

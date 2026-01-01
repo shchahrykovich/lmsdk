@@ -118,6 +118,7 @@ v1.post("/projects/:projectSlugOrId/prompts/:promptSlugOrId/execute", async (c) 
       variables: body.variables,
       response_format: promptBody.response_format,
       openai_settings: promptBody.openai_settings,
+      google_settings: promptBody.google_settings,
     });
 
     // If there's a JSON schema, try to parse the response

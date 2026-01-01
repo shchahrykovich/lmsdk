@@ -14,6 +14,8 @@ interface JsonSectionProps {
   data: unknown;
   collapsed?: boolean | number;
   compact?: boolean;
+  contextTitle?: string;
+  logId?: number;
 }
 
 export default function JsonSection({
@@ -21,9 +23,22 @@ export default function JsonSection({
   data,
   collapsed = 2,
   compact = false,
+  contextTitle,
+  logId,
 }: JsonSectionProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+
+  const getFullscreenTitle = () => {
+    if (contextTitle && logId !== undefined) {
+      return `${contextTitle} (log #${logId}) - ${title}`;
+    }
+    if (contextTitle) {
+      return `${contextTitle} - ${title}`;
+    }
+    return title;
+  };
+
   const parseJsonData = (data: unknown) => {
     if (data === null || data === undefined) {
       return null;
@@ -71,7 +86,9 @@ export default function JsonSection({
           <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
             <DialogHeader>
               <div className="flex items-center gap-3">
-                <DialogTitle>{title}</DialogTitle>
+                <DialogTitle>
+                  {getFullscreenTitle()}
+                </DialogTitle>
                 {parsedData && (
                   <Button
                     variant="outline"
@@ -133,7 +150,9 @@ export default function JsonSection({
         <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
           <DialogHeader>
             <div className="flex items-center gap-3">
-              <DialogTitle>{title}</DialogTitle>
+              <DialogTitle>
+                {getFullscreenTitle()}
+              </DialogTitle>
               {parsedData && (
                 <Button
                   variant="outline"
@@ -150,7 +169,7 @@ export default function JsonSection({
                     <>
                       <ChevronsDownUp className="h-4 w-4" />
                       Expand All
-                    </>
+                      </>
                   )}
                 </Button>
               )}

@@ -161,11 +161,11 @@ export default function LogDetail() {
             )}
           </div>
 
-          <JsonSection title="Variables" data={files?.variables} collapsed={false} />
-          <JsonSection title="Response" data={files?.response} collapsed={false} />
-          <JsonSection title="Result" data={files?.result} collapsed={2} />
-          <JsonSection title="Input" data={files?.input} collapsed={2} />
-          <JsonSection title="Output" data={files?.output} collapsed={2} />
+          <JsonSection title="Variables" data={files?.variables} collapsed={false} contextTitle={log.promptName || undefined} logId={log.id} />
+          <JsonSection title="Response" data={files?.response} collapsed={false} contextTitle={log.promptName || undefined} logId={log.id} />
+          <JsonSection title="Result" data={files?.result} collapsed={2} contextTitle={log.promptName || undefined} logId={log.id} />
+          <JsonSection title="Input" data={files?.input} collapsed={2} contextTitle={log.promptName || undefined} logId={log.id} />
+          <JsonSection title="Output" data={files?.output} collapsed={2} contextTitle={log.promptName || undefined} logId={log.id} />
         </div>
       </div>
     </div>

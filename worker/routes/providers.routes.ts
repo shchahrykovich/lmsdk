@@ -43,7 +43,7 @@ providers.get("/", async (c) => {
 providers.post("/execute", async (c) => {
   try {
     const body = await c.req.json();
-    const { provider, model, messages, response_format, variables, google_settings } = body;
+    const { provider, model, messages, response_format, variables, google_settings, openai_settings } = body;
 
     // Validate required fields
     if (!provider || !model || !messages || !Array.isArray(messages)) {
@@ -89,6 +89,7 @@ providers.post("/execute", async (c) => {
       variables,
       response_format,
       google_settings,
+      openai_settings,
     });
 
     // Return the response

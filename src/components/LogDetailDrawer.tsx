@@ -125,11 +125,11 @@ export default function LogDetailDrawer({
               {/*  </pre>*/}
               {/*</div>*/}
 
-              <JsonSection title="Variables" data={files?.variables} collapsed={false} compact />
-              <JsonSection title="Response" data={files?.response} collapsed={false} compact />
-              <JsonSection title="Result" data={files?.result} collapsed={2} compact />
-              <JsonSection title="Input" data={files?.input} collapsed={2} compact />
-              <JsonSection title="Output" data={files?.output} collapsed={2} compact />
+              <JsonSection title="Variables" data={files?.variables} collapsed={false} compact contextTitle={log.promptName || undefined} logId={log.id} />
+              <JsonSection title="Response" data={files?.response} collapsed={false} compact contextTitle={log.promptName || undefined} logId={log.id} />
+              <JsonSection title="Result" data={files?.result} collapsed={2} compact contextTitle={log.promptName || undefined} logId={log.id} />
+              <JsonSection title="Input" data={files?.input} collapsed={2} compact contextTitle={log.promptName || undefined} logId={log.id} />
+              <JsonSection title="Output" data={files?.output} collapsed={2} compact contextTitle={log.promptName || undefined} logId={log.id} />
             </div>
           </>
         ) : (
