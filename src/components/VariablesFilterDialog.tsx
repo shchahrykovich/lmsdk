@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PlusCircle, X } from "lucide-react";
+import { PlusCircle, XCircle } from "lucide-react";
 
 interface VariablesFilterDialogProps {
   variablePaths: string[];
@@ -93,18 +93,28 @@ export function VariablesFilterDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="h-8 border-dashed">
+        <Button variant="outline" size="sm" className="h-8 border-dashed font-normal">
           {hasActiveFilter ? (
             <>
-              <X
-                className="mr-2 h-4 w-4 cursor-pointer hover:opacity-70"
+              <div
+                role="button"
+                aria-label="Clear variables filter"
+                tabIndex={0}
+                className="rounded-sm opacity-70 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 onClick={handleClearClick}
-              />
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    handleClearClick(e as any);
+                  }
+                }}
+              >
+                <XCircle />
+              </div>
               <span className="font-mono text-xs">{filterDisplayText}</span>
             </>
           ) : (
             <>
-              <PlusCircle className="mr-2 h-4 w-4" />
+              <PlusCircle className="h-4 w-4" />
               Variables
             </>
           )}

@@ -157,6 +157,7 @@ export class TraceExtractionService {
           successCount: stats.successCount,
           errorCount: stats.errorCount,
           totalDurationMs: stats.totalDurationMs,
+          stats: stats.stats,
           firstLogAt: stats.firstLogAt ? new Date(stats.firstLogAt * 1000) : undefined,
           lastLogAt: stats.lastLogAt ? new Date(stats.lastLogAt * 1000) : undefined,
           tracePath,
@@ -203,6 +204,7 @@ export class TraceExtractionService {
           successCount: stats.successCount,
           errorCount: stats.errorCount,
           totalDurationMs: stats.totalDurationMs,
+          stats: stats.stats,
           firstLogAt: stats.firstLogAt ? new Date(stats.firstLogAt * 1000) : undefined,
           lastLogAt: stats.lastLogAt ? new Date(stats.lastLogAt * 1000) : undefined,
           tracePath,
@@ -236,6 +238,7 @@ export class TraceExtractionService {
 
   /**
    * Calculate aggregated statistics from execution logs
+   * Includes usage statistics aggregated by provider and model
    */
   private calculateTraceStats(logs: typeof promptExecutionLogs.$inferSelect[]) {
     let successCount = 0;
@@ -243,6 +246,9 @@ export class TraceExtractionService {
     let totalDurationMs = 0;
     let firstLogAt: number | undefined;
     let lastLogAt: number | undefined;
+
+    // Aggregate usage by provider and model
+    const providerStats = new Map<string, Map<string, { count: number; usage: any }>>();
 
     for (const log of logs) {
       if (log.isSuccess) {
@@ -253,6 +259,29 @@ export class TraceExtractionService {
 
       if (log.durationMs) {
         totalDurationMs += log.durationMs;
+      }
+
+      // Aggregate usage statistics
+      if (log.provider && log.model && log.usage) {
+        try {
+          const usage = JSON.parse(log.usage);
+
+          if (!providerStats.has(log.provider)) {
+            providerStats.set(log.provider, new Map());
+          }
+
+          const modelStats = providerStats.get(log.provider)!;
+
+          if (!modelStats.has(log.model)) {
+            modelStats.set(log.model, { count: 0, usage: this.initializeUsage(log.provider) });
+          }
+
+          const stats = modelStats.get(log.model)!;
+          stats.count++;
+          this.aggregateUsage(stats.usage, usage, log.provider);
+        } catch (error) {
+          console.error(`Failed to parse usage for log ${log.id}:`, error);
+        }
       }
 
       // Drizzle with mode: "timestamp" returns Date objects
@@ -269,6 +298,9 @@ export class TraceExtractionService {
       }
     }
 
+    // Build stats JSON
+    const statsJson = this.buildStatsJson(providerStats);
+
     return {
       totalLogs: logs.length,
       successCount,
@@ -276,7 +308,80 @@ export class TraceExtractionService {
       totalDurationMs,
       firstLogAt,
       lastLogAt,
+      stats: statsJson,
     };
+  }
+
+  /**
+   * Initialize usage object based on provider
+   */
+  private initializeUsage(provider: string): any {
+    if (provider === 'openai') {
+      return {
+        input_tokens: 0,
+        cached_tokens: 0,
+        output_tokens: 0,
+        reasoning_tokens: 0,
+        total_tokens: 0,
+      };
+    } else if (provider === 'google') {
+      return {
+        prompt_tokens: 0,
+        cached_tokens: 0,
+        response_tokens: 0,
+        thoughts_tokens: 0,
+        tool_use_prompt_tokens: 0,
+        total_tokens: 0,
+      };
+    }
+    return {};
+  }
+
+  /**
+   * Aggregate usage from a single log into the accumulated stats
+   */
+  private aggregateUsage(accumulated: any, usage: any, provider: string): void {
+    if (provider === 'openai') {
+      accumulated.input_tokens += usage.input_tokens || 0;
+      accumulated.cached_tokens += usage.input_tokens_details?.cached_tokens || 0;
+      accumulated.output_tokens += usage.output_tokens || 0;
+      accumulated.reasoning_tokens += usage.output_tokens_details?.reasoning_tokens || 0;
+      accumulated.total_tokens += usage.total_tokens || 0;
+    } else if (provider === 'google') {
+      accumulated.prompt_tokens += usage.prompt_tokens || 0;
+      accumulated.cached_tokens += usage.cached_tokens || 0;
+      accumulated.response_tokens += usage.response_tokens || 0;
+      accumulated.thoughts_tokens += usage.thoughts_tokens || 0;
+      accumulated.tool_use_prompt_tokens += usage.tool_use_prompt_tokens || 0;
+      accumulated.total_tokens += usage.total_tokens || 0;
+    }
+  }
+
+  /**
+   * Build stats JSON from aggregated provider statistics
+   */
+  private buildStatsJson(providerStats: Map<string, Map<string, { count: number; usage: any }>>): string | null {
+    if (providerStats.size === 0) {
+      return null;
+    }
+
+    const providers = [];
+    for (const [provider, modelStats] of providerStats) {
+      const models = [];
+      for (const [model, stats] of modelStats) {
+        models.push({
+          model,
+          count: stats.count,
+          tokens: stats.usage,
+        });
+      }
+      providers.push({
+        provider,
+        models,
+      });
+    }
+
+    return JSON.stringify({ providers });
   }
 
   /**

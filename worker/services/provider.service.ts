@@ -2,6 +2,7 @@ import { ProviderFactory, type ProviderConfig } from "../providers/provider-fact
 import type { ExecuteRequest, ExecuteResult, AIMessage } from "../providers/base-provider";
 import { getOpenAIModels } from "../utils/openai-models";
 import type { IPromptExecutionLogger } from "../providers/logger/execution-logger";
+import {replaceAllVariables} from "../utils/variable-replacer";
 
 /**
  * Provider metadata for frontend display
@@ -37,25 +38,7 @@ export class ProviderService {
    * Supports {{variable}} and {{variable.property}} syntax
    */
   private replaceVariables(template: string, variables: Record<string, any>): string {
-    return template.replace(/\{\{([^}]+)\}\}/g, (match, key) => {
-      const trimmedKey = key.trim();
-
-      // Support nested properties like {{user.name}}
-      const keys = trimmedKey.split('.');
-      let value: any = variables;
-
-      for (const k of keys) {
-        if (value && typeof value === 'object' && k in value) {
-          value = value[k];
-        } else {
-          // Variable not found, return original placeholder
-          return match;
-        }
-      }
-
-      // Convert to string, handling null/undefined
-      return value != null ? String(value) : match;
-    });
+    return replaceAllVariables(template, variables);
   }
 
   /**

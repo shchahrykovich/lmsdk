@@ -141,8 +141,6 @@ logs.get("/:projectId/logs", async (c) => {
       filters.variableOperator = variableOperator;
     }
 
-    console.log("Filters being applied:", filters); // Debug log
-
     const db = drizzle(c.env.DB);
     const logService = new LogService(db, c.env.PRIVATE_FILES, c.env.DB);
 

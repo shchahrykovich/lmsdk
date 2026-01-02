@@ -10,13 +10,6 @@ export interface PromptExecutionContext {
 }
 
 /**
- * Variables used in prompt execution
- */
-export interface VariablesLogData {
-    variables: Record<string, any>;
-}
-
-/**
  * Interface for logging prompt executions
  */
 export interface IPromptExecutionLogger {

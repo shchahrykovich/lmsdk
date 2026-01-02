@@ -115,6 +115,7 @@ export class PromptService {
         model: input.model ?? currentPrompt.model,
         body: input.body ?? currentPrompt.body,
         latestVersion: newVersion,
+        updatedAt: new Date(),
       })
       .where(
         and(
@@ -292,7 +293,10 @@ export class PromptService {
   ) {
     return await this.db
       .update(prompts)
-      .set({ isActive: false })
+      .set({
+        isActive: false,
+        updatedAt: new Date(),
+      })
       .where(
         and(
           eq(prompts.id, promptId),

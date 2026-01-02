@@ -3,6 +3,19 @@ import {and, asc, count, desc, eq} from "drizzle-orm";
 import {traces, promptExecutionLogs, prompts} from "../db/schema";
 import {parseTraceParent} from "../utils/trace-parser";
 
+export interface UsageStats {
+    providers: Array<{
+        provider: string;
+        models: Array<{
+            model: string;
+            count: number;
+            tokens: {
+                [key: string]: number;
+            };
+        }>;
+    }>;
+}
+
 export interface TraceEntry {
     id: number;
     traceId: string;
@@ -10,6 +23,7 @@ export interface TraceEntry {
     successCount: number;
     errorCount: number;
     totalDurationMs: number;
+    stats: UsageStats | null;
     firstLogAt: number | Date | null;
     lastLogAt: number | Date | null;
     tracePath: string | null;
@@ -106,10 +120,16 @@ export class TraceService {
             .limit(pageSize)
             .offset(offset);
 
+        // Parse stats JSON strings into objects
+        const parsedTraces = traceRecords.map(trace => ({
+            ...trace,
+            stats: trace.stats ? JSON.parse(trace.stats) : null,
+        }));
+
         const totalPages = Math.ceil(totalCount / pageSize);
 
         return {
-            traces: traceRecords,
+            traces: parsedTraces,
             total: totalCount,
             page,
             pageSize,
@@ -138,6 +158,7 @@ export class TraceService {
                 successCount: traces.successCount,
                 errorCount: traces.errorCount,
                 totalDurationMs: traces.totalDurationMs,
+                stats: traces.stats,
                 firstLogAt: traces.firstLogAt,
                 lastLogAt: traces.lastLogAt,
                 createdAt: traces.createdAt,
@@ -156,6 +177,12 @@ export class TraceService {
         if (!traceRecord) {
             return {trace: null, logs: []};
         }
+
+        // Parse stats JSON string into object
+        const parsedTrace = {
+            ...traceRecord,
+            stats: traceRecord.stats ? JSON.parse(traceRecord.stats) : null,
+        };
 
         // Get all logs for this trace with prompt information (excluding logPath)
         const logRecords = await this.db
@@ -215,7 +242,7 @@ export class TraceService {
         });
 
         return {
-            trace: traceRecord,
+            trace: parsedTrace,
             logs: logsWithSpans,
         };
     }

@@ -11,6 +11,19 @@ interface Project {
   slug: string;
 }
 
+interface UsageStats {
+  providers: Array<{
+    provider: string;
+    models: Array<{
+      model: string;
+      count: number;
+      tokens: {
+        [key: string]: number;
+      };
+    }>;
+  }>;
+}
+
 interface TraceEntry {
   id: number;
   traceId: string;
@@ -18,6 +31,7 @@ interface TraceEntry {
   successCount: number;
   errorCount: number;
   totalDurationMs: number;
+  stats: UsageStats | null;
   firstLogAt: number | string | null;
   lastLogAt: number | string | null;
   tracePath: string | null;
@@ -155,6 +169,9 @@ export default function TraceDetail() {
     );
   }
 
+  // Stats are already parsed as object from API
+  const usageStats = trace.stats;
+
   return (
     <div className="h-full flex flex-col overflow-hidden">
       <ProjectPageHeader
@@ -165,8 +182,54 @@ export default function TraceDetail() {
       />
 
       <div className="flex-1 overflow-y-auto px-8 py-6">
-        <div className="w-full">
-          <SpanWaterfall logs={logs} onSpanClick={handleSpanClick} />
+        <div className="w-full space-y-6">
+          {/* Usage Statistics */}
+          {usageStats && usageStats.providers.length > 0 && (
+            <div className="bg-card border rounded-lg p-6">
+              <h2 className="text-lg font-semibold mb-4">Usage Statistics</h2>
+              <div className="space-y-4">
+                {usageStats.providers.map((providerData, idx) => (
+                  <div key={idx} className="space-y-2">
+                    <h3 className="text-sm font-medium text-muted-foreground uppercase">
+                      {providerData.provider}
+                    </h3>
+                    <div className="grid gap-3">
+                      {providerData.models.map((modelData, modelIdx) => (
+                        <div
+                          key={modelIdx}
+                          className="flex items-start justify-between p-3 bg-muted/50 rounded"
+                        >
+                          <div className="space-y-1">
+                            <div className="font-mono text-sm">{modelData.model}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {modelData.count} call{modelData.count !== 1 ? "s" : ""}
+                            </div>
+                          </div>
+                          <div className="text-right space-y-1">
+                            {Object.entries(modelData.tokens)
+                              .filter(([, value]) => value > 0)
+                              .map(([key, value]) => (
+                                <div key={key} className="text-xs">
+                                  <span className="text-muted-foreground">
+                                    {key.replace(/_/g, " ")}:
+                                  </span>{" "}
+                                  <span className="font-mono">{value.toLocaleString()}</span>
+                                </div>
+                              ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Waterfall Chart */}
+          <div>
+            <SpanWaterfall logs={logs} onSpanClick={handleSpanClick} />
+          </div>
         </div>
       </div>
 

@@ -21,6 +21,12 @@ export default defineWorkersProject(async () => {
             d1Databases: {
               DB: 'test-db',
             },
+            r2Buckets: {
+              PRIVATE_FILES: 'test-private-files',
+            },
+            queueProducers: {
+              NEW_LOGS: 'test-queue',
+            },
           },
         },
       },
