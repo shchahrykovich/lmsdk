@@ -23,8 +23,8 @@ export async function getAuthenticatedUser(c: Context<HonoEnv>): Promise<Authent
  * Type guard to validate user has a valid tenantId
  * Returns true if user exists and has tenantId > 0
  */
-export function hasValidTenant(user: any): user is AuthenticatedUser {
-  return user && typeof user.tenantId === 'number' && user.tenantId > 0;
+export function hasValidTenant(user: unknown): user is AuthenticatedUser {
+  return typeof user === 'object' && user !== null && 'tenantId' in user && typeof user.tenantId === 'number' && user.tenantId > 0;
 }
 
 /**

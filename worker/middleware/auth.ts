@@ -14,5 +14,5 @@ export interface AuthenticatedUser {
 
 
 export function getUserFromContext(c: Context<HonoEnv>): AuthenticatedUser {
-    return c.get("user") as AuthenticatedUser;
+    return c.get("user")!;
 }

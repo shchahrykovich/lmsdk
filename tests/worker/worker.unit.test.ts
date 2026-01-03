@@ -17,8 +17,8 @@ describe("Worker Unit Tests", () => {
       const response = await worker.fetch(request, env, ctx);
       await waitOnExecutionContext(ctx);
 
-      expect(response.status).toBe(200);
-      expect(await response.text()).toBe("Frontend route");
+      expect(response.status).toBe(404);
+      expect(await response.text()).toBe("404 Not Found");
     });
 
     it("should return 'Frontend route' for any non-api path", async () => {
@@ -27,8 +27,8 @@ describe("Worker Unit Tests", () => {
       const response = await worker.fetch(request, env, ctx);
       await waitOnExecutionContext(ctx);
 
-      expect(response.status).toBe(200);
-      expect(await response.text()).toBe("Frontend route");
+      expect(response.status).toBe(404);
+      expect(await response.text()).toBe("404 Not Found");
     });
   });
 

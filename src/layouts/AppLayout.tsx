@@ -11,15 +11,18 @@ import {
   ScrollText,
   PanelLeftClose,
   PanelLeftOpen,
+  ExternalLink,
   Users,
   Network,
 } from "lucide-react";
 import { useState, useEffect } from "react";
+import { getVersion } from "@/lib/get-version";
 
 export default function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { data: session } = useSession();
+  const appVersion = getVersion();
   const [expandedItems, setExpandedItems] = useState<string[]>(["Projects"]);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     const saved = localStorage.getItem("sidebarCollapsed");
@@ -90,6 +93,13 @@ export default function AppLayout() {
       subItems: [],
     },
     {
+      name: "API Docs",
+      icon: FileText,
+      path: "/api/docs",
+      openInNewTab: true,
+      subItems: [],
+    },
+    {
       name: "Users",
       icon: Users,
       path: "/users",
@@ -133,6 +143,7 @@ export default function AppLayout() {
               const isActive = location.pathname === item.path;
               const isExpanded = expandedItems.includes(item.name);
               const hasSubItems = item.subItems && item.subItems.length > 0;
+              const isExternal = "openInNewTab" in item && item.openInNewTab;
 
               return (
                 <div key={item.path}>
@@ -168,6 +179,9 @@ export default function AppLayout() {
                     <a
                       href={item.path}
                       onClick={(e) => {
+                        if (isExternal) {
+                          return;
+                        }
                         // Allow browser default behavior for Cmd/Ctrl+Click
                         if (e.metaKey || e.ctrlKey) {
                           return;
@@ -175,6 +189,8 @@ export default function AppLayout() {
                         e.preventDefault();
                         void navigate(item.path);
                       }}
+                      target={isExternal ? "_blank" : undefined}
+                      rel={isExternal ? "noreferrer" : undefined}
                       className={`
                         w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium
                         transition-colors duration-150
@@ -190,9 +206,10 @@ export default function AppLayout() {
                       {!isSidebarCollapsed && (
                         <>
                           <span>{item.name}</span>
-                          {isActive && (
-                            <ChevronRight size={16} className="ml-auto" strokeWidth={2} />
-                          )}
+                          <span className="ml-auto flex items-center gap-1">
+                            {isExternal && <ExternalLink size={14} strokeWidth={2} />}
+                            {isActive && <ChevronRight size={16} strokeWidth={2} />}
+                          </span>
                         </>
                       )}
                     </a>
@@ -287,6 +304,18 @@ export default function AppLayout() {
             <LogOut size={18} strokeWidth={2} />
             {!isSidebarCollapsed && <span>Sign out</span>}
           </Button>
+
+          <div
+            className={`mt-3 flex flex-col gap-2 text-xs text-muted-foreground ${
+              isSidebarCollapsed ? "items-center" : "px-3"
+            }`}
+          >
+            <div
+              className={`w-full text-center ${isSidebarCollapsed ? "text-[10px]" : ""}`}
+            >
+              v{appVersion}
+            </div>
+          </div>
         </div>
       </aside>
 

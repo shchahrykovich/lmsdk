@@ -2,7 +2,7 @@ import type { File, Reporter, Task, Vitest } from 'vitest'
 import { getTests } from '@vitest/runner/utils'
 
 /**
- * Optimized Vitest reporter for Claude Code
+ * Optimized Vitest reporter for AI Assistant
  *
  * Features:
  * - Minimal output during test execution
@@ -10,7 +10,7 @@ import { getTests } from '@vitest/runner/utils'
  * - Shows first 10 failed tests with details
  * - Reduces context usage significantly
  */
-export default class ClaudeReporter implements Reporter {
+export default class AiReporter implements Reporter {
   private vitest!: Vitest
   private maxFailedTests = 10
 

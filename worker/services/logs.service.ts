@@ -87,6 +87,12 @@ export class LogService {
           totalPages: 0,
         };
       }
+
+			// D1 has a limit of 100 parameters per query
+			// We need 4 base parameters, so limit to 95 IDs to be safe
+			if (variableFilteredLogIds.length > 95) {
+				variableFilteredLogIds = variableFilteredLogIds.slice(0, 95);
+			}
     }
 
     // Build where conditions
