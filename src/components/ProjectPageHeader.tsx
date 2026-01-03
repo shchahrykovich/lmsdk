@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 interface ProjectPageHeaderProps {
   projectName: string;
   pageTitle?: string;
-  description: string;
+  description: string | ReactNode;
   onBack: () => void;
   actionIcon?: ReactNode;
   actionLabel?: string;

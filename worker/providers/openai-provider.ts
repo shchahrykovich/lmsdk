@@ -13,11 +13,17 @@ import type { IPromptExecutionLogger } from "./logger/execution-logger";
 export class OpenAIProvider extends AIProvider {
   private client: OpenAI;
   protected logger: IPromptExecutionLogger;
+  private proxyConfig?: { token?: string; baseUrl?: string };
 
-  constructor(apiKey: string, logger: IPromptExecutionLogger) {
+  constructor(
+    apiKey: string,
+    logger: IPromptExecutionLogger,
+    proxyConfig?: { token?: string; baseUrl?: string }
+  ) {
     super(apiKey);
     this.client = new OpenAI({ apiKey: this.apiKey });
     this.logger = logger;
+    this.proxyConfig = proxyConfig;
   }
 
   getProviderName(): string {
@@ -97,8 +103,10 @@ export class OpenAIProvider extends AIProvider {
         },
       });
 
+      const client = this.getClient(request);
+
       // Execute the prompt using responses.create
-      const response = await this.client.responses.create({
+      const response = await client.responses.create({
         model: model,
         input: inputMessages as any,
         text: textFormat,
@@ -124,6 +132,7 @@ export class OpenAIProvider extends AIProvider {
         }
       }
 
+      const durationMs = Date.now() - startTime;
       const result = {
         content: outputText,
         model: response.model,
@@ -132,6 +141,7 @@ export class OpenAIProvider extends AIProvider {
           completion_tokens: response.usage?.output_tokens || 0,
           total_tokens: (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0),
         },
+        duration_ms: durationMs,
       };
 
       // Log output
@@ -144,7 +154,6 @@ export class OpenAIProvider extends AIProvider {
       });
 
       // Log successful execution
-      const durationMs = Date.now() - startTime;
       await this.logger.logSuccess({
         durationMs,
       });
@@ -162,5 +171,25 @@ export class OpenAIProvider extends AIProvider {
 
       throw error;
     }
+  }
+
+  private getClient(request: ExecuteRequest): OpenAI {
+    if (request.proxy !== "cloudflare") {
+      return this.client;
+    }
+
+    if (!this.proxyConfig?.token || !this.proxyConfig?.baseUrl) {
+      return this.client;
+    }
+
+    const headers: Record<string, string> = {
+      "cf-aig-authorization": `Bearer ${this.proxyConfig.token}`,
+    };
+
+    return new OpenAI({
+      apiKey: this.apiKey,
+      baseURL: this.proxyConfig.baseUrl + '/openai',
+      defaultHeaders: headers,
+    });
   }
 }

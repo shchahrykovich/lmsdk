@@ -12,16 +12,16 @@ interface Project {
 }
 
 interface UsageStats {
-  providers: Array<{
+  providers: {
     provider: string;
-    models: Array<{
+    models: {
       model: string;
       count: number;
       tokens: {
         [key: string]: number;
       };
-    }>;
-  }>;
+    }[];
+  }[];
 }
 
 interface TraceEntry {
@@ -239,6 +239,7 @@ export default function TraceDetail() {
         log={selectedLog}
         files={logFiles}
         loading={logLoading}
+        projectSlug={slug}
       />
     </div>
   );

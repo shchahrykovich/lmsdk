@@ -45,7 +45,7 @@ export function createHonoApp() {
 				title: "LM SDK API",
 				version: getVersion(),
 				description: "API for managing and executing AI prompts with versioning, and distributed tracing.",
-			},
+			}
 		},
 	});
 

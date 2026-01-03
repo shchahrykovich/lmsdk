@@ -63,99 +63,30 @@ export class LogService {
     filters?: LogFilters,
     sort?: LogSort
   ): Promise<LogsListResponse> {
-    // If variable filtering is requested, get matching log IDs first
-    let variableFilteredLogIds: number[] | undefined;
-    if (filters?.variablePath && this.searchRepository) {
-      const operator = filters.variableOperator || "contains";
-      const searchValue = filters.variableValue || "";
-
-      variableFilteredLogIds = await this.searchRepository.getLogIdsByVariableSearch(
-        tenantId,
-        projectId,
-        filters.variablePath,
-        searchValue,
-        operator
-      );
-
-      // If no logs match the variable search, return empty result
-      if (variableFilteredLogIds.length === 0) {
-        return {
-          logs: [],
-          total: 0,
-          page,
-          pageSize,
-          totalPages: 0,
-        };
-      }
-
-			// D1 has a limit of 100 parameters per query
-			// We need 4 base parameters, so limit to 95 IDs to be safe
-			if (variableFilteredLogIds.length > 95) {
-				variableFilteredLogIds = variableFilteredLogIds.slice(0, 95);
-			}
+    const variableFilteredLogIds = await this.getVariableFilteredLogIds(
+      tenantId,
+      projectId,
+      filters
+    );
+    if (variableFilteredLogIds?.length === 0) {
+      return {
+        logs: [],
+        total: 0,
+        page,
+        pageSize,
+        totalPages: 0,
+      };
     }
 
-    // Build where conditions
-    const whereConditions = [
-      eq(promptExecutionLogs.tenantId, tenantId),
-      eq(promptExecutionLogs.projectId, projectId),
-    ];
+    const whereConditions = this.buildWhereConditions(
+      tenantId,
+      projectId,
+      filters,
+      variableFilteredLogIds
+    );
 
-    // Apply variable filter by log IDs
-    if (variableFilteredLogIds !== undefined) {
-      whereConditions.push(inArray(promptExecutionLogs.id, variableFilteredLogIds));
-    }
-
-    // Apply filters
-    if (filters?.isSuccess !== undefined) {
-      whereConditions.push(eq(promptExecutionLogs.isSuccess, filters.isSuccess));
-    }
-
-    if (filters?.promptId !== undefined) {
-      whereConditions.push(eq(promptExecutionLogs.promptId, filters.promptId));
-    }
-
-    if (filters?.version !== undefined) {
-      whereConditions.push(eq(promptExecutionLogs.version, filters.version));
-    }
-
-    // Get total count
-    const [{ total }] = await this.db
-      .select({ total: count() })
-      .from(promptExecutionLogs)
-      .leftJoin(
-        prompts,
-        and(
-          eq(promptExecutionLogs.promptId, prompts.id),
-          eq(prompts.tenantId, tenantId),
-          eq(prompts.projectId, projectId)
-        )
-      )
-      .where(and(...whereConditions));
-
-    // Determine sort order
-    let orderByClause;
-    const sortField = sort?.field || "createdAt";
-    const sortDirection = sort?.direction || "desc";
-
-    switch (sortField) {
-      case "promptName":
-        orderByClause = sortDirection === "asc" ? asc(prompts.name) : desc(prompts.name);
-        break;
-      case "durationMs":
-        orderByClause = sortDirection === "asc" ? asc(promptExecutionLogs.durationMs) : desc(promptExecutionLogs.durationMs);
-        break;
-      case "isSuccess":
-        orderByClause = sortDirection === "asc" ? asc(promptExecutionLogs.isSuccess) : desc(promptExecutionLogs.isSuccess);
-        break;
-      case "provider":
-        orderByClause = sortDirection === "asc" ? asc(prompts.provider) : desc(prompts.provider);
-        break;
-      case "createdAt":
-      default:
-        orderByClause = sortDirection === "asc" ? asc(promptExecutionLogs.createdAt) : desc(promptExecutionLogs.createdAt);
-        break;
-    }
+    const total = await this.getTotalCount(tenantId, projectId, whereConditions);
+    const orderByClause = this.getOrderByClause(sort);
 
     // Get paginated results
     const offset = (page - 1) * pageSize;
@@ -199,6 +130,108 @@ export class LogService {
       pageSize,
       totalPages,
     };
+  }
+
+  private async getVariableFilteredLogIds(
+    tenantId: number,
+    projectId: number,
+    filters?: LogFilters
+  ): Promise<number[] | undefined> {
+    if (!filters?.variablePath || !this.searchRepository) {
+      return undefined;
+    }
+
+    const operator = filters.variableOperator || "contains";
+    const searchValue = filters.variableValue || "";
+    const logIds = await this.searchRepository.getLogIdsByVariableSearch(
+      tenantId,
+      projectId,
+      filters.variablePath,
+      searchValue,
+      operator
+    );
+
+    if (logIds.length > 95) {
+      return logIds.slice(0, 95);
+    }
+
+    return logIds;
+  }
+
+  private buildWhereConditions(
+    tenantId: number,
+    projectId: number,
+    filters?: LogFilters,
+    variableFilteredLogIds?: number[]
+  ) {
+    const whereConditions = [
+      eq(promptExecutionLogs.tenantId, tenantId),
+      eq(promptExecutionLogs.projectId, projectId),
+    ];
+
+    if (variableFilteredLogIds !== undefined) {
+      whereConditions.push(inArray(promptExecutionLogs.id, variableFilteredLogIds));
+    }
+
+    if (filters?.isSuccess !== undefined) {
+      whereConditions.push(eq(promptExecutionLogs.isSuccess, filters.isSuccess));
+    }
+
+    if (filters?.promptId !== undefined) {
+      whereConditions.push(eq(promptExecutionLogs.promptId, filters.promptId));
+    }
+
+    if (filters?.version !== undefined) {
+      whereConditions.push(eq(promptExecutionLogs.version, filters.version));
+    }
+
+    return whereConditions;
+  }
+
+  private async getTotalCount(
+    tenantId: number,
+    projectId: number,
+    whereConditions: ReturnType<LogService["buildWhereConditions"]>
+  ): Promise<number> {
+    const [{ total }] = await this.db
+      .select({ total: count() })
+      .from(promptExecutionLogs)
+      .leftJoin(
+        prompts,
+        and(
+          eq(promptExecutionLogs.promptId, prompts.id),
+          eq(prompts.tenantId, tenantId),
+          eq(prompts.projectId, projectId)
+        )
+      )
+      .where(and(...whereConditions));
+
+    return total;
+  }
+
+  private getOrderByClause(sort?: LogSort) {
+    const sortField = sort?.field || "createdAt";
+    const sortDirection = sort?.direction || "desc";
+
+    switch (sortField) {
+      case "promptName":
+        return sortDirection === "asc" ? asc(prompts.name) : desc(prompts.name);
+      case "durationMs":
+        return sortDirection === "asc"
+          ? asc(promptExecutionLogs.durationMs)
+          : desc(promptExecutionLogs.durationMs);
+      case "isSuccess":
+        return sortDirection === "asc"
+          ? asc(promptExecutionLogs.isSuccess)
+          : desc(promptExecutionLogs.isSuccess);
+      case "provider":
+        return sortDirection === "asc" ? asc(prompts.provider) : desc(prompts.provider);
+      case "createdAt":
+      default:
+        return sortDirection === "asc"
+          ? asc(promptExecutionLogs.createdAt)
+          : desc(promptExecutionLogs.createdAt);
+    }
   }
 
   async getProjectLog(
@@ -300,7 +333,7 @@ export class LogService {
   async getUniquePromptsForProject(
     tenantId: number,
     projectId: number
-  ): Promise<Array<{ promptId: number; promptName: string; version: number }>> {
+  ): Promise<{ promptId: number; promptName: string; version: number }[]> {
     const results = await this.db
       .selectDistinct({
         promptId: promptExecutionLogs.promptId,

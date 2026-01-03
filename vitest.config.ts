@@ -35,6 +35,9 @@ export default defineWorkersProject(async () => {
             queueProducers: {
               NEW_LOGS: 'test-queue',
             },
+            kvNamespaces: {
+              CACHE: 'test-cache',
+            },
           },
         },
       },

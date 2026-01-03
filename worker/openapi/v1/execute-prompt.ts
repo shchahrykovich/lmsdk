@@ -6,9 +6,86 @@ import { drizzle } from "drizzle-orm/d1";
 import { ProjectService } from "../../services/project.service";
 import { PromptService } from "../../services/prompt.service";
 import { ProviderService } from "../../services/provider.service";
-import type { AIMessage } from "../../providers/base-provider";
+import type { AIMessage, GoogleSettings, OpenAISettings, ResponseFormat } from "../../providers/base-provider";
 import { CFPromptExecutionLogger } from "../../providers/logger/c-f-prompt-execution-logger";
 import { ExecutePromptResponse, ErrorResponse } from "./schemas";
+
+type PromptBody = {
+  messages?: AIMessage[];
+  response_format?: ResponseFormat;
+  openai_settings?: OpenAISettings;
+  google_settings?: GoogleSettings;
+  proxy?: "none" | "cloudflare";
+};
+
+const parsePromptBody = (rawBody: string): { body?: PromptBody; error?: Response } => {
+  try {
+    return { body: JSON.parse(rawBody) as PromptBody };
+  } catch {
+    return {
+      error: Response.json({ error: "Invalid prompt body format" }, { status: 500 }),
+    };
+  }
+};
+
+const finalizeLogger = async (c: Context, logger: CFPromptExecutionLogger): Promise<void> => {
+  const finishPromise = logger.finish();
+  try {
+    c.executionCtx.waitUntil(finishPromise);
+  } catch {
+    await finishPromise;
+  }
+};
+
+const respondWithResult = async (
+  c: Context,
+  logger: CFPromptExecutionLogger,
+  result: { content: string },
+  responseFormat?: PromptBody["response_format"]
+): Promise<Record<string, unknown>> => {
+  const shouldParseJson =
+    responseFormat?.type === "json_schema" || responseFormat?.type === "json";
+  let response: Record<string, unknown>;
+
+  if (shouldParseJson) {
+    try {
+      response = { response: JSON.parse(result.content) };
+    } catch {
+      response = { response: result.content };
+    }
+  } else {
+    response = { response: result.content };
+  }
+
+  await logger.logResponse({ output: response });
+  await finalizeLogger(c, logger);
+  return response;
+};
+
+const resolveProject = async (
+  projectService: ProjectService,
+  tenantId: number,
+  projectSlugOrId: string
+) => {
+  const parsedProjectId = parseInt(projectSlugOrId);
+  if (!Number.isNaN(parsedProjectId)) {
+    return projectService.getProjectById(tenantId, parsedProjectId);
+  }
+  return projectService.getProjectBySlug(tenantId, projectSlugOrId);
+};
+
+const resolvePrompt = async (
+  promptService: PromptService,
+  tenantId: number,
+  projectId: number,
+  promptSlugOrId: string
+) => {
+  const parsedPromptId = parseInt(promptSlugOrId);
+  if (!Number.isNaN(parsedPromptId)) {
+    return promptService.getPromptById(tenantId, projectId, parsedPromptId);
+  }
+  return promptService.getPromptBySlug(tenantId, projectId, promptSlugOrId);
+};
 
 export class V1ExecutePrompt extends OpenAPIRoute {
   schema = {
@@ -93,27 +170,18 @@ export class V1ExecutePrompt extends OpenAPIRoute {
       const projectService = new ProjectService(db);
       const promptService = new PromptService(db);
 
-      // Find project by slug or ID
-      let project;
-      const parsedProjectId = parseInt(projectSlugOrId);
-      if (!isNaN(parsedProjectId)) {
-        project = await projectService.getProjectById(user.tenantId, parsedProjectId);
-      } else {
-        project = await projectService.getProjectBySlug(user.tenantId, projectSlugOrId);
-      }
+      const project = await resolveProject(projectService, user.tenantId, projectSlugOrId);
 
       if (!project) {
         return Response.json({ error: "Project not found" }, { status: 404 });
       }
 
-      // Find prompt by slug or ID
-      let prompt;
-      const parsedPromptId = parseInt(promptSlugOrId);
-      if (!isNaN(parsedPromptId)) {
-        prompt = await promptService.getPromptById(user.tenantId, project.id, parsedPromptId);
-      } else {
-        prompt = await promptService.getPromptBySlug(user.tenantId, project.id, promptSlugOrId);
-      }
+      const prompt = await resolvePrompt(
+        promptService,
+        user.tenantId,
+        project.id,
+        promptSlugOrId
+      );
 
       if (!prompt) {
         return Response.json({ error: "Prompt not found" }, { status: 404 });
@@ -147,12 +215,9 @@ export class V1ExecutePrompt extends OpenAPIRoute {
         rawTraceId: traceparent,
       });
 
-      // Parse the body (which contains messages and other config)
-      let promptBody;
-      try {
-        promptBody = JSON.parse(activeVersion.body);
-      } catch (error) {
-        return Response.json({ error: "Invalid prompt body format" }, { status: 500 });
+      const { body: promptBody, error: promptBodyError } = parsePromptBody(activeVersion.body);
+      if (promptBodyError || !promptBody) {
+        return promptBodyError || Response.json({ error: "Invalid prompt body format" }, { status: 500 });
       }
 
       const messages: AIMessage[] = promptBody.messages || [];
@@ -165,7 +230,9 @@ export class V1ExecutePrompt extends OpenAPIRoute {
       const providerService = new ProviderService({
         openAIKey: c.env.OPEN_AI_API_KEY,
         geminiKey: c.env.GEMINI_API_KEY,
-      }, logger);
+        cloudflareAiGatewayToken: c.env.CLOUDFLARE_AI_GATEWAY_TOKEN,
+        cloudflareAiGatewayBaseUrl: c.env.CLOUDFLARE_AI_GATEWAY_BASE_URL,
+      }, logger, c.env.CACHE);
 
       // Execute the prompt with variables (provider service handles variable substitution)
       // Note: Logging is now handled inside the provider's execute method
@@ -176,86 +243,16 @@ export class V1ExecutePrompt extends OpenAPIRoute {
         response_format: promptBody.response_format,
         openai_settings: promptBody.openai_settings,
         google_settings: promptBody.google_settings,
+        proxy: promptBody.proxy,
+        projectId: activeVersion.projectId,
+        promptSlug: activeVersion.slug,
       });
 
-      // If there's a JSON schema, try to parse the response
-      if (promptBody.response_format?.type === "json_schema" ||
-          promptBody.response_format?.type === "json") {
-        try {
-          const jsonResponse = JSON.parse(result.content);
-          const response = {
-            response: jsonResponse,
-          };
-          await logger.logResponse({ output: response });
-          // Defer logging operations to improve response latency
-          // Only use waitUntil if execution context is available (not in tests)
-          try {
-            c.executionCtx.waitUntil(
-              (async () => {
-                await logger.finish();
-              })()
-            );
-          } catch {
-            // In test environment, execute synchronously
-            await logger.finish();
-          }
-          return response;
-        } catch (error) {
-          // If parsing fails, return as text
-          const response = {
-            response: result.content,
-          };
-          await logger.logResponse({ output: response });
-          // Defer logging operations to improve response latency
-          // Only use waitUntil if execution context is available (not in tests)
-          try {
-            c.executionCtx.waitUntil(
-              (async () => {
-                await logger.finish();
-              })()
-            );
-          } catch {
-            // In test environment, execute synchronously
-            await logger.finish();
-          }
-          return response;
-        }
-      }
-
-      // Return text response
-      const response = {
-        response: result.content
-      };
-      await logger.logResponse({ output: response });
-      // Defer logging operations to improve response latency
-      // Only use waitUntil if execution context is available (not in tests)
-      try {
-        c.executionCtx.waitUntil(
-          (async () => {
-            await logger.finish();
-          })()
-        );
-      } catch {
-        // In test environment, execute synchronously
-        await logger.finish();
-      }
-      return response;
-
+      return await respondWithResult(c, logger, result, promptBody.response_format);
     } catch (error) {
       console.error("Error executing prompt:", error);
 
-      // Defer logging operations even on error
-      // Only use waitUntil if execution context is available (not in tests)
-      try {
-        c.executionCtx.waitUntil(
-          (async () => {
-            await logger.finish();
-          })()
-        );
-      } catch {
-        // In test environment, execute synchronously
-        await logger.finish();
-      }
+      await finalizeLogger(c, logger);
 
       // Note: Error logging is now handled inside the provider's execute method
 

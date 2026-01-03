@@ -51,7 +51,7 @@ export default function AppLayout() {
   };
 
   // Extract project slug from URL if we're in a project context
-  const projectMatch = location.pathname.match(/^\/projects\/([^/]+)/);
+  const projectMatch = /^\/projects\/([^/]+)/.exec(location.pathname);
   const currentProjectSlug = projectMatch ? projectMatch[1] : null;
 
   // Auto-expand Projects menu when in project context

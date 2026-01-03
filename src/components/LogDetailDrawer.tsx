@@ -6,6 +6,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Clock, Timer, CheckCircle2, AlertCircle } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import JsonSection from "@/components/JsonSection";
 
 interface LogEntry {
@@ -38,6 +39,7 @@ interface LogDetailDrawerProps {
   log: LogEntry | null;
   files: LogFiles | null;
   loading: boolean;
+  projectSlug?: string;
 }
 
 export default function LogDetailDrawer({
@@ -46,7 +48,10 @@ export default function LogDetailDrawer({
   log,
   files,
   loading,
+  projectSlug,
 }: LogDetailDrawerProps) {
+  const navigate = useNavigate();
+
   const formatDateTime = (value: string | number) => {
     const timestamp =
       typeof value === "number" && value < 1_000_000_000_000 ? value * 1000 : value;
@@ -65,7 +70,25 @@ export default function LogDetailDrawer({
             <SheetHeader>
               <SheetTitle>Log #{log.id}</SheetTitle>
               <SheetDescription>
-                {log.promptName || "Unknown prompt"} v{log.version}
+                {log.promptSlug && projectSlug ? (
+                  <a
+                    href={`/projects/${projectSlug}/prompts/${log.promptSlug}`}
+                    onClick={(e) => {
+                      // Allow browser default behavior for Cmd/Ctrl+Click
+                      if (e.metaKey || e.ctrlKey) {
+                        return;
+                      }
+                      e.preventDefault();
+                      navigate(`/projects/${projectSlug}/prompts/${log.promptSlug}`);
+                    }}
+                    className="hover:text-primary hover:underline"
+                  >
+                    {log.promptName || "Unknown prompt"}
+                  </a>
+                ) : (
+                  <span>{log.promptName || "Unknown prompt"}</span>
+                )}
+                {" "}v{log.version}
                 {log.provider && log.model && ` - ${log.provider}/${log.model}`}
               </SheetDescription>
             </SheetHeader>

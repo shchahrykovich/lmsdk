@@ -25,7 +25,7 @@ export class V1Whoami extends OpenAPIRoute {
     },
   };
 
-  async handle(_c: Context) {
+  handle(_c: Context) {
     return {
       ok: true,
     };

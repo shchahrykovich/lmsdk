@@ -7,17 +7,36 @@ import {
 import type { IPromptExecutionLogger } from "./logger/execution-logger";
 
 /**
+ * Cache TTL (Time To Live) configuration
+ * Google cache expects duration in seconds as a string (e.g., "3600s")
+ * Cloudflare KV expects TTL in seconds as a number
+ *
+ * Default: 1 hour (3600 seconds)
+ */
+const CACHE_TTL_SECONDS = 3600;
+const GOOGLE_CACHE_TTL = `${CACHE_TTL_SECONDS}s`;
+
+/**
  * Google Gemini provider implementation
  * Uses Google GenAI SDK for executing prompts
  */
 export class GoogleProvider extends AIProvider {
   private client: GoogleGenAI;
   protected logger: IPromptExecutionLogger;
+  private cache: KVNamespace;
+  private proxyConfig?: { token?: string; baseUrl?: string };
 
-  constructor(apiKey: string, logger: IPromptExecutionLogger) {
+  constructor(
+    apiKey: string,
+    logger: IPromptExecutionLogger,
+    cache: KVNamespace,
+    proxyConfig?: { token?: string; baseUrl?: string }
+  ) {
     super(apiKey);
     this.client = new GoogleGenAI({ apiKey: this.apiKey });
     this.logger = logger;
+    this.cache = cache;
+    this.proxyConfig = proxyConfig;
   }
 
   getProviderName(): string {
@@ -31,7 +50,7 @@ export class GoogleProvider extends AIProvider {
 
   async execute(request: ExecuteRequest): Promise<ExecuteResult> {
     const startTime = Date.now();
-    const { model, messages, response_format, variables, google_settings } = request;
+    const { model, messages, response_format, variables, google_settings, projectId, promptSlug } = request;
 
     // Log variables if provided
     if (variables) {
@@ -39,83 +58,20 @@ export class GoogleProvider extends AIProvider {
     }
 
     try {
-      // Convert messages to Gemini format
-      // Build system instruction from system messages
-      let systemInstruction = "";
-      const contents = [];
-
-      for (const msg of messages) {
-        if (msg.role === "system") {
-          systemInstruction += msg.content + "\n\n";
-        } else if (msg.role === "user") {
-          contents.push({
-            role: "user",
-            parts: [{ text: msg.content }],
-          });
-        } else if (msg.role === "assistant") {
-          contents.push({
-            role: "model",
-            parts: [{ text: msg.content }],
-          });
-        }
-      }
-
-      // If no user messages, create one from system message
-      if (contents.length === 0 && systemInstruction) {
-        contents.push({
-          role: "user",
-          parts: [{ text: systemInstruction }],
-        });
-        systemInstruction = "";
-      }
-
-      // Build generation config
-      const config: any = {};
-
-      // Add system instruction if present
-      if (systemInstruction.trim()) {
-        config.systemInstruction = systemInstruction.trim();
-      }
-
-      // If JSON mode is requested
-      if (response_format?.type === "json_schema" || response_format?.type === "json") {
-        config.responseMimeType = "application/json";
-
-        // If there's a schema, add it
-        if (response_format.json_schema) {
-          config.responseSchema = response_format.json_schema.schema || response_format.json_schema;
-        }
-      }
-
-      // Add Google thinking settings if provided
-      if (google_settings) {
-        const thinkingConfig: any = {};
-
-        if (google_settings.include_thoughts !== undefined) {
-          thinkingConfig.includeThoughts = google_settings.include_thoughts;
-        }
-
-        // CRITICAL: Google API only allows ONE of thinking_budget OR thinking_level, not both
-        // Priority: thinking_budget > thinking_level > neither
-        if (google_settings.thinking_budget !== undefined && google_settings.thinking_budget != 0) {
-          // Use thinking_budget if explicitly set (!= 0)
-          thinkingConfig.thinkingBudget = google_settings.thinking_budget;
-        } else if (google_settings.thinking_level && google_settings.thinking_level !== "THINKING_LEVEL_UNSPECIFIED") {
-          // Use thinking_level if it's set to a specific value
-          thinkingConfig.thinkingLevel = google_settings.thinking_level;
-        }
-        // If thinking_budget is 0 or -1, and thinking_level is unspecified, send neither
-
-        // Only add thinkingConfig if it has properties
-        if (Object.keys(thinkingConfig).length > 0) {
-          config.thinkingConfig = thinkingConfig;
-        }
-
-        // Add tools if enabled
-        if (google_settings.google_search_enabled) {
-          config.tools = [{ type: 'google_search' }];
-        }
-      }
+      const { systemInstruction, contents } = this.buildContents(messages);
+      const cachedContentName = await this.getCachedContentName(
+        model,
+        google_settings,
+        systemInstruction,
+        projectId,
+        promptSlug
+      );
+      const config = this.buildGenerationConfig(
+        response_format,
+        google_settings,
+        systemInstruction,
+        cachedContentName
+      );
 
       // Log input
       await this.logger.logInput({
@@ -126,34 +82,20 @@ export class GoogleProvider extends AIProvider {
         },
       });
 
+      const client = this.getClient(request);
+
       // Execute the request using generateContentStream
-      const response: any = await this.client.models.generateContentStream({
+      const response: any = await client.models.generateContentStream({
         model: model,
         config: config,
         contents: contents,
       });
 
-      // Collect the streamed response
-      let outputText = "";
-      const chunks = [];
-      for await (const chunk of response) {
-        chunks.push(chunk);
-        if (chunk.text) {
-          outputText += chunk.text;
-        }
-      }
+      const { outputText, chunks, usageMetadata } = await this.collectStream(response);
 
-      // Note: Usage metadata is not available in streaming mode
-      // You would need to use generateContent (non-streaming) to get usage data
-      const result = {
-        content: outputText,
-        model: model,
-        usage: {
-          prompt_tokens: 0,
-          completion_tokens: 0,
-          total_tokens: 0,
-        },
-      };
+      const durationMs = Date.now() - startTime;
+
+      const result = this.buildResult(model, outputText, usageMetadata, durationMs);
 
       // Log output
       await this.logger.logOutput({
@@ -166,7 +108,6 @@ export class GoogleProvider extends AIProvider {
 
 
       // Log successful execution
-      const durationMs = Date.now() - startTime;
       await this.logger.logSuccess({
         durationMs,
       });
@@ -184,5 +125,193 @@ export class GoogleProvider extends AIProvider {
 
       throw error;
     }
+  }
+
+  private buildContents(messages: ExecuteRequest["messages"]) {
+    let systemInstruction = "";
+    const contents: { role: string; parts: { text: string }[] }[] = [];
+
+    for (const msg of messages) {
+      if (msg.role === "system") {
+        systemInstruction += msg.content + "\n\n";
+      } else if (msg.role === "user") {
+        contents.push({
+          role: "user",
+          parts: [{ text: msg.content }],
+        });
+      } else if (msg.role === "assistant") {
+        contents.push({
+          role: "model",
+          parts: [{ text: msg.content }],
+        });
+      }
+    }
+
+    if (contents.length === 0 && systemInstruction) {
+      contents.push({
+        role: "user",
+        parts: [{ text: systemInstruction }],
+      });
+      systemInstruction = "";
+    }
+
+    return { systemInstruction, contents };
+  }
+
+  private async getCachedContentName(
+    model: string,
+    googleSettings: ExecuteRequest["google_settings"],
+    systemInstruction: string,
+    projectId?: number,
+    promptSlug?: string
+  ): Promise<string | null> {
+    if (!googleSettings?.cache_system_message || !systemInstruction.trim() || !projectId || !promptSlug) {
+      return null;
+    }
+
+    const cacheKey = `gemini_cache_${projectId}__${promptSlug}`;
+
+    try {
+      let cachedContentName = await this.cache.get(cacheKey);
+      if (cachedContentName) {
+        return cachedContentName;
+      }
+
+      try {
+        const newCache = await this.client.caches.create({
+          model: model,
+          config: {
+            systemInstruction: systemInstruction.trim(),
+            displayName: cacheKey,
+            ttl: GOOGLE_CACHE_TTL,
+          },
+        });
+        cachedContentName = newCache.name || null;
+
+        if (cachedContentName) {
+          await this.cache.put(cacheKey, cachedContentName, {
+            expirationTtl: CACHE_TTL_SECONDS,
+          });
+        }
+      } catch (createError: any) {
+        if (!createError.message?.includes("duplicate") && !createError.message?.includes("already exists")) {
+          console.error("Error creating cache:", createError);
+        }
+      }
+      return cachedContentName;
+    } catch (error) {
+      console.error("Error managing cache:", error);
+      return null;
+    }
+  }
+
+  private buildGenerationConfig(
+    responseFormat: ExecuteRequest["response_format"],
+    googleSettings: ExecuteRequest["google_settings"],
+    systemInstruction: string,
+    cachedContentName: string | null
+  ) {
+    const config: any = {};
+
+    if (cachedContentName) {
+      config.cachedContent = cachedContentName;
+    } else if (systemInstruction.trim()) {
+      config.systemInstruction = systemInstruction.trim();
+    }
+
+    if (responseFormat?.type === "json_schema" || responseFormat?.type === "json") {
+      config.responseMimeType = "application/json";
+      if (responseFormat.json_schema) {
+        config.responseSchema = responseFormat.json_schema.schema || responseFormat.json_schema;
+      }
+    }
+
+    if (googleSettings) {
+      const thinkingConfig: any = {};
+
+      if (googleSettings.include_thoughts !== undefined) {
+        thinkingConfig.includeThoughts = googleSettings.include_thoughts;
+      }
+
+      if (googleSettings.thinking_budget !== undefined && googleSettings.thinking_budget != 0) {
+        thinkingConfig.thinkingBudget = googleSettings.thinking_budget;
+      } else if (
+        googleSettings.thinking_level &&
+        googleSettings.thinking_level !== "THINKING_LEVEL_UNSPECIFIED"
+      ) {
+        thinkingConfig.thinkingLevel = googleSettings.thinking_level;
+      }
+
+      if (Object.keys(thinkingConfig).length > 0) {
+        config.thinkingConfig = thinkingConfig;
+      }
+
+      if (googleSettings.google_search_enabled) {
+        config.tools = [{ type: "google_search" }];
+      }
+    }
+
+    return config;
+  }
+
+  private async collectStream(response: AsyncIterable<any>) {
+    let outputText = "";
+    const chunks: any[] = [];
+    let usageMetadata: any = null;
+
+    for await (const chunk of response) {
+      chunks.push(chunk);
+      if (chunk.text) {
+        outputText += chunk.text;
+      }
+      if (chunk.usageMetadata) {
+        usageMetadata = chunk.usageMetadata;
+      }
+    }
+
+    return { outputText, chunks, usageMetadata };
+  }
+
+  private buildResult(
+    model: string,
+    outputText: string,
+    usageMetadata: any,
+    durationMs: number
+  ): ExecuteResult {
+    return {
+      content: outputText,
+      model: model,
+      usage: {
+        prompt_tokens: usageMetadata?.promptTokenCount || 0,
+        completion_tokens: usageMetadata?.candidatesTokenCount || 0,
+        total_tokens: usageMetadata?.totalTokenCount || 0,
+        thoughts_tokens: usageMetadata?.thoughtsTokenCount,
+        tool_use_prompt_tokens: usageMetadata?.toolUsePromptTokenCount,
+        cached_content_tokens: usageMetadata?.cachedContentTokenCount,
+      },
+      duration_ms: durationMs,
+    };
+  }
+
+  private getClient(request: ExecuteRequest): GoogleGenAI {
+    if (request.proxy !== "cloudflare") {
+      return this.client;
+    }
+
+    if (!this.proxyConfig?.token || !this.proxyConfig?.baseUrl) {
+      return this.client;
+    }
+
+    const headers: Record<string, string> = {
+      "cf-aig-authorization": `Bearer ${this.proxyConfig.token}`,
+    };
+
+    return new GoogleGenAI({
+      apiKey: this.apiKey,
+      httpOptions: {
+        baseUrl: this.proxyConfig.baseUrl + '/google-ai-studio',
+        headers,
+      },
+    });
   }
 }

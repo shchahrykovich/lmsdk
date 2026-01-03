@@ -110,7 +110,29 @@ export default function LogDetail() {
       <ProjectPageHeader
         projectName={project.name}
         pageTitle={`Log #${log.id}`}
-        description={`${log.promptName || "Unknown prompt"} v${log.version} - ${log.provider && log.model ? `${log.provider}/${log.model}` : "Unknown provider"}`}
+        description={
+          <span>
+            {log.promptSlug ? (
+              <a
+                href={`/projects/${slug}/prompts/${log.promptSlug}`}
+                onClick={(e) => {
+                  // Allow browser default behavior for Cmd/Ctrl+Click
+                  if (e.metaKey || e.ctrlKey) {
+                    return;
+                  }
+                  e.preventDefault();
+                  navigate(`/projects/${slug}/prompts/${log.promptSlug}`);
+                }}
+                className="hover:text-primary hover:underline"
+              >
+                {log.promptName || "Unknown prompt"}
+              </a>
+            ) : (
+              <span>{log.promptName || "Unknown prompt"}</span>
+            )}
+            {" "}v{log.version} - {log.provider && log.model ? `${log.provider}/${log.model}` : "Unknown provider"}
+          </span>
+        }
         onBack={() => navigate(`/projects/${project.slug}/logs`)}
         badge={
           <span

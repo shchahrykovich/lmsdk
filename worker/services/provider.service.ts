@@ -11,7 +11,7 @@ export interface ProviderInfo {
   id: string;
   name: string;
   description: string;
-  models: Array<{ id: string; name: string }>;
+  models: { id: string; name: string }[];
 }
 
 /**
@@ -29,8 +29,8 @@ export interface ExecutePromptRequest extends Omit<ExecuteRequest, 'messages'> {
 export class ProviderService {
   private factory: ProviderFactory;
 
-  constructor(config: ProviderConfig, logger: IPromptExecutionLogger) {
-    this.factory = new ProviderFactory(config, logger);
+  constructor(config: ProviderConfig, logger: IPromptExecutionLogger, cache: KVNamespace) {
+    this.factory = new ProviderFactory(config, logger, cache);
   }
 
   /**
@@ -108,6 +108,9 @@ export class ProviderService {
       openai_settings: request.openai_settings,
       google_settings: request.google_settings,
       variables: request.variables,
+      proxy: request.proxy,
+			promptSlug: request.promptSlug,
+			projectId: request.projectId,
     });
     return result;
   }

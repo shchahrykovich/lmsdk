@@ -9,6 +9,8 @@ import type { IPromptExecutionLogger } from "./logger/execution-logger";
 export interface ProviderConfig {
   openAIKey?: string;
   geminiKey?: string;
+  cloudflareAiGatewayToken?: string;
+  cloudflareAiGatewayBaseUrl?: string;
 }
 
 /**
@@ -18,10 +20,12 @@ export interface ProviderConfig {
 export class ProviderFactory {
   private config: ProviderConfig;
   private logger: IPromptExecutionLogger;
+  private cache: KVNamespace;
 
-  constructor(config: ProviderConfig, logger: IPromptExecutionLogger) {
+  constructor(config: ProviderConfig, logger: IPromptExecutionLogger, cache: KVNamespace) {
     this.config = config;
     this.logger = logger;
+    this.cache = cache;
   }
 
   /**
@@ -36,13 +40,19 @@ export class ProviderFactory {
         if (!this.config.openAIKey) {
           throw new Error("OpenAI API key not configured. Please set OPEN_AI_API_KEY secret.");
         }
-        return new OpenAIProvider(this.config.openAIKey, this.logger);
+        return new OpenAIProvider(this.config.openAIKey, this.logger, {
+          token: this.config.cloudflareAiGatewayToken,
+          baseUrl: this.config.cloudflareAiGatewayBaseUrl,
+        });
 
       case "google":
         if (!this.config.geminiKey) {
           throw new Error("Google Gemini API key not configured. Please set GEMINI_API_KEY secret.");
         }
-        return new GoogleProvider(this.config.geminiKey, this.logger);
+        return new GoogleProvider(this.config.geminiKey, this.logger, this.cache, {
+          token: this.config.cloudflareAiGatewayToken,
+          baseUrl: this.config.cloudflareAiGatewayBaseUrl,
+        });
 
       default:
         throw new Error(

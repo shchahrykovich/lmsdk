@@ -37,6 +37,7 @@ export interface GoogleSettings {
   thinking_budget?: number;
   thinking_level?: "THINKING_LEVEL_UNSPECIFIED" | "LOW" | "MEDIUM" | "HIGH" | "MINIMAL";
   google_search_enabled?: boolean;
+  cache_system_message?: boolean;
 }
 
 /**
@@ -49,6 +50,10 @@ export interface ExecuteRequest {
   openai_settings?: OpenAISettings;
   google_settings?: GoogleSettings;
   variables?: Record<string, any>;
+  proxy?: "none" | "cloudflare";
+  // For Google cache key generation
+  projectId?: number;
+  promptSlug?: string;
 }
 
 /**
@@ -58,6 +63,10 @@ export interface TokenUsage {
   prompt_tokens: number;
   completion_tokens: number;
   total_tokens: number;
+  // Optional fields for provider-specific token breakdowns
+  thoughts_tokens?: number; // Google: tokens used for thinking/reasoning
+  tool_use_prompt_tokens?: number; // Google: tokens from tool execution results
+  cached_content_tokens?: number; // Google: tokens from cached content
 }
 
 /**
@@ -67,6 +76,7 @@ export interface ExecuteResult {
   content: string;
   model: string;
   usage: TokenUsage;
+  duration_ms?: number;
 }
 
 /**

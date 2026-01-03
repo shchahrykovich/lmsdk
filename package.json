@@ -1,12 +1,13 @@
 {
   "name": "lmsdk",
   "private": true,
-  "version": "0.0.6",
+  "version": "0.0.7",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "lint": "eslint",
+    "lint-with-warnings": "eslint",
+    "lint": "eslint . --quiet --max-warnings=0",
     "preview": "npm run build && vite preview",
     "db:version": "wrangler d1 time-travel info DB",
     "db:migrations:apply": "wrangler d1 migrations apply DB --remote",

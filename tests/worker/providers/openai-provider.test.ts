@@ -3,12 +3,20 @@ import { OpenAIProvider } from "../../../worker/providers/openai-provider";
 import type { ExecuteRequest } from "../../../worker/providers/base-provider";
 import {NullPromptExecutionLogger} from "../../../worker/providers/logger/null-prompt-execution-logger";
 
+const constructedOptions: any[] = [];
+const mockResponsesCreate = vi.fn();
+
 // Mock the OpenAI module
 vi.mock("openai", () => {
   return {
     default: class MockOpenAI {
+      options: any;
+      constructor(options: any) {
+        this.options = options;
+        constructedOptions.push(options);
+      }
       responses = {
-        create: vi.fn(),
+        create: mockResponsesCreate,
       };
     },
   };
@@ -19,6 +27,7 @@ describe("OpenAIProvider", () => {
 
   beforeEach(() => {
     logger = new NullPromptExecutionLogger();
+    constructedOptions.length = 0;
   });
   describe("Constructor", () => {
     it("should create provider with valid API key", () => {
@@ -456,6 +465,77 @@ describe("OpenAIProvider", () => {
       };
 
       await expect(provider.execute(request)).rejects.toThrow("API Error: Rate limit exceeded");
+    });
+  });
+
+  describe("Proxy settings", () => {
+    let provider: OpenAIProvider;
+    let mockCreate: any;
+
+    beforeEach(() => {
+      provider = new OpenAIProvider("test-api-key", logger, {
+        token: "cf-token",
+        baseUrl: "https://gateway.example",
+      });
+      mockCreate = (provider as any).client.responses.create;
+      mockCreate.mockReset();
+    });
+
+    it("should use Cloudflare gateway when proxy is enabled", async () => {
+      const mockResponse = {
+        model: "gpt-5.2",
+        output: [
+          {
+            type: "message",
+            content: [{ type: "output_text", text: "Proxy response" }],
+          },
+        ],
+        usage: { input_tokens: 1, output_tokens: 1 },
+      };
+
+      mockCreate.mockResolvedValue(mockResponse);
+
+      const request: ExecuteRequest = {
+        model: "gpt-5.2",
+        messages: [{ role: "user", content: "Test proxy" }],
+        proxy: "cloudflare",
+        projectId: 42,
+        promptSlug: "proxy-test",
+      };
+
+      await provider.execute(request);
+
+      const gatewayOptions = constructedOptions[constructedOptions.length - 1];
+      expect(gatewayOptions.baseURL).toBe("https://gateway.example/openai");
+      expect(gatewayOptions.defaultHeaders["cf-aig-authorization"]).toBe("Bearer cf-token");
+    });
+
+    it("should fallback to default client when proxy config is missing", async () => {
+      const fallbackProvider = new OpenAIProvider("test-api-key", logger);
+      const fallbackCreate = (fallbackProvider as any).client.responses.create;
+      fallbackCreate.mockReset();
+      fallbackCreate.mockResolvedValue({
+        model: "gpt-5.2",
+        output: [
+          {
+            type: "message",
+            content: [{ type: "output_text", text: "Fallback response" }],
+          },
+        ],
+        usage: { input_tokens: 1, output_tokens: 1 },
+      });
+
+      const request: ExecuteRequest = {
+        model: "gpt-5.2",
+        messages: [{ role: "user", content: "Test proxy fallback" }],
+        proxy: "cloudflare",
+      };
+
+      const optionsCount = constructedOptions.length;
+      await fallbackProvider.execute(request);
+
+      expect(constructedOptions.length).toBe(optionsCount);
+      expect(constructedOptions[optionsCount - 1]?.baseURL).toBeUndefined();
     });
   });
 

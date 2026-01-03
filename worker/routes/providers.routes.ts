@@ -16,13 +16,15 @@ providers.use("/*", requireAuth);
  * Returns list of supported AI providers
  * Requires: Authentication
  */
-providers.get("/", async (c) => {
+providers.get("/", (c) => {
   // Initialize provider service with API keys from environment
   // Use NullLogger since this endpoint doesn't execute prompts
   const providerService = new ProviderService({
     openAIKey: c.env.OPEN_AI_API_KEY,
     geminiKey: c.env.GEMINI_API_KEY,
-  }, new NullPromptExecutionLogger());
+    cloudflareAiGatewayToken: c.env.CLOUDFLARE_AI_GATEWAY_TOKEN,
+    cloudflareAiGatewayBaseUrl: c.env.CLOUDFLARE_AI_GATEWAY_BASE_URL,
+  }, new NullPromptExecutionLogger(), c.env.CACHE);
 
   const providersList = providerService.getProviders();
 
@@ -43,7 +45,7 @@ providers.get("/", async (c) => {
 providers.post("/execute", async (c) => {
   try {
     const body = await c.req.json();
-    const { provider, model, messages, response_format, variables, google_settings, openai_settings } = body;
+    const { provider, model, messages, response_format, variables, google_settings, openai_settings, projectId, promptSlug, proxy } = body;
 
     // Validate required fields
     if (!provider || !model || !messages || !Array.isArray(messages)) {
@@ -74,7 +76,9 @@ providers.post("/execute", async (c) => {
     const providerService = new ProviderService({
       openAIKey: c.env.OPEN_AI_API_KEY,
       geminiKey: c.env.GEMINI_API_KEY,
-    }, new NullPromptExecutionLogger());
+      cloudflareAiGatewayToken: c.env.CLOUDFLARE_AI_GATEWAY_TOKEN,
+      cloudflareAiGatewayBaseUrl: c.env.CLOUDFLARE_AI_GATEWAY_BASE_URL,
+    }, new NullPromptExecutionLogger(), c.env.CACHE);
 
     // Convert messages to AIMessage format
     const aiMessages: AIMessage[] = messages.map((msg: any) => ({
@@ -90,6 +94,9 @@ providers.post("/execute", async (c) => {
       response_format,
       google_settings,
       openai_settings,
+      proxy,
+      projectId,
+      promptSlug,
     });
 
     // Return the response

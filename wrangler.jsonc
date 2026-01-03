@@ -48,6 +48,11 @@
       }
     ]
   },
+  "kv_namespaces": [
+    {
+      "binding": "CACHE",
+    }
+  ],
   "vars": {
     "GITHUB_URL": "https://github.com/shchahrykovich/lmsdk",
     "ALLOW_TO_CREATE_MORE_THAN_ONE_TENANT": "false",

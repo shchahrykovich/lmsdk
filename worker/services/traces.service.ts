@@ -4,16 +4,16 @@ import {traces, promptExecutionLogs, prompts} from "../db/schema";
 import {parseTraceParent} from "../utils/trace-parser";
 
 export interface UsageStats {
-    providers: Array<{
+    providers: {
         provider: string;
-        models: Array<{
+        models: {
             model: string;
             count: number;
             tokens: {
                 [key: string]: number;
             };
-        }>;
-    }>;
+        }[];
+    }[];
 }
 
 export interface TraceEntry {

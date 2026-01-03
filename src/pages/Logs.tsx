@@ -452,12 +452,12 @@ export default function Logs() {
 
   // Extract active filters for display
   const activeFilters = useMemo(() => {
-    const filters: Array<{
+    const filters: {
       id: string;
       label: string;
       value: string;
       onRemove: () => void;
-    }> = [];
+    }[] = [];
 
     const columnFilters = table.getState().columnFilters;
 

@@ -2,7 +2,7 @@ import { env } from 'cloudflare:test';
 
 // Use Vite's import.meta.glob to load migration files at build time
 // This works in the Workers environment where fs is not available
-// @ts-ignore
+// @ts-expect-error Vite's import.meta.glob typing isn't available in this context.
 const migrations = import.meta.glob('../../../drizzle/*.sql', {
     query: '?raw',
     import: 'default',

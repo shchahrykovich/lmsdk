@@ -67,32 +67,9 @@ export class TraceExtractionService {
     projectId: number,
     traceId: string
   ): Promise<void> {
-    // Step 1: Read current trace record and capture updatedAt for optimistic locking
-    const [existingTrace] = await this.db
-      .select()
-      .from(traces)
-      .where(
-        and(
-          eq(traces.tenantId, tenantId),
-          eq(traces.projectId, projectId),
-          eq(traces.traceId, traceId)
-        )
-      )
-      .limit(1);
-
+    const existingTrace = await this.getTraceRecord(tenantId, projectId, traceId);
     const initialUpdatedAt = existingTrace?.updatedAt;
-
-    // Step 2: Query all execution logs for this trace
-    const logs = await this.db
-      .select()
-      .from(promptExecutionLogs)
-      .where(
-        and(
-          eq(promptExecutionLogs.tenantId, tenantId),
-          eq(promptExecutionLogs.projectId, projectId),
-          eq(promptExecutionLogs.traceId, traceId)
-        )
-      );
+    const logs = await this.getTraceLogs(tenantId, projectId, traceId);
 
     if (logs.length === 0) {
       console.warn(`No logs found for trace ${traceId}`);
@@ -116,124 +93,176 @@ export class TraceExtractionService {
     const nowDate = new Date(now * 1000);
 
     if (existingTrace) {
-      // Check if updatedAt has changed (another worker updated it)
-      const [currentTrace] = await this.db
-        .select()
-        .from(traces)
-        .where(
-          and(
-            eq(traces.tenantId, tenantId),
-            eq(traces.projectId, projectId),
-            eq(traces.traceId, traceId)
-          )
-        )
-        .limit(1);
-
-      if (!currentTrace) {
-        throw new Error(`Trace record disappeared during processing: ${traceId}`);
-      }
-
-      // Compare updatedAt timestamps
-      // Drizzle with mode: "timestamp" returns Date objects
-      const currentUpdatedAt = currentTrace.updatedAt instanceof Date
-        ? Math.floor(currentTrace.updatedAt.getTime() / 1000)
-        : (currentTrace.updatedAt as number);
-
-      const initialUpdatedAtTimestamp = initialUpdatedAt instanceof Date
-        ? Math.floor(initialUpdatedAt.getTime() / 1000)
-        : (initialUpdatedAt as number) || 0;
-
-      if (currentUpdatedAt !== initialUpdatedAtTimestamp) {
-        // Another worker updated this trace, restart process
-        console.log(`Trace ${traceId} was updated by another worker, restarting`);
-        throw new OptimisticLockError("Trace was modified during processing");
-      }
-
-      // Update existing trace
-      await this.db
-        .update(traces)
-        .set({
-          totalLogs: stats.totalLogs,
-          successCount: stats.successCount,
-          errorCount: stats.errorCount,
-          totalDurationMs: stats.totalDurationMs,
-          stats: stats.stats,
-          firstLogAt: stats.firstLogAt ? new Date(stats.firstLogAt * 1000) : undefined,
-          lastLogAt: stats.lastLogAt ? new Date(stats.lastLogAt * 1000) : undefined,
-          tracePath,
-          updatedAt: nowDate,
-        })
-        .where(
-          and(
-            eq(traces.tenantId, tenantId),
-            eq(traces.projectId, projectId),
-            eq(traces.traceId, traceId),
-            // Add updatedAt to WHERE clause for atomic check-and-update
-            sql`${traces.updatedAt} = ${initialUpdatedAtTimestamp}`
-          )
-        );
-
-      // Verify update happened (if 0 rows affected, lock failed)
-      const [verifyTrace] = await this.db
-        .select()
-        .from(traces)
-        .where(
-          and(
-            eq(traces.tenantId, tenantId),
-            eq(traces.projectId, projectId),
-            eq(traces.traceId, traceId)
-          )
-        )
-        .limit(1);
-
-      const verifyUpdatedAt = verifyTrace.updatedAt instanceof Date
-        ? Math.floor(verifyTrace.updatedAt.getTime() / 1000)
-        : (verifyTrace.updatedAt as number);
-
-      if (!verifyTrace || verifyUpdatedAt !== now) {
-        throw new OptimisticLockError("Trace update failed due to concurrent modification");
-      }
+      await this.updateTraceWithOptimisticLock({
+        tenantId,
+        projectId,
+        traceId,
+        initialUpdatedAt,
+        stats,
+        tracePath,
+        now,
+        nowDate,
+      });
     } else {
-      // Insert new trace record
-      try {
-        await this.db.insert(traces).values({
-          tenantId,
-          projectId,
-          traceId,
-          totalLogs: stats.totalLogs,
-          successCount: stats.successCount,
-          errorCount: stats.errorCount,
-          totalDurationMs: stats.totalDurationMs,
-          stats: stats.stats,
-          firstLogAt: stats.firstLogAt ? new Date(stats.firstLogAt * 1000) : undefined,
-          lastLogAt: stats.lastLogAt ? new Date(stats.lastLogAt * 1000) : undefined,
-          tracePath,
-          updatedAt: nowDate,
-        });
-      } catch (error: any) {
-        // Handle unique constraint violation (another worker inserted it)
-        // D1 error format can have the constraint error nested deeply
-        const checkError = (e: any): boolean => {
-          if (!e) return false;
-          const msg = e?.message || '';
-          if (msg.includes("UNIQUE constraint failed") || msg.includes("SQLITE_CONSTRAINT")) {
-            return true;
-          }
-          // Check nested cause
-          if (e.cause) {
-            return checkError(e.cause);
-          }
-          return false;
-        };
-
-        if (checkError(error)) {
-          throw new OptimisticLockError("Trace was created by another worker");
-        }
-        throw error;
-      }
+      await this.insertTraceRecord({
+        tenantId,
+        projectId,
+        traceId,
+        stats,
+        tracePath,
+        nowDate,
+      });
     }
 
     console.log(`Successfully processed trace ${traceId} with ${stats.totalLogs} logs`);
+  }
+
+  private async getTraceRecord(tenantId: number, projectId: number, traceId: string) {
+    const [existingTrace] = await this.db
+      .select()
+      .from(traces)
+      .where(
+        and(
+          eq(traces.tenantId, tenantId),
+          eq(traces.projectId, projectId),
+          eq(traces.traceId, traceId)
+        )
+      )
+      .limit(1);
+
+    return existingTrace;
+  }
+
+  private async getTraceLogs(tenantId: number, projectId: number, traceId: string) {
+    return this.db
+      .select()
+      .from(promptExecutionLogs)
+      .where(
+        and(
+          eq(promptExecutionLogs.tenantId, tenantId),
+          eq(promptExecutionLogs.projectId, projectId),
+          eq(promptExecutionLogs.traceId, traceId)
+        )
+      );
+  }
+
+  private async updateTraceWithOptimisticLock(params: {
+    tenantId: number;
+    projectId: number;
+    traceId: string;
+    initialUpdatedAt: number | Date | null | undefined;
+    stats: ReturnType<TraceExtractionService["calculateTraceStats"]>;
+    tracePath: string;
+    now: number;
+    nowDate: Date;
+  }): Promise<void> {
+    const { tenantId, projectId, traceId, initialUpdatedAt, stats, tracePath, now, nowDate } = params;
+    const currentTrace = await this.getTraceRecord(tenantId, projectId, traceId);
+
+    if (!currentTrace) {
+      throw new Error(`Trace record disappeared during processing: ${traceId}`);
+    }
+
+    const currentUpdatedAt = this.getUpdatedAtTimestamp(currentTrace.updatedAt);
+    const initialUpdatedAtTimestamp = this.getUpdatedAtTimestamp(initialUpdatedAt);
+
+    if (currentUpdatedAt !== initialUpdatedAtTimestamp) {
+      console.log(`Trace ${traceId} was updated by another worker, restarting`);
+      throw new OptimisticLockError("Trace was modified during processing");
+    }
+
+    await this.db
+      .update(traces)
+      .set({
+        totalLogs: stats.totalLogs,
+        successCount: stats.successCount,
+        errorCount: stats.errorCount,
+        totalDurationMs: stats.totalDurationMs,
+        stats: stats.stats,
+        firstLogAt: stats.firstLogAt ? new Date(stats.firstLogAt * 1000) : undefined,
+        lastLogAt: stats.lastLogAt ? new Date(stats.lastLogAt * 1000) : undefined,
+        tracePath,
+        updatedAt: nowDate,
+      })
+      .where(
+        and(
+          eq(traces.tenantId, tenantId),
+          eq(traces.projectId, projectId),
+          eq(traces.traceId, traceId),
+          sql`${traces.updatedAt} = ${initialUpdatedAtTimestamp}`
+        )
+      );
+
+    const verifyTrace = await this.getTraceRecord(tenantId, projectId, traceId);
+    if (!verifyTrace) {
+      throw new OptimisticLockError("Trace update failed due to concurrent modification");
+    }
+
+    const verifyUpdatedAt = this.getUpdatedAtTimestamp(verifyTrace.updatedAt);
+    if (verifyUpdatedAt !== now) {
+      throw new OptimisticLockError("Trace update failed due to concurrent modification");
+    }
+  }
+
+  private async insertTraceRecord(params: {
+    tenantId: number;
+    projectId: number;
+    traceId: string;
+    stats: ReturnType<TraceExtractionService["calculateTraceStats"]>;
+    tracePath: string;
+    nowDate: Date;
+  }): Promise<void> {
+    const { tenantId, projectId, traceId, stats, tracePath, nowDate } = params;
+
+    try {
+      await this.db.insert(traces).values({
+        tenantId,
+        projectId,
+        traceId,
+        totalLogs: stats.totalLogs,
+        successCount: stats.successCount,
+        errorCount: stats.errorCount,
+        totalDurationMs: stats.totalDurationMs,
+        stats: stats.stats,
+        firstLogAt: stats.firstLogAt ? new Date(stats.firstLogAt * 1000) : undefined,
+        lastLogAt: stats.lastLogAt ? new Date(stats.lastLogAt * 1000) : undefined,
+        tracePath,
+        updatedAt: nowDate,
+      });
+    } catch (error) {
+      if (this.isUniqueConstraintError(error)) {
+        throw new OptimisticLockError("Trace was created by another worker");
+      }
+      throw error;
+    }
+  }
+
+  private getUpdatedAtTimestamp(updatedAt: number | Date | null | undefined): number {
+    if (updatedAt instanceof Date) {
+      return Math.floor(updatedAt.getTime() / 1000);
+    }
+    if (typeof updatedAt === "number") {
+      return updatedAt;
+    }
+    return 0;
+  }
+
+  private isUniqueConstraintError(error: unknown): boolean {
+    if (!error || typeof error !== "object") {
+      return false;
+    }
+
+    const message = (error as { message?: string }).message || "";
+    if (message.includes("UNIQUE constraint failed") || message.includes("SQLITE_CONSTRAINT")) {
+      return true;
+    }
+
+    const cause = (error as { cause?: unknown }).cause;
+    if (cause) {
+      return this.isUniqueConstraintError(cause);
+    }
+
+    return false;
   }
 
   /**

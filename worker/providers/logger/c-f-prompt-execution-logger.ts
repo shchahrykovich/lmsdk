@@ -138,7 +138,7 @@ export class CFPromptExecutionLogger implements IPromptExecutionLogger {
         });
     }
 
-    async logInput(params: {
+    logInput(params: {
         tenantId?: number;
         projectId?: number;
         promptId?: number;
@@ -147,9 +147,10 @@ export class CFPromptExecutionLogger implements IPromptExecutionLogger {
     }): Promise<void> {
         // Just accumulate data - persistence happens in finish
         this.inputData = params.input;
+        return Promise.resolve();
     }
 
-    async logOutput(params: {
+    logOutput(params: {
         tenantId?: number;
         projectId?: number;
         promptId?: number;
@@ -158,9 +159,10 @@ export class CFPromptExecutionLogger implements IPromptExecutionLogger {
     }): Promise<void> {
         // Just accumulate data - persistence happens in finish
         this.outputData = params.output;
+        return Promise.resolve();
     }
 
-    async logResult(params: {
+    logResult(params: {
         tenantId?: number;
         projectId?: number;
         promptId?: number;
@@ -168,9 +170,10 @@ export class CFPromptExecutionLogger implements IPromptExecutionLogger {
         output: unknown;
     }): Promise<void> {
         this.resultData = params.output;
+        return Promise.resolve();
     }
 
-    async logResponse(params: {
+    logResponse(params: {
         tenantId?: number;
         projectId?: number;
         promptId?: number;
@@ -178,9 +181,10 @@ export class CFPromptExecutionLogger implements IPromptExecutionLogger {
         output: unknown;
     }): Promise<void> {
         this.responseData = params.output;
+        return Promise.resolve();
     }
 
-    async logVariables(params: {
+    logVariables(params: {
         tenantId?: number;
         projectId?: number;
         promptId?: number;
@@ -189,9 +193,10 @@ export class CFPromptExecutionLogger implements IPromptExecutionLogger {
     }): Promise<void> {
         // Just accumulate data - persistence happens in finish
         this.variablesData = params.variables;
+        return Promise.resolve();
     }
 
-    async logSuccess(params: {
+    logSuccess(params: {
         tenantId?: number;
         projectId?: number;
         promptId?: number;
@@ -204,7 +209,7 @@ export class CFPromptExecutionLogger implements IPromptExecutionLogger {
         const version = params.version ?? this.context?.version;
 
         if (tenantId === undefined || projectId === undefined || promptId === undefined || version === undefined) {
-            throw new Error("Missing required context: tenantId, projectId, promptId, and version must be provided either via setContext() or params");
+            return Promise.reject(new Error("Missing required context"));
         }
 
         const durationMs = params.durationMs;
@@ -265,9 +270,10 @@ export class CFPromptExecutionLogger implements IPromptExecutionLogger {
         })();
 
         this.pendingTasks.push(task);
+        return Promise.resolve();
     }
 
-    async logError(params: {
+    logError(params: {
         tenantId?: number;
         projectId?: number;
         promptId?: number;
@@ -281,7 +287,7 @@ export class CFPromptExecutionLogger implements IPromptExecutionLogger {
         const version = params.version ?? this.context?.version;
 
         if (tenantId === undefined || projectId === undefined || promptId === undefined || version === undefined) {
-            throw new Error("Missing required context: tenantId, projectId, promptId, and version must be provided either via setContext() or params");
+            return Promise.reject(new Error("Missing required context: tenantId, projectId, promptId, and version must be provided either via setContext() or params"));
         }
 
         const durationMs = params.durationMs;
@@ -345,5 +351,6 @@ export class CFPromptExecutionLogger implements IPromptExecutionLogger {
         })();
 
         this.pendingTasks.push(task);
+        return Promise.resolve();
     }
 }
