@@ -50,7 +50,7 @@
   },
   "kv_namespaces": [
     {
-      "binding": "CACHE",
+      "binding": "CACHE"
     }
   ],
   "vars": {
