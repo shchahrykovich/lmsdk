@@ -9,7 +9,9 @@
   "compatibility_date": "2025-12-17",
   "assets": {
     "directory": "dist",
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
   },
   "observability": {
     "enabled": true
