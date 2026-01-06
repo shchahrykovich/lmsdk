@@ -1,6 +1,7 @@
-import { and, asc, desc, eq, gt } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { dataSetRecords, type DataSetRecord, type NewDataSetRecord } from "../db/schema";
+import type { DataSetIdentity, Pagination } from "../types/common";
 
 export class DataSetRecordRepository {
   private db;
@@ -53,6 +54,46 @@ export class DataSetRecordRepository {
       .orderBy(desc(dataSetRecords.createdAt));
   }
 
+  async listByDataSetPaginated(
+    identity: DataSetIdentity,
+    pagination: Pagination
+  ): Promise<{ records: DataSetRecord[]; total: number }> {
+    const offset = (pagination.page - 1) * pagination.pageSize;
+
+    const [recordsResult, countResult] = await Promise.all([
+      this.db
+        .select()
+        .from(dataSetRecords)
+        .where(
+          and(
+            eq(dataSetRecords.tenantId, identity.tenantId),
+            eq(dataSetRecords.projectId, identity.projectId),
+            eq(dataSetRecords.dataSetId, identity.dataSetId),
+            eq(dataSetRecords.isDeleted, false)
+          )
+        )
+        .orderBy(desc(dataSetRecords.createdAt))
+        .limit(pagination.pageSize)
+        .offset(offset),
+      this.db
+        .select({ count: dataSetRecords.id })
+        .from(dataSetRecords)
+        .where(
+          and(
+            eq(dataSetRecords.tenantId, identity.tenantId),
+            eq(dataSetRecords.projectId, identity.projectId),
+            eq(dataSetRecords.dataSetId, identity.dataSetId),
+            eq(dataSetRecords.isDeleted, false)
+          )
+        ),
+    ]);
+
+    return {
+      records: recordsResult,
+      total: countResult.length,
+    };
+  }
+
   async listBatchByProject(params: {
     tenantId: number;
     projectId: number;
@@ -101,5 +142,28 @@ export class DataSetRecordRepository {
       .where(and(...whereConditions))
       .orderBy(asc(dataSetRecords.id))
       .limit(params.limit);
+  }
+
+  async softDeleteMany(
+    identity: DataSetIdentity,
+    recordIds: number[]
+  ): Promise<number> {
+    if (recordIds.length === 0) return 0;
+
+    const result = await this.db
+      .update(dataSetRecords)
+      .set({ isDeleted: true })
+      .where(
+        and(
+          eq(dataSetRecords.tenantId, identity.tenantId),
+          eq(dataSetRecords.projectId, identity.projectId),
+          eq(dataSetRecords.dataSetId, identity.dataSetId),
+          inArray(dataSetRecords.id, recordIds),
+          eq(dataSetRecords.isDeleted, false)
+        )
+      )
+      .returning({ id: dataSetRecords.id });
+
+    return result.length;
   }
 }

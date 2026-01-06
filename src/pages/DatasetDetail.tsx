@@ -1,10 +1,17 @@
 /* eslint-disable sonarjs/function-return-type */
 import type * as React from "react";
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import ProjectPageHeader from "@/components/ProjectPageHeader";
 import { Button } from "@/components/ui/button";
 import { AddRecordDialog } from "@/components/AddRecordDialog";
+import { DataTable } from "@/components/data-table/data-table";
+import { DataTableToolbar } from "@/components/data-table/data-table-toolbar";
+import { DataTableColumnHeader } from "@/components/data-table/data-table-column-header";
+import { useDataTable } from "@/hooks/use-data-table";
+import type { ColumnDef } from "@tanstack/react-table";
+import { Clock, Trash2 } from "lucide-react";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 interface Project {
   id: number;
@@ -33,6 +40,14 @@ interface DataSetRecord {
   variables: Record<string, unknown>;
   createdAt: number | string;
   updatedAt: number | string;
+}
+
+interface RecordsResponse {
+  records: DataSetRecord[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
 }
 
 type SchemaFields = Record<string, { type: string }>;
@@ -89,11 +104,21 @@ const getValueAtPath = (variables: Record<string, unknown>, path: string) => {
   return current;
 };
 
-const formatValue = (value: unknown) => {
+const formatValue = (value: unknown, maxLength = 100) => {
   if (value === null || value === undefined) return "—";
-  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+
+  if (typeof value === "string") {
+    if (value.length <= maxLength) {
+      return value;
+    }
+    const remaining = value.length - maxLength;
+    return `${value.slice(0, maxLength)}... (+${remaining} chars)`;
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
     return String(value);
   }
+
   try {
     return JSON.stringify(value);
   } catch {
@@ -104,11 +129,14 @@ const formatValue = (value: unknown) => {
 export default function DatasetDetail(): React.ReactNode {
   const { slug, datasetSlug } = useParams<{ slug: string; datasetSlug: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const [project, setProject] = useState<Project | null>(null);
   const [dataset, setDataset] = useState<DataSet | null>(null);
-  const [records, setRecords] = useState<DataSetRecord[]>([]);
+  const [recordsData, setRecordsData] = useState<RecordsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     void fetchProject();
@@ -124,7 +152,8 @@ export default function DatasetDetail(): React.ReactNode {
     if (project && dataset) {
       void fetchRecords(project.id, dataset.id);
     }
-  }, [project, dataset]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project, dataset, location.search]);
 
   const fetchProject = async () => {
     try {
@@ -180,18 +209,33 @@ export default function DatasetDetail(): React.ReactNode {
 
   const fetchRecords = async (projectId: number, datasetId: number) => {
     try {
+      setLoading(true);
+      setError(null);
+
+      // Build query string from URL params
+      const params = new URLSearchParams(window.location.search);
+      const page = params.get("page") ?? "1";
+      const perPage = params.get("perPage") ?? "10";
+
+      const apiParams = new URLSearchParams({
+        page,
+        pageSize: perPage,
+      });
+
       const response = await fetch(
-        `/api/projects/${projectId}/datasets/${datasetId}/records`
+        `/api/projects/${projectId}/datasets/${datasetId}/records?${apiParams.toString()}`
       );
       if (!response.ok) {
         throw new Error(`Failed to fetch records: ${response.statusText}`);
       }
 
       const data = await response.json();
-      setRecords(data.records ?? []);
+      setRecordsData(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load records");
       console.error("Error fetching records:", err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -204,6 +248,95 @@ export default function DatasetDetail(): React.ReactNode {
     () => Object.keys(schemaFields).sort((a, b) => a.localeCompare(b)),
     [schemaFields]
   );
+
+  const columns = useMemo<ColumnDef<DataSetRecord>[]>(
+    () => [
+      {
+        id: "select",
+        header: ({ table }) => (
+          <div className="flex items-center justify-center">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-foreground"
+              checked={table.getIsAllPageRowsSelected()}
+              ref={(input) => {
+                if (input) {
+                  input.indeterminate =
+                    table.getIsSomePageRowsSelected() &&
+                    !table.getIsAllPageRowsSelected();
+                }
+              }}
+              onChange={(event) =>
+                table.toggleAllPageRowsSelected(event.target.checked)
+              }
+              onClick={(event) => event.stopPropagation()}
+              aria-label="Select all records"
+            />
+          </div>
+        ),
+        cell: ({ row }) => (
+          <div className="flex items-center justify-center">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-foreground"
+              checked={row.getIsSelected()}
+              onChange={(event) => row.toggleSelected(event.target.checked)}
+              onClick={(event) => event.stopPropagation()}
+              aria-label="Select record"
+            />
+          </div>
+        ),
+        enableSorting: false,
+        enableHiding: false,
+        size: 40,
+      },
+      {
+        id: "createdAt",
+        accessorKey: "createdAt",
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} label="Created" />
+        ),
+        cell: ({ row }) => (
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <Clock className="h-3.5 w-3.5" />
+            {formatDate(row.original.createdAt)}
+          </div>
+        ),
+        enableSorting: true,
+        enableColumnFilter: false,
+        size: 150,
+      },
+      ...schemaColumns.map((column) => ({
+        id: column,
+        accessorFn: (row: DataSetRecord) => getValueAtPath(row.variables ?? {}, column),
+        header: column,
+        cell: ({ row }: { row: { original: DataSetRecord } }) => {
+          const value = getValueAtPath(row.original.variables ?? {}, column);
+          return (
+            <div className="text-foreground">
+              {formatValue(value)}
+            </div>
+          );
+        },
+        enableSorting: false,
+        enableColumnFilter: false,
+      })),
+    ],
+    [schemaColumns]
+  );
+
+  const { table } = useDataTable({
+    data: recordsData?.records ?? [],
+    columns,
+    pageCount: recordsData?.totalPages ?? 0,
+    initialState: {
+      sorting: [{ id: "createdAt", desc: true }],
+      pagination: { pageIndex: 0, pageSize: 10 },
+    },
+    getRowId: (row) => String(row.id),
+    debounceMs: 0,
+    shallow: false,
+  });
 
   if (loading && !dataset) {
     return (
@@ -228,12 +361,47 @@ export default function DatasetDetail(): React.ReactNode {
     void fetchRecords(project.id, dataset.id);
   };
 
+  const handleDeleteRecords = async () => {
+    if (!project || !dataset) return;
+
+    const selectedRows = table.getSelectedRowModel().rows;
+    const recordIds = selectedRows.map((row) => row.original.id);
+
+    try {
+      setIsDeleting(true);
+
+      const response = await fetch(
+        `/api/projects/${project.id}/datasets/${dataset.id}/records`,
+        {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ recordIds }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to delete records");
+      }
+
+      table.resetRowSelection();
+      setIsDeleteDialogOpen(false);
+      void fetchRecords(project.id, dataset.id);
+    } catch (err) {
+      console.error("Error deleting records:", err);
+      setError(err instanceof Error ? err.message : "Failed to delete records");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const selectedRowCount = table.getFilteredSelectedRowModel().rows.length;
+
   return (
     <div className="h-full flex flex-col overflow-hidden">
       <ProjectPageHeader
         projectName={project.name}
         pageTitle={dataset.name}
-        description={`${records.length} record${records.length === 1 ? "" : "s"}`}
+        description={`${recordsData?.total ?? 0} record${recordsData?.total === 1 ? "" : "s"}`}
         actions={
           <AddRecordDialog
             projectId={project.id}
@@ -245,61 +413,54 @@ export default function DatasetDetail(): React.ReactNode {
       />
 
       <div className="flex-1 overflow-y-auto px-8 py-6">
-        {records.length === 0 ? (
-          <div className="rounded-lg border border-border bg-card p-6">
-            <h2 className="text-lg font-semibold text-foreground">No records yet</h2>
-            <p className="text-sm text-muted-foreground mt-2 mb-4">
-              Add logs to this dataset or create records manually.
-            </p>
-            <AddRecordDialog
-              projectId={project.id}
-              datasetId={dataset.id}
-              schema={schemaFields}
-              onRecordAdded={handleRecordAdded}
-            />
-          </div>
-        ) : (
-          <div className="border border-border rounded-lg overflow-hidden">
-            <table className="w-full">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Created
-                  </th>
-                  {schemaColumns.map((column) => (
-                    <th
-                      key={column}
-                      className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider"
+        <div className="w-full space-y-4">
+          {!recordsData || recordsData.records.length === 0 ? (
+            <div className="rounded-lg border border-border bg-card p-6">
+              <h2 className="text-lg font-semibold text-foreground">No records yet</h2>
+              <p className="text-sm text-muted-foreground mt-2 mb-4">
+                Add logs to this dataset or create records manually.
+              </p>
+              <AddRecordDialog
+                projectId={project.id}
+                datasetId={dataset.id}
+                schema={schemaFields}
+                onRecordAdded={handleRecordAdded}
+              />
+            </div>
+          ) : (
+            <DataTable table={table}>
+              <DataTableToolbar table={table}>
+                {selectedRowCount > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">
+                      {selectedRowCount} selected
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => setIsDeleteDialogOpen(true)}
                     >
-                      {column}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="bg-card divide-y divide-border">
-                {records.map((record) => (
-                  <tr key={record.id} className="hover:bg-muted/30 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
-                      {formatDate(record.createdAt)}
-                    </td>
-                    {schemaColumns.map((column) => {
-                      const value = getValueAtPath(record.variables ?? {}, column);
-                      return (
-                        <td
-                          key={`${record.id}-${column}`}
-                          className="px-6 py-4 whitespace-nowrap text-sm text-foreground"
-                        >
-                          {formatValue(value)}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                      <Trash2 className="mr-1 h-3.5 w-3.5" />
+                      Delete
+                    </Button>
+                  </div>
+                )}
+              </DataTableToolbar>
+            </DataTable>
+          )}
+        </div>
       </div>
+
+      <ConfirmDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        title="Delete records"
+        description={`Are you sure you want to delete ${selectedRowCount} record${selectedRowCount === 1 ? "" : "s"}? This action cannot be undone.`}
+        confirmText="Delete"
+        onConfirm={() => { void handleDeleteRecords(); }}
+        loading={isDeleting}
+        variant="destructive"
+      />
     </div>
   );
 }

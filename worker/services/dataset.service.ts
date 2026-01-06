@@ -2,7 +2,7 @@ import { drizzle } from "drizzle-orm/d1";
 import type { DataSet, DataSetRecord } from "../db/schema";
 import { DataSetRepository } from "../repositories/dataset.repository";
 import { DataSetRecordRepository } from "../repositories/dataset-record.repository";
-import type { TenantProjectContext, DataSetContext } from "../types/common";
+import type { TenantProjectContext, DataSetContext, Pagination, PaginatedResult } from "../types/common";
 import { LogService } from "./logs.service";
 
 interface AddLogsInput {
@@ -81,17 +81,20 @@ export class DataSetService {
     const newRecords = [];
     let skipped = 0;
 
-    for (const logId of input.logIds) {
-      const variables = await this.logService.getLogVariables(
-        context.tenantId,
-        context.projectId,
-        logId
-      );
-      if (!variables) {
+    // Process logs in parallel for better performance
+    const results = await Promise.allSettled(
+      input.logIds.map((logId) =>
+        this.logService!.getLogVariables(context.tenantId, context.projectId, logId)
+      )
+    );
+
+    for (const result of results) {
+      if (result.status === "rejected" || !result.value) {
         skipped += 1;
         continue;
       }
 
+      const variables = result.value;
       this.mergeSchema(schema, variables);
 
       newRecords.push({
@@ -114,6 +117,26 @@ export class DataSetService {
 
   async listDataSetRecords(context: DataSetContext): Promise<DataSetRecord[]> {
     return await this.recordRepository.listByDataSet(context);
+  }
+
+  async listDataSetRecordsPaginated(
+    context: DataSetContext,
+    pagination: Pagination
+  ): Promise<PaginatedResult<DataSetRecord>> {
+    const { records, total } = await this.recordRepository.listByDataSetPaginated(
+      context,
+      pagination
+    );
+
+    const totalPages = Math.ceil(total / pagination.pageSize);
+
+    return {
+      records,
+      total,
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+      totalPages,
+    };
   }
 
   async createDataSetRecord(
@@ -146,6 +169,19 @@ export class DataSetService {
     await this.repository.updateSchema(context, JSON.stringify(schema));
 
     return record;
+  }
+
+  async deleteDataSetRecords(
+    context: DataSetContext,
+    recordIds: number[]
+  ): Promise<{ deleted: number }> {
+    const deleted = await this.recordRepository.softDeleteMany(context, recordIds);
+
+    if (deleted > 0) {
+      await this.repository.incrementRecordCountBy(context, -deleted);
+    }
+
+    return { deleted };
   }
 
   private parseSchema(value: string): DataSetSchema {

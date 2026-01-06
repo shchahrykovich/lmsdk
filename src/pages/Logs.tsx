@@ -27,6 +27,7 @@ import { useDataTable } from "@/hooks/use-data-table";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Clock, AlertCircle, CheckCircle2, Timer } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 import {
   applyDirectFilters,
   applySortParams,
@@ -87,6 +88,7 @@ export default function Logs(): React.ReactNode {
   const [selectedDatasetId, setSelectedDatasetId] = useState("");
   const [isAdding, setIsAdding] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
+  const [addProgress, setAddProgress] = useState({ current: 0, total: 0 });
 
   useEffect(() => {
     void fetchProject();
@@ -470,32 +472,58 @@ export default function Logs(): React.ReactNode {
     setIsAddDialogOpen(true);
   };
 
+  const sendLogsToDataset = async (logIds: number[]): Promise<void> => {
+    if (!project || !selectedDatasetId) return;
+
+    const response = await fetch(
+      `/api/projects/${project.id}/datasets/${selectedDatasetId}/logs`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ logIds }),
+      },
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => null);
+      throw new Error(errorData?.error ?? "Failed to add logs to dataset");
+    }
+  };
+
   const handleAddToDataset = async () => {
     if (!project || !selectedDatasetId) return;
 
     const logIds = table.getSelectedRowModel().rows.map((row) => row.original.id);
+    const BATCH_SIZE = 10;
 
     try {
       setIsAdding(true);
       setAddError(null);
+      setAddProgress({ current: 0, total: logIds.length });
 
-      const response = await fetch(
-        `/api/projects/${project.id}/datasets/${selectedDatasetId}/logs`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ logIds }),
-        },
-      );
+      // If 10 or fewer logs, send in a single request
+      if (logIds.length <= BATCH_SIZE) {
+        await sendLogsToDataset(logIds);
+        setAddProgress({ current: logIds.length, total: logIds.length });
+      } else {
+        // Split into batches of 10 for larger selections
+        const batches = [];
+        for (let i = 0; i < logIds.length; i += BATCH_SIZE) {
+          batches.push(logIds.slice(i, i + BATCH_SIZE));
+        }
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        throw new Error(errorData?.error ?? "Failed to add logs to dataset");
+        let processedCount = 0;
+        for (const batch of batches) {
+          await sendLogsToDataset(batch);
+          processedCount += batch.length;
+          setAddProgress({ current: processedCount, total: logIds.length });
+        }
       }
 
       table.resetRowSelection();
       setIsAddDialogOpen(false);
       setSelectedDatasetId("");
+      setAddProgress({ current: 0, total: 0 });
     } catch (err) {
       setAddError(err instanceof Error ? err.message : "Failed to add logs to dataset");
     } finally {
@@ -601,7 +629,7 @@ export default function Logs(): React.ReactNode {
               <Select
                 value={selectedDatasetId}
                 onValueChange={setSelectedDatasetId}
-                disabled={datasets.length === 0}
+                disabled={datasets.length === 0 || isAdding}
               >
                 <SelectTrigger id="dataset-select">
                   <SelectValue
@@ -620,6 +648,19 @@ export default function Logs(): React.ReactNode {
               </Select>
             </div>
 
+            {isAdding && addProgress.total > 0 && (
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm text-muted-foreground">
+                  <span>Copying logs...</span>
+                  <span>{addProgress.current} / {addProgress.total}</span>
+                </div>
+                <Progress
+                  value={(addProgress.current / addProgress.total) * 100}
+                  className="w-full"
+                />
+              </div>
+            )}
+
             {addError && <div className="text-sm text-red-500">{addError}</div>}
           </div>
 
@@ -629,7 +670,9 @@ export default function Logs(): React.ReactNode {
               onClick={() => {
                 setIsAddDialogOpen(false);
                 setAddError(null);
+                setAddProgress({ current: 0, total: 0 });
               }}
+              disabled={isAdding}
             >
               Cancel
             </Button>

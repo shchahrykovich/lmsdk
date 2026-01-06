@@ -84,7 +84,7 @@ export class DataSetRepository {
     context: DataSetContext,
     amount: number
   ): Promise<void> {
-    if (amount <= 0) return;
+    if (amount === 0) return;
     await this.db
       .update(dataSets)
       .set({

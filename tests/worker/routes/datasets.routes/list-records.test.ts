@@ -3,7 +3,7 @@ import app from "../../../../worker/index";
 
 const mockGetSession = vi.fn();
 const getDataSetByIdMock = vi.fn();
-const listDataSetRecordsMock = vi.fn();
+const listDataSetRecordsPaginatedMock = vi.fn();
 
 vi.mock("../../../../auth", () => ({
   createAuth: vi.fn(() => ({
@@ -16,7 +16,7 @@ vi.mock("../../../../auth", () => ({
 vi.mock("../../../../worker/services/dataset.service", () => ({
   DataSetService: class {
     getDataSetById = getDataSetByIdMock;
-    listDataSetRecords = listDataSetRecordsMock;
+    listDataSetRecordsPaginated = listDataSetRecordsPaginatedMock;
   },
 }));
 
@@ -25,7 +25,7 @@ describe("Datasets Routes - GET /api/projects/:projectId/datasets/:datasetId/rec
     vi.clearAllMocks();
     mockGetSession.mockReset();
     getDataSetByIdMock.mockReset();
-    listDataSetRecordsMock.mockReset();
+    listDataSetRecordsPaginatedMock.mockReset();
   });
 
   const setAuthenticatedUser = (tenantId = 1) => {
@@ -58,18 +58,24 @@ describe("Datasets Routes - GET /api/projects/:projectId/datasets/:datasetId/rec
       createdAt: 1000,
       updatedAt: 1000,
     });
-    listDataSetRecordsMock.mockResolvedValue([
-      {
-        id: 1,
-        tenantId: 1,
-        projectId: 1,
-        dataSetId: 10,
-        variables: JSON.stringify({ user: { name: "Ada" } }),
-        isDeleted: false,
-        createdAt: 1000,
-        updatedAt: 1000,
-      },
-    ]);
+    listDataSetRecordsPaginatedMock.mockResolvedValue({
+      records: [
+        {
+          id: 1,
+          tenantId: 1,
+          projectId: 1,
+          dataSetId: 10,
+          variables: JSON.stringify({ user: { name: "Ada" } }),
+          isDeleted: false,
+          createdAt: 1000,
+          updatedAt: 1000,
+        },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 10,
+      totalPages: 1,
+    });
 
     const response = await app.request(
       "/api/projects/1/datasets/10/records",
@@ -81,11 +87,14 @@ describe("Datasets Routes - GET /api/projects/:projectId/datasets/:datasetId/rec
     const data = await response.json();
     expect(data.records).toHaveLength(1);
     expect(data.records[0].variables).toEqual({ user: { name: "Ada" } });
-    expect(listDataSetRecordsMock).toHaveBeenCalledWith({
-      tenantId: 1,
-      projectId: 1,
-      dataSetId: 10,
-    });
+    expect(listDataSetRecordsPaginatedMock).toHaveBeenCalledWith(
+      {
+        tenantId: 1,
+        projectId: 1,
+        dataSetId: 10,
+      },
+      { page: 1, pageSize: 10 }
+    );
   });
 
   it("should return 400 for invalid project or dataset ID", async () => {

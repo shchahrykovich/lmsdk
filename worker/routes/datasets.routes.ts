@@ -110,7 +110,7 @@ datasets.get("/:projectId/datasets/:datasetId", async (c) => {
 
 /**
  * GET /api/projects/:projectId/datasets/:datasetId/records
- * List dataset records
+ * List dataset records with pagination
  */
 datasets.get("/:projectId/datasets/:datasetId/records", async (c) => {
   try {
@@ -120,6 +120,84 @@ datasets.get("/:projectId/datasets/:datasetId/records", async (c) => {
 
     if (isNaN(projectId) || isNaN(datasetId)) {
       return c.json({ error: "Invalid project ID or dataset ID" }, 400);
+    }
+
+    // Parse pagination parameters
+    const pageParam = c.req.query("page");
+    const pageSizeParam = c.req.query("pageSize");
+    const page = pageParam ? Math.max(1, parseInt(pageParam, 10)) : 1;
+    const pageSize = pageSizeParam
+      ? Math.min(100, Math.max(1, parseInt(pageSizeParam, 10)))
+      : 10;
+
+    const datasetService = new DataSetService(c.env.DB);
+
+    const dataset = await datasetService.getDataSetById({
+      tenantId: user.tenantId,
+      projectId,
+      dataSetId: datasetId,
+    });
+
+    if (!dataset) {
+      return c.json({ error: "Dataset not found" }, 404);
+    }
+
+    const result = await datasetService.listDataSetRecordsPaginated(
+      {
+        tenantId: user.tenantId,
+        projectId,
+        dataSetId: datasetId,
+      },
+      { page, pageSize }
+    );
+
+    const parsedRecords = result.records.map((record) => ({
+      ...record,
+      variables: (() => {
+        try {
+          return JSON.parse(record.variables ?? "{}");
+        } catch {
+          return {};
+        }
+      })(),
+    }));
+
+    return c.json({
+      records: parsedRecords,
+      total: result.total,
+      page: result.page,
+      pageSize: result.pageSize,
+      totalPages: result.totalPages,
+    });
+  } catch (error) {
+    console.error("Error listing dataset records:", error);
+    return c.json({ error: "Failed to list dataset records" }, 500);
+  }
+});
+
+/**
+ * DELETE /api/projects/:projectId/datasets/:datasetId/records
+ * Delete dataset records
+ */
+datasets.delete("/:projectId/datasets/:datasetId/records", async (c) => {
+  try {
+    const user = getUserFromContext(c);
+    const projectId = parseInt(c.req.param("projectId"));
+    const datasetId = parseInt(c.req.param("datasetId"));
+
+    if (isNaN(projectId) || isNaN(datasetId)) {
+      return c.json({ error: "Invalid project ID or dataset ID" }, 400);
+    }
+
+    const body = await c.req.json();
+    const recordIds = Array.isArray(body?.recordIds) ? body.recordIds : [];
+    const parsedRecordIds = recordIds
+      .filter((id: unknown) => id != null && id !== "")
+      .map((id: unknown) => Number(id))
+      .filter((id: number) => Number.isInteger(id) && id > 0);
+
+    if (parsedRecordIds.length === 0) {
+      return c.json({ error: "Record IDs are required" }, 400);
     }
 
     const datasetService = new DataSetService(c.env.DB);
@@ -134,27 +212,19 @@ datasets.get("/:projectId/datasets/:datasetId/records", async (c) => {
       return c.json({ error: "Dataset not found" }, 404);
     }
 
-    const records = await datasetService.listDataSetRecords({
-      tenantId: user.tenantId,
-      projectId,
-      dataSetId: datasetId,
-    });
+    const result = await datasetService.deleteDataSetRecords(
+      {
+        tenantId: user.tenantId,
+        projectId,
+        dataSetId: datasetId,
+      },
+      parsedRecordIds
+    );
 
-    const parsedRecords = records.map((record) => ({
-      ...record,
-      variables: (() => {
-        try {
-          return JSON.parse(record.variables ?? "{}");
-        } catch {
-          return {};
-        }
-      })(),
-    }));
-
-    return c.json({ records: parsedRecords });
+    return c.json({ success: true, deleted: result.deleted });
   } catch (error) {
-    console.error("Error listing dataset records:", error);
-    return c.json({ error: "Failed to list dataset records" }, 500);
+    console.error("Error deleting dataset records:", error);
+    return c.json({ error: "Failed to delete dataset records" }, 500);
   }
 });
 
