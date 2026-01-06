@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable sonarjs/function-return-type */
+
 import * as React from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,25 +24,25 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PlusCircle, XCircle } from "lucide-react";
 
-interface VariablesFilterDialogProps {
+type VariablesFilterDialogProps = Readonly<{
   variablePaths: string[];
   onApplyFilter: (filter: { path: string; value: string; operator: string }) => void;
   onClearFilter?: () => void;
   currentFilter?: { path?: string; value?: string; operator?: string };
-}
+}>;
 
 export function VariablesFilterDialog({
   variablePaths,
   onApplyFilter,
   onClearFilter,
   currentFilter,
-}: VariablesFilterDialogProps) {
+}: VariablesFilterDialogProps): React.ReactNode {
   const [open, setOpen] = React.useState(false);
-  const [selectedPath, setSelectedPath] = React.useState(currentFilter?.path || "");
+  const [selectedPath, setSelectedPath] = React.useState(currentFilter?.path ?? "");
   const [operator, setOperator] = React.useState<"contains" | "notEmpty">(
-    currentFilter?.operator as "contains" | "notEmpty" || "notEmpty"
+    currentFilter?.operator as "contains" | "notEmpty" ?? "notEmpty"
   );
-  const [value, setValue] = React.useState(currentFilter?.value || "");
+  const [value, setValue] = React.useState(currentFilter?.value ?? "");
 
   // Format the display text for active filter
   const filterDisplayText = React.useMemo(() => {
@@ -60,8 +62,8 @@ export function VariablesFilterDialog({
   React.useEffect(() => {
     if (currentFilter?.path) {
       setSelectedPath(currentFilter.path);
-      setOperator(currentFilter.operator as "contains" | "notEmpty" || "contains");
-      setValue(currentFilter.value || "");
+      setOperator(currentFilter.operator as "contains" | "notEmpty" ?? "contains");
+      setValue(currentFilter.value ?? "");
     }
   }, [currentFilter]);
 
@@ -77,14 +79,14 @@ export function VariablesFilterDialog({
   };
 
   const handleCancel = () => {
-    setSelectedPath(currentFilter?.path || "");
-    setOperator(currentFilter?.operator as "contains" | "notEmpty" || "contains");
-    setValue(currentFilter?.value || "");
+    setSelectedPath(currentFilter?.path ?? "");
+    setOperator(currentFilter?.operator as "contains" | "notEmpty" ?? "contains");
+    setValue(currentFilter?.value ?? "");
     setOpen(false);
   };
 
-  const handleClearClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleClearClick = (event: React.SyntheticEvent) => {
+    event.stopPropagation();
     if (onClearFilter) {
       onClearFilter();
     }
@@ -102,9 +104,9 @@ export function VariablesFilterDialog({
                 tabIndex={0}
                 className="rounded-sm opacity-70 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 onClick={handleClearClick}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    handleClearClick(e as any);
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    handleClearClick(event);
                   }
                 }}
               >

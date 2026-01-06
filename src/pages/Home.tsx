@@ -1,9 +1,11 @@
+/* eslint-disable sonarjs/function-return-type */
+import type * as React from "react";
 import { useNavigate, Navigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useSession } from "@/lib/auth-client";
 
-export default function Home() {
+export default function Home(): React.ReactNode {
   const { data: session, isPending } = useSession();
   const navigate = useNavigate();
 

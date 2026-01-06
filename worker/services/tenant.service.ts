@@ -38,14 +38,14 @@ export class TenantService {
     return result?.count ?? 0;
   }
 
-  async deactivateTenant(id: number) {
+  async deactivateTenant(id: number): Promise<unknown> {
     return await this.db
       .update(tenants)
       .set({ isActive: false })
       .where(eq(tenants.id, id));
   }
 
-  async removeTenant(tenantId: number) {
+  async removeTenant(tenantId: number): Promise<unknown> {
     return await this.db
         .delete(tenants)
         .where(eq(tenants.id, tenantId));

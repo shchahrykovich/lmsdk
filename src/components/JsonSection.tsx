@@ -1,3 +1,5 @@
+/* eslint-disable sonarjs/function-return-type */
+import type * as React from "react";
 import { useState } from "react";
 import JsonView from "@uiw/react-json-view";
 import { Maximize2, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
@@ -9,14 +11,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-interface JsonSectionProps {
+type JsonSectionProps = Readonly<{
   title: string;
   data: unknown;
   collapsed?: boolean | number;
   compact?: boolean;
   contextTitle?: string;
   logId?: number;
-}
+}>;
 
 export default function JsonSection({
   title,
@@ -25,7 +27,7 @@ export default function JsonSection({
   compact = false,
   contextTitle,
   logId,
-}: JsonSectionProps) {
+}: JsonSectionProps): React.ReactNode {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
 

@@ -1,4 +1,10 @@
 import OpenAI from "openai";
+import type {
+  Response,
+  ResponseCreateParamsNonStreaming,
+  ResponseOutputMessage,
+  ResponseOutputText,
+} from "openai/resources/responses/responses";
 import {
   AIProvider,
   type ExecuteRequest,
@@ -39,107 +45,40 @@ export class OpenAIProvider extends AIProvider {
     const startTime = Date.now();
     const { model, messages, response_format, openai_settings, variables } = request;
 
-    // Log variables if provided
-    if (variables) {
-      await this.logger.logVariables({ variables });
-    }
+    await this.logVariablesIfNeeded(variables);
 
     try {
-      // Convert messages to OpenAI Responses API format
-      const inputMessages = messages.map((msg) => ({
-        role: msg.role === "system" ? "developer" : msg.role,
-        content: [
-          {
-            type: "input_text",
-            text: msg.content,
-          },
-        ],
-      }));
-
-      // Build text format configuration
-      let textFormat: any = {
-        format: {
-          type: "text",
-        },
-        verbosity: "medium",
-      };
-
-      // If JSON schema is specified, configure structured output
-      if (response_format?.type === "json_schema" && response_format.json_schema) {
-        const schema = response_format.json_schema;
-        textFormat = {
-          format: {
-            type: "json_schema",
-            name: schema.name || "response",
-            strict: schema.strict !== undefined ? schema.strict : true,
-            schema: schema.schema || schema,
-          },
-          verbosity: "medium",
-        };
-      }
-
-      // Build reasoning configuration from settings (with defaults)
-      const reasoningConfig = {
-        effort: openai_settings?.reasoning_effort || "medium",
-        summary: openai_settings?.reasoning_summary || "auto",
-      };
-
-      // Build include array based on settings
-      const includeArray: string[] = [];
-      if (openai_settings?.include_encrypted_reasoning !== false) {
-        includeArray.push("reasoning.encrypted_content");
-      }
-
-      // Log input
-      await this.logger.logInput({
-        input: {
-          model: model,
-          input: inputMessages as any,
-          text: textFormat,
-          reasoning: reasoningConfig,
-          tools: [],
-          store: openai_settings?.store !== false, // Default to true
-          include: includeArray,
-        },
+      const inputMessages = this.buildInputMessages(messages);
+      const textFormat = this.buildTextFormat(response_format);
+      const reasoningConfig = this.buildReasoningConfig(openai_settings);
+      const includeArray = this.buildIncludeArray(openai_settings);
+      const store = openai_settings?.store !== false;
+			const requestPayload = this.buildRequestPayload({
+        model,
+        inputMessages,
+        textFormat,
+        reasoningConfig,
+				// @ts-expect-error no type
+        includeArray,
+        store,
       });
+
+      await this.logger.logInput({ input: requestPayload });
 
       const client = this.getClient(request);
 
       // Execute the prompt using responses.create
-      const response = await client.responses.create({
-        model: model,
-        input: inputMessages as any,
-        text: textFormat,
-        reasoning: reasoningConfig,
-        tools: [],
-        store: openai_settings?.store !== false, // Default to true
-        include: includeArray,
-      } as any);
-
-      // Extract output text from response
-      let outputText = "";
-      if (response.output && Array.isArray(response.output)) {
-        // Find the message output item
-        const messageOutput = response.output.find(
-          (item: any) => item.type === "message"
-        ) as any;
-        if (messageOutput && messageOutput.content) {
-          // Extract text from content array
-          const textContent = messageOutput.content.find(
-            (c: any) => c.type === "output_text"
-          );
-          outputText = textContent?.text || "";
-        }
-      }
+      const response = await client.responses.create(requestPayload);
+      const outputText = this.extractOutputText(response);
 
       const durationMs = Date.now() - startTime;
       const result = {
         content: outputText,
         model: response.model,
         usage: {
-          prompt_tokens: response.usage?.input_tokens || 0,
-          completion_tokens: response.usage?.output_tokens || 0,
-          total_tokens: (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0),
+          prompt_tokens: response.usage?.input_tokens ?? 0,
+          completion_tokens: response.usage?.output_tokens ?? 0,
+          total_tokens: (response.usage?.input_tokens ?? 0) + (response.usage?.output_tokens ?? 0),
         },
         duration_ms: durationMs,
       };
@@ -171,6 +110,96 @@ export class OpenAIProvider extends AIProvider {
 
       throw error;
     }
+  }
+
+  private buildInputMessages(messages: ExecuteRequest["messages"]) {
+    return messages.map((msg) => ({
+      role: msg.role === "system" ? "developer" : msg.role,
+      content: [
+        {
+          type: "input_text",
+          text: msg.content,
+        },
+      ],
+    }));
+  }
+
+  private async logVariablesIfNeeded(variables: ExecuteRequest["variables"]) {
+    if (!variables) {
+      return;
+    }
+    await this.logger.logVariables({ variables });
+  }
+
+  private buildTextFormat(responseFormat: ExecuteRequest["response_format"]): ResponseTextConfig {
+    if (responseFormat?.type === "json_schema" && responseFormat.json_schema) {
+      const schema = responseFormat.json_schema;
+      return {
+        format: {
+          type: "json_schema",
+          name: schema.name ?? "response",
+          strict: schema.strict ?? true,
+					// @ts-expect-error no type
+          schema: schema.schema ?? schema,
+        },
+        verbosity: "medium",
+      };
+    }
+
+    return {
+      format: {
+        type: "text",
+      },
+      verbosity: "medium",
+    };
+  }
+
+  private buildReasoningConfig(openaiSettings: ExecuteRequest["openai_settings"]): Reasoning | null {
+		return {
+      effort: openaiSettings?.reasoning_effort ?? "medium",
+			// @ts-expect-error no type
+      summary: openaiSettings?.reasoning_summary ?? "auto",
+    };
+  }
+
+  private buildIncludeArray(openaiSettings: ExecuteRequest["openai_settings"]) {
+    return openaiSettings?.include_encrypted_reasoning !== false
+      ? ["reasoning.encrypted_content"]
+      : [];
+  }
+
+  private buildRequestPayload(params: {
+    model: string;
+    inputMessages: ReturnType<OpenAIProvider["buildInputMessages"]>;
+    textFormat: ResponseTextConfig;
+    reasoningConfig: Reasoning | null;
+    includeArray: ResponseIncludable[];
+    store: boolean;
+  }): ResponseCreateParamsNonStreaming {
+    const { model, inputMessages, textFormat, reasoningConfig, includeArray, store } = params;
+    return {
+      model,
+      input: inputMessages as ResponseCreateParamsNonStreaming["input"],
+      text: textFormat,
+      reasoning: reasoningConfig,
+      tools: [],
+      store,
+      include: includeArray,
+    };
+  }
+
+  private extractOutputText(response: Response): string {
+    if (!response.output || !Array.isArray(response.output)) {
+      return "";
+    }
+
+    const messageOutput = response.output.find(
+      (item): item is ResponseOutputMessage => item.type === "message"
+    );
+    const textContent = messageOutput?.content?.find(
+      (content): content is ResponseOutputText => content.type === "output_text"
+    );
+    return textContent?.text ?? "";
   }
 
   private getClient(request: ExecuteRequest): OpenAI {

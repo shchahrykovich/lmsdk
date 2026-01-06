@@ -16,6 +16,28 @@ import type { IPromptExecutionLogger } from "./logger/execution-logger";
 const CACHE_TTL_SECONDS = 3600;
 const GOOGLE_CACHE_TTL = `${CACHE_TTL_SECONDS}s`;
 
+interface CachedContentParams {
+  model: string;
+  googleSettings: ExecuteRequest["google_settings"];
+  systemInstruction: string;
+  projectId?: number;
+  promptSlug?: string;
+}
+
+type GoogleUsageMetadata = {
+  promptTokenCount?: number;
+  candidatesTokenCount?: number;
+  totalTokenCount?: number;
+  thoughtsTokenCount?: number;
+  toolUsePromptTokenCount?: number;
+  cachedContentTokenCount?: number;
+};
+
+type GoogleStreamChunk = {
+  text?: string;
+  usageMetadata?: GoogleUsageMetadata;
+};
+
 /**
  * Google Gemini provider implementation
  * Uses Google GenAI SDK for executing prompts
@@ -59,13 +81,13 @@ export class GoogleProvider extends AIProvider {
 
     try {
       const { systemInstruction, contents } = this.buildContents(messages);
-      const cachedContentName = await this.getCachedContentName(
+      const cachedContentName = await this.getCachedContentName({
         model,
-        google_settings,
+        googleSettings: google_settings,
         systemInstruction,
         projectId,
-        promptSlug
-      );
+        promptSlug,
+      });
       const config = this.buildGenerationConfig(
         response_format,
         google_settings,
@@ -85,11 +107,11 @@ export class GoogleProvider extends AIProvider {
       const client = this.getClient(request);
 
       // Execute the request using generateContentStream
-      const response: any = await client.models.generateContentStream({
+      const response = await client.models.generateContentStream({
         model: model,
         config: config,
         contents: contents,
-      });
+      }) as AsyncIterable<GoogleStreamChunk>;
 
       const { outputText, chunks, usageMetadata } = await this.collectStream(response);
 
@@ -158,51 +180,89 @@ export class GoogleProvider extends AIProvider {
     return { systemInstruction, contents };
   }
 
-  private async getCachedContentName(
-    model: string,
+  private async getCachedContentName(params: CachedContentParams): Promise<string | null> {
+    const { model, googleSettings, systemInstruction, projectId, promptSlug } = params;
+    if (!this.shouldUseCache(googleSettings, systemInstruction, projectId, promptSlug)) {
+      return null;
+    }
+
+    const cacheKey = this.getCacheKey(projectId ?? -1, promptSlug ?? '');
+    const cachedContentName = await this.loadCachedContentName(cacheKey);
+    if (cachedContentName) {
+      return cachedContentName;
+    }
+
+    return this.createCachedContentName({
+      model,
+      systemInstruction,
+      cacheKey,
+    });
+  }
+
+  private shouldUseCache(
     googleSettings: ExecuteRequest["google_settings"],
     systemInstruction: string,
     projectId?: number,
     promptSlug?: string
-  ): Promise<string | null> {
-    if (!googleSettings?.cache_system_message || !systemInstruction.trim() || !projectId || !promptSlug) {
-      return null;
-    }
+  ): boolean {
+    return Boolean(
+      googleSettings?.cache_system_message &&
+        systemInstruction.trim() &&
+        projectId &&
+        promptSlug
+    );
+  }
 
-    const cacheKey = `gemini_cache_${projectId}__${promptSlug}`;
+  private getCacheKey(projectId: number, promptSlug: string): string {
+    return `gemini_cache_${projectId}__${promptSlug}`;
+  }
 
+  private async loadCachedContentName(cacheKey: string): Promise<string | null> {
     try {
-      let cachedContentName = await this.cache.get(cacheKey);
-      if (cachedContentName) {
-        return cachedContentName;
-      }
-
-      try {
-        const newCache = await this.client.caches.create({
-          model: model,
-          config: {
-            systemInstruction: systemInstruction.trim(),
-            displayName: cacheKey,
-            ttl: GOOGLE_CACHE_TTL,
-          },
-        });
-        cachedContentName = newCache.name || null;
-
-        if (cachedContentName) {
-          await this.cache.put(cacheKey, cachedContentName, {
-            expirationTtl: CACHE_TTL_SECONDS,
-          });
-        }
-      } catch (createError: any) {
-        if (!createError.message?.includes("duplicate") && !createError.message?.includes("already exists")) {
-          console.error("Error creating cache:", createError);
-        }
-      }
-      return cachedContentName;
+      return (await this.cache.get(cacheKey)) ?? null;
     } catch (error) {
       console.error("Error managing cache:", error);
       return null;
     }
+  }
+
+  private async createCachedContentName(params: {
+    model: string;
+    systemInstruction: string;
+    cacheKey: string;
+  }): Promise<string | null> {
+    const { model, systemInstruction, cacheKey } = params;
+    try {
+      const newCache = await this.client.caches.create({
+        model: model,
+        config: {
+          systemInstruction: systemInstruction.trim(),
+          displayName: cacheKey,
+          ttl: GOOGLE_CACHE_TTL,
+        },
+      });
+      const cachedContentName = newCache.name ?? null;
+
+      if (cachedContentName) {
+        await this.cache.put(cacheKey, cachedContentName, {
+          expirationTtl: CACHE_TTL_SECONDS,
+        });
+      }
+      return cachedContentName;
+    } catch (error) {
+      if (!this.isDuplicateCacheError(error)) {
+        console.error("Error creating cache:", error);
+      }
+      return null;
+    }
+  }
+
+  private isDuplicateCacheError(error: unknown): boolean {
+    const message =
+      error && typeof error === "object" && "message" in error
+        ? (error as { message?: unknown }).message
+        : undefined;
+    return typeof message === "string" && (message.includes("duplicate") || message.includes("already exists"));
   }
 
   private buildGenerationConfig(
@@ -211,53 +271,78 @@ export class GoogleProvider extends AIProvider {
     systemInstruction: string,
     cachedContentName: string | null
   ) {
-    const config: any = {};
+    const config: Record<string, unknown> = {};
 
-    if (cachedContentName) {
-      config.cachedContent = cachedContentName;
-    } else if (systemInstruction.trim()) {
-      config.systemInstruction = systemInstruction.trim();
-    }
-
-    if (responseFormat?.type === "json_schema" || responseFormat?.type === "json") {
-      config.responseMimeType = "application/json";
-      if (responseFormat.json_schema) {
-        config.responseSchema = responseFormat.json_schema.schema || responseFormat.json_schema;
-      }
-    }
-
-    if (googleSettings) {
-      const thinkingConfig: any = {};
-
-      if (googleSettings.include_thoughts !== undefined) {
-        thinkingConfig.includeThoughts = googleSettings.include_thoughts;
-      }
-
-      if (googleSettings.thinking_budget !== undefined && googleSettings.thinking_budget != 0) {
-        thinkingConfig.thinkingBudget = googleSettings.thinking_budget;
-      } else if (
-        googleSettings.thinking_level &&
-        googleSettings.thinking_level !== "THINKING_LEVEL_UNSPECIFIED"
-      ) {
-        thinkingConfig.thinkingLevel = googleSettings.thinking_level;
-      }
-
-      if (Object.keys(thinkingConfig).length > 0) {
-        config.thinkingConfig = thinkingConfig;
-      }
-
-      if (googleSettings.google_search_enabled) {
-        config.tools = [{ type: "google_search" }];
-      }
-    }
+    this.applySystemInstruction(config, systemInstruction, cachedContentName);
+    this.applyResponseFormat(config, responseFormat);
+    this.applyGoogleSettings(config, googleSettings);
 
     return config;
   }
 
-  private async collectStream(response: AsyncIterable<any>) {
+  private applySystemInstruction(
+    config: Record<string, unknown>,
+    systemInstruction: string,
+    cachedContentName: string | null
+  ) {
+    if (cachedContentName) {
+      config.cachedContent = cachedContentName;
+      return;
+    }
+
+    if (systemInstruction.trim()) {
+      config.systemInstruction = systemInstruction.trim();
+    }
+  }
+
+  private applyResponseFormat(
+    config: Record<string, unknown>,
+    responseFormat: ExecuteRequest["response_format"]
+  ) {
+    if (responseFormat?.type !== "json_schema" && responseFormat?.type !== "json") {
+      return;
+    }
+
+    config.responseMimeType = "application/json";
+    if (responseFormat.json_schema) {
+      config.responseSchema = responseFormat.json_schema.schema ?? responseFormat.json_schema;
+    }
+  }
+
+  private applyGoogleSettings(
+    config: Record<string, unknown>,
+    googleSettings: ExecuteRequest["google_settings"]
+  ) {
+    if (!googleSettings) return;
+
+    const thinkingConfig: Record<string, unknown> = {};
+
+    if (googleSettings.include_thoughts !== undefined) {
+      thinkingConfig.includeThoughts = googleSettings.include_thoughts;
+    }
+
+    if (googleSettings.thinking_budget !== undefined && googleSettings.thinking_budget != 0) {
+      thinkingConfig.thinkingBudget = googleSettings.thinking_budget;
+    } else if (
+      googleSettings.thinking_level &&
+      googleSettings.thinking_level !== "THINKING_LEVEL_UNSPECIFIED"
+    ) {
+      thinkingConfig.thinkingLevel = googleSettings.thinking_level;
+    }
+
+    if (Object.keys(thinkingConfig).length > 0) {
+      config.thinkingConfig = thinkingConfig;
+    }
+
+    if (googleSettings.google_search_enabled) {
+      config.tools = [{ type: "google_search" }];
+    }
+  }
+
+  private async collectStream(response: AsyncIterable<GoogleStreamChunk>) {
     let outputText = "";
-    const chunks: any[] = [];
-    let usageMetadata: any = null;
+    const chunks: GoogleStreamChunk[] = [];
+    let usageMetadata: GoogleUsageMetadata | null = null;
 
     for await (const chunk of response) {
       chunks.push(chunk);
@@ -275,16 +360,16 @@ export class GoogleProvider extends AIProvider {
   private buildResult(
     model: string,
     outputText: string,
-    usageMetadata: any,
+    usageMetadata: GoogleUsageMetadata | null,
     durationMs: number
   ): ExecuteResult {
     return {
       content: outputText,
       model: model,
       usage: {
-        prompt_tokens: usageMetadata?.promptTokenCount || 0,
-        completion_tokens: usageMetadata?.candidatesTokenCount || 0,
-        total_tokens: usageMetadata?.totalTokenCount || 0,
+        prompt_tokens: usageMetadata?.promptTokenCount ?? 0,
+        completion_tokens: usageMetadata?.candidatesTokenCount ?? 0,
+        total_tokens: usageMetadata?.totalTokenCount ?? 0,
         thoughts_tokens: usageMetadata?.thoughtsTokenCount,
         tool_use_prompt_tokens: usageMetadata?.toolUsePromptTokenCount,
         cached_content_tokens: usageMetadata?.cachedContentTokenCount,

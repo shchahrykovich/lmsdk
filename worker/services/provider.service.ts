@@ -19,7 +19,7 @@ export interface ProviderInfo {
  */
 export interface ExecutePromptRequest extends Omit<ExecuteRequest, 'messages'> {
   messages: AIMessage[];
-  variables?: Record<string, any>;
+  variables?: Record<string, unknown>;
 }
 
 /**
@@ -37,7 +37,7 @@ export class ProviderService {
    * Replace variables in a template string
    * Supports {{variable}} and {{variable.property}} syntax
    */
-  private replaceVariables(template: string, variables: Record<string, any>): string {
+  private replaceVariables(template: string, variables: Record<string, unknown>): string {
     return replaceAllVariables(template, variables);
   }
 
@@ -96,7 +96,7 @@ export class ProviderService {
     const messages = request.variables
       ? request.messages.map((msg) => ({
           ...msg,
-          content: this.replaceVariables(msg.content, request.variables || {}),
+          content: this.replaceVariables(msg.content, request.variables ?? {}),
         }))
       : request.messages;
 

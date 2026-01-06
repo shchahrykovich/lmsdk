@@ -87,6 +87,43 @@ const resolvePrompt = async (
   return promptService.getPromptBySlug(tenantId, projectId, promptSlugOrId);
 };
 
+const resolveExecutionContext = async (params: {
+  projectService: ProjectService;
+  promptService: PromptService;
+  tenantId: number;
+  projectSlugOrId: string;
+  promptSlugOrId: string;
+}) => {
+  const { projectService, promptService, tenantId, projectSlugOrId, promptSlugOrId } = params;
+  const project = await resolveProject(projectService, tenantId, projectSlugOrId);
+
+  if (!project) {
+    return { error: Response.json({ error: "Project not found" }, { status: 404 }) };
+  }
+
+  const prompt = await resolvePrompt(promptService, tenantId, project.id, promptSlugOrId);
+
+  if (!prompt) {
+    return { error: Response.json({ error: "Prompt not found" }, { status: 404 }) };
+  }
+
+  if (!prompt.isActive) {
+    return { error: Response.json({ error: "Prompt is not active" }, { status: 400 }) };
+  }
+
+  const activeVersion = await promptService.getActivePromptVersion(
+    tenantId,
+    project.id,
+    prompt.id
+  );
+
+  if (!activeVersion) {
+    return { error: Response.json({ error: "No active version found for prompt" }, { status: 404 }) };
+  }
+
+  return { project, prompt, activeVersion };
+};
+
 export class V1ExecutePrompt extends OpenAPIRoute {
   schema = {
     tags: ["v1"],
@@ -103,13 +140,13 @@ export class V1ExecutePrompt extends OpenAPIRoute {
           example: "my-prompt",
           description: "Prompt slug or numeric ID",
         }),
-      }) as any,
+      }),
       body: {
         content: {
           "application/json": {
             schema: z.object({
               variables: z.any().optional().describe("Variables to substitute in the prompt template (key-value pairs)"),
-            }) as any,
+            }),
           },
         },
       },
@@ -119,14 +156,14 @@ export class V1ExecutePrompt extends OpenAPIRoute {
           description: "W3C Trace Context traceparent header for distributed tracing (format: 00-{trace-id}-{parent-id}-{trace-flags})",
           example: "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
         }).nullable(),
-      }) as any,
+      }),
     },
     responses: {
       "200": {
         description: "Prompt executed successfully",
         content: {
           "application/json": {
-            schema: ExecutePromptResponse as any,
+            schema: ExecutePromptResponse,
           },
         },
       },
@@ -134,7 +171,7 @@ export class V1ExecutePrompt extends OpenAPIRoute {
         description: "Bad request - prompt not active or no messages",
         content: {
           "application/json": {
-            schema: ErrorResponse as any,
+            schema: ErrorResponse,
           },
         },
       },
@@ -142,7 +179,7 @@ export class V1ExecutePrompt extends OpenAPIRoute {
         description: "Project, prompt, or active version not found",
         content: {
           "application/json": {
-            schema: ErrorResponse as any,
+            schema: ErrorResponse,
           },
         },
       },
@@ -150,58 +187,43 @@ export class V1ExecutePrompt extends OpenAPIRoute {
         description: "Internal server error",
         content: {
           "application/json": {
-            schema: ErrorResponse as any,
+            schema: ErrorResponse,
           },
         },
       },
     },
   };
 
-  async handle(c: Context) {
+  async handle(c: Context): Promise<Response | Record<string, unknown>> {
     const db = drizzle(c.env.DB);
     const logger = new CFPromptExecutionLogger(db, c.env.PRIVATE_FILES, c.env.NEW_LOGS);
 
     try {
       const user = getUserFromContext(c);
       const data = await this.getValidatedData<typeof this.schema>();
-      const { projectSlugOrId, promptSlugOrId } = data.params as any;
-      const body = (data.body || {}) as any;
+      const { projectSlugOrId, promptSlugOrId } = data.params as {
+        projectSlugOrId: string;
+        promptSlugOrId: string;
+      };
+      const body = (data.body ?? {}) as { variables?: Record<string, unknown> };
 
       const projectService = new ProjectService(db);
       const promptService = new PromptService(db);
 
-      const project = await resolveProject(projectService, user.tenantId, projectSlugOrId);
-
-      if (!project) {
-        return Response.json({ error: "Project not found" }, { status: 404 });
-      }
-
-      const prompt = await resolvePrompt(
+      const executionContext = await resolveExecutionContext({
+        projectService,
         promptService,
-        user.tenantId,
-        project.id,
-        promptSlugOrId
-      );
+        tenantId: user.tenantId,
+        projectSlugOrId,
+        promptSlugOrId,
+      });
 
-      if (!prompt) {
-        return Response.json({ error: "Prompt not found" }, { status: 404 });
+      if ("error" in executionContext) {
+				// @ts-expect-error no type
+        return executionContext.error;
       }
 
-      // Check if prompt is active
-      if (!prompt.isActive) {
-        return Response.json({ error: "Prompt is not active" }, { status: 400 });
-      }
-
-      // Get the active version from the router
-      const activeVersion = await promptService.getActivePromptVersion(
-        user.tenantId,
-        project.id,
-        prompt.id
-      );
-
-      if (!activeVersion) {
-        return Response.json({ error: "No active version found for prompt" }, { status: 404 });
-      }
+      const { project, prompt, activeVersion } = executionContext;
 
       // Extract traceparent header for distributed tracing
       const traceparent = c.req.header("traceparent");
@@ -217,10 +239,10 @@ export class V1ExecutePrompt extends OpenAPIRoute {
 
       const { body: promptBody, error: promptBodyError } = parsePromptBody(activeVersion.body);
       if (promptBodyError || !promptBody) {
-        return promptBodyError || Response.json({ error: "Invalid prompt body format" }, { status: 500 });
+        return promptBodyError ?? Response.json({ error: "Invalid prompt body format" }, { status: 500 });
       }
 
-      const messages: AIMessage[] = promptBody.messages || [];
+      const messages: AIMessage[] = promptBody.messages ?? [];
 
       if (messages.length === 0) {
         return Response.json({ error: "No messages found in prompt body" }, { status: 400 });

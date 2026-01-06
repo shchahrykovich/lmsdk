@@ -14,8 +14,8 @@ export interface ResponseFormat {
   json_schema?: {
     name?: string;
     strict?: boolean;
-    schema?: any;
-    [key: string]: any;
+    schema?: unknown;
+    [key: string]: unknown;
   };
 }
 
@@ -24,7 +24,7 @@ export interface ResponseFormat {
  */
 export interface OpenAISettings {
   reasoning_effort?: "low" | "medium" | "high";
-  reasoning_summary?: "auto" | "enabled" | "disabled";
+  reasoning_summary?: "auto" | "enabled" | "concise";
   store?: boolean;
   include_encrypted_reasoning?: boolean;
 }
@@ -49,7 +49,7 @@ export interface ExecuteRequest {
   response_format?: ResponseFormat;
   openai_settings?: OpenAISettings;
   google_settings?: GoogleSettings;
-  variables?: Record<string, any>;
+  variables?: Record<string, unknown>;
   proxy?: "none" | "cloudflare";
   // For Google cache key generation
   projectId?: number;

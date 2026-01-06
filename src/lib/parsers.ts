@@ -1,4 +1,5 @@
 import { createParser } from "nuqs/server";
+import type { SingleParserBuilder } from "nuqs/server";
 import { z } from "zod";
 
 import { dataTableConfig } from "@/config/data-table";
@@ -13,14 +14,15 @@ const sortingItemSchema = z.object({
   desc: z.boolean(),
 });
 
+const normalizeColumnIds = (columnIds?: string[] | Set<string>) => {
+  if (!columnIds) return null;
+  return columnIds instanceof Set ? columnIds : new Set(columnIds);
+};
+
 export const getSortingStateParser = <TData>(
   columnIds?: string[] | Set<string>,
-) => {
-  const validKeys = columnIds
-    ? columnIds instanceof Set
-      ? columnIds
-      : new Set(columnIds)
-    : null;
+): SingleParserBuilder<ExtendedColumnSort<TData>[]> => {
+  const validKeys = normalizeColumnIds(columnIds);
 
   return createParser({
     parse: (value) => {
@@ -61,12 +63,8 @@ export type FilterItemSchema = z.infer<typeof filterItemSchema>;
 
 export const getFiltersStateParser = <TData>(
   columnIds?: string[] | Set<string>,
-) => {
-  const validKeys = columnIds
-    ? columnIds instanceof Set
-      ? columnIds
-      : new Set(columnIds)
-    : null;
+): SingleParserBuilder<ExtendedColumnFilter<TData>[]> => {
+  const validKeys = normalizeColumnIds(columnIds);
 
   return createParser({
     parse: (value) => {

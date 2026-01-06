@@ -1,35 +1,32 @@
+/* eslint-disable sonarjs/function-return-type */
+import type * as React from "react";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
-import type { ReactNode } from "react";
 
-interface ProjectPageHeaderProps {
+type ProjectPageHeaderProps = Readonly<{
   projectName: string;
   pageTitle?: string;
-  description: string | ReactNode;
-  onBack: () => void;
-  actionIcon?: ReactNode;
+  description: string | React.ReactNode;
+  actionIcon?: React.ReactNode;
   actionLabel?: string;
   onAction?: () => void;
-  badge?: ReactNode;
-}
+  badge?: React.ReactNode;
+  actions?: React.ReactNode;
+}>;
 
 export default function ProjectPageHeader({
   projectName,
   pageTitle,
   description,
-  onBack,
   actionIcon,
   actionLabel,
   onAction,
   badge,
-}: ProjectPageHeaderProps) {
+  actions,
+}: ProjectPageHeaderProps): React.ReactNode {
   return (
     <div className="border-b border-border bg-card shrink-0">
       <div className="px-8 py-6">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={onBack}>
-            <ArrowLeft size={18} />
-          </Button>
           <div className="flex-1">
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-semibold text-foreground">
@@ -40,6 +37,7 @@ export default function ProjectPageHeader({
             </div>
             <p className="text-sm text-muted-foreground mt-1">{description}</p>
           </div>
+          {actions}
           {actionLabel && onAction && (
             <Button className="gap-2" onClick={onAction}>
               {actionIcon}

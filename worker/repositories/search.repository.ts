@@ -152,15 +152,16 @@ export class SearchRepository {
    * @param operator - The comparison operator (contains, notEmpty)
    * @returns Array of unique log IDs
    */
-  async getLogIdsByVariableSearch(
-    tenantId: number,
-    projectId: number,
-    variablePath: string,
-    searchValue: string,
-    operator: "contains" | "notEmpty" = "contains"
-  ): Promise<number[]> {
+  async getLogIdsByVariableSearch(params: {
+    tenantId: number;
+    projectId: number;
+    variablePath: string;
+    searchValue: string;
+    operator?: "contains" | "notEmpty";
+  }): Promise<number[]> {
+    const { tenantId, projectId, variablePath, searchValue, operator = "contains" } = params;
     let query: string;
-    let bindParams: any[];
+    let bindParams: (number | string)[];
 
     // Build query based on operator
     if (operator === "notEmpty") {

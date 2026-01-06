@@ -135,6 +135,38 @@ describe("V1 Execute Prompt Routes", () => {
     expect(data).toEqual({ error: "Prompt not found" });
   });
 
+  it("should return 400 when prompt is not active", async () => {
+    const db = drizzle(env.DB);
+
+    // Create an inactive prompt
+    const inactivePrompt = await createPromptWithRouter(db, {
+      name: "Inactive Prompt",
+      slug: "inactive-prompt",
+      tenantId: 1,
+      projectId: projectId,
+      provider: "openai",
+      model: "gpt-4o-mini",
+      body: JSON.stringify({
+        messages: [
+          { role: "user", content: "This should not execute" }
+        ]
+      }),
+      latestVersion: 1,
+      isActive: false,
+    });
+
+    const response = await requestJsonWithApiKey(
+      `/api/v1/projects/${projectId}/prompts/${inactivePrompt.id}/execute`,
+      testApiKey,
+      { variables: {} }
+    );
+
+    expect(response.status).toBe(400);
+    const data = await response.json();
+    expect(data).toEqual({ error: "Prompt is not active" });
+    expect(mockExecutePrompt).not.toHaveBeenCalled();
+  });
+
   it("should find project and prompt by slug", async () => {
     const response = await requestJsonWithApiKey(
       "/api/v1/projects/test-project/prompts/test-prompt/execute",

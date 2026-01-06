@@ -1,5 +1,4 @@
 import { OpenAPIRoute } from "chanfana";
-import type { Context } from "hono";
 import { z } from "zod";
 
 export class V1Whoami extends OpenAPIRoute {
@@ -18,14 +17,14 @@ export class V1Whoami extends OpenAPIRoute {
                 result: z.object({
                   ok: z.boolean(),
                 }),
-            }) as any,
+            }) as z.ZodTypeAny,
           },
         },
       },
     },
   };
 
-  handle(_c: Context) {
+  handle(): { ok: boolean } {
     return {
       ok: true,
     };

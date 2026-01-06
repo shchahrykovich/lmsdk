@@ -286,7 +286,12 @@ describe("TraceService - Stats Parsing", () => {
       await createTrace(1, 42, "trace-2", stats2);
       await createTrace(1, 42, "trace-3", null);
 
-      const result = await traceService.listProjectTraces(1, 42, 1, 10);
+      const result = await traceService.listProjectTraces({
+        tenantId: 1,
+        projectId: 42,
+        page: 1,
+        pageSize: 10,
+      });
 
       expect(result.traces).toHaveLength(3);
 

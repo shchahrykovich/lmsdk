@@ -1,5 +1,6 @@
 import { DrizzleD1Database } from "drizzle-orm/d1";
 import { and, asc, count, desc, eq, inArray } from "drizzle-orm";
+import type { AnyColumn } from "drizzle-orm";
 import { promptExecutionLogs, prompts } from "../db/schema";
 import { SearchRepository } from "../repositories/search.repository";
 
@@ -42,6 +43,15 @@ export interface LogsListResponse {
   totalPages: number;
 }
 
+export interface ListProjectLogsParams {
+  tenantId: number;
+  projectId: number;
+  page?: number;
+  pageSize?: number;
+  filters?: LogFilters;
+  sort?: LogSort;
+}
+
 export class LogService {
   private db: DrizzleD1Database;
   private r2?: R2Bucket;
@@ -55,14 +65,8 @@ export class LogService {
     }
   }
 
-  async listProjectLogs(
-    tenantId: number,
-    projectId: number,
-    page: number = 1,
-    pageSize: number = 10,
-    filters?: LogFilters,
-    sort?: LogSort
-  ): Promise<LogsListResponse> {
+  async listProjectLogs(params: ListProjectLogsParams): Promise<LogsListResponse> {
+    const { tenantId, projectId, page = 1, pageSize = 10, filters, sort } = params;
     const variableFilteredLogIds = await this.getVariableFilteredLogIds(
       tenantId,
       projectId,
@@ -141,15 +145,15 @@ export class LogService {
       return undefined;
     }
 
-    const operator = filters.variableOperator || "contains";
-    const searchValue = filters.variableValue || "";
-    const logIds = await this.searchRepository.getLogIdsByVariableSearch(
+    const operator = filters.variableOperator ?? "contains";
+    const searchValue = filters.variableValue ?? "";
+    const logIds = await this.searchRepository.getLogIdsByVariableSearch({
       tenantId,
       projectId,
-      filters.variablePath,
+      variablePath: filters.variablePath,
       searchValue,
-      operator
-    );
+      operator,
+    });
 
     if (logIds.length > 95) {
       return logIds.slice(0, 95);
@@ -210,28 +214,25 @@ export class LogService {
   }
 
   private getOrderByClause(sort?: LogSort) {
-    const sortField = sort?.field || "createdAt";
-    const sortDirection = sort?.direction || "desc";
+    const sortField = sort?.field ?? "createdAt";
+    const sortDirection = sort?.direction ?? "desc";
 
-    switch (sortField) {
-      case "promptName":
-        return sortDirection === "asc" ? asc(prompts.name) : desc(prompts.name);
-      case "durationMs":
-        return sortDirection === "asc"
-          ? asc(promptExecutionLogs.durationMs)
-          : desc(promptExecutionLogs.durationMs);
-      case "isSuccess":
-        return sortDirection === "asc"
-          ? asc(promptExecutionLogs.isSuccess)
-          : desc(promptExecutionLogs.isSuccess);
-      case "provider":
-        return sortDirection === "asc" ? asc(prompts.provider) : desc(prompts.provider);
-      case "createdAt":
-      default:
-        return sortDirection === "asc"
-          ? asc(promptExecutionLogs.createdAt)
-          : desc(promptExecutionLogs.createdAt);
+    const sortColumns: Record<LogSort["field"], AnyColumn> = {
+      promptName: prompts.name,
+      durationMs: promptExecutionLogs.durationMs,
+      isSuccess: promptExecutionLogs.isSuccess,
+      provider: prompts.provider,
+      createdAt: promptExecutionLogs.createdAt,
+    };
+
+    const sortColumn = sortColumns[sortField];
+
+    // Guard against invalid sort field (e.g., from URL parameter type casting)
+    if (!sortColumn) {
+      return desc(promptExecutionLogs.createdAt);
     }
+
+    return sortDirection === "asc" ? asc(sortColumn) : desc(sortColumn);
   }
 
   async getProjectLog(
@@ -330,6 +331,34 @@ export class LogService {
     return { log, files };
   }
 
+  async getLogVariables(
+    tenantId: number,
+    projectId: number,
+    logId: number
+  ): Promise<Record<string, unknown> | null> {
+    const log = await this.getProjectLog(tenantId, projectId, logId);
+    if (!log?.logPath || !this.r2) {
+      return null;
+    }
+
+    const base = log.logPath.replace(/\/$/, "");
+    const object = await this.r2.get(`${base}/variables.json`);
+    if (!object) {
+      return null;
+    }
+
+    try {
+      const text = await object.text();
+      const parsed = JSON.parse(text) as unknown;
+      if (parsed && typeof parsed === "object") {
+        return parsed as Record<string, unknown>;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
   async getUniquePromptsForProject(
     tenantId: number,
     projectId: number
@@ -359,7 +388,7 @@ export class LogService {
 
     return results.map((r) => ({
       promptId: r.promptId,
-      promptName: r.promptName || "Unknown",
+      promptName: r.promptName ?? "Unknown",
       version: r.version,
     }));
   }

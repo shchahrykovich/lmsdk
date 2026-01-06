@@ -1,12 +1,6 @@
 import { DrizzleD1Database } from "drizzle-orm/d1";
-import { eq, and, desc } from "drizzle-orm";
-import {
-  prompts,
-  promptVersions,
-  promptRouters,
-  type Prompt,
-  type PromptVersion
-} from "../db/schema";
+import { type Prompt, type PromptVersion } from "../db/schema";
+import { PromptRepository } from "../repositories/prompt.repository";
 
 export interface CreatePromptInput {
   tenantId: number;
@@ -26,10 +20,10 @@ export interface UpdatePromptInput {
 }
 
 export class PromptService {
-  private db: DrizzleD1Database;
+  private repository: PromptRepository;
 
   constructor(db: DrizzleD1Database) {
-    this.db = db;
+    this.repository = new PromptRepository(db);
   }
 
   /**
@@ -39,23 +33,20 @@ export class PromptService {
     const version = 1;
 
     // Create the main prompt record
-    const [prompt] = await this.db
-      .insert(prompts)
-      .values({
-        tenantId: input.tenantId,
-        projectId: input.projectId,
-        name: input.name,
-        slug: input.slug,
-        provider: input.provider,
-        model: input.model,
-        body: input.body,
-        latestVersion: version,
-        isActive: true,
-      })
-      .returning();
+    const prompt = await this.repository.createPrompt({
+      tenantId: input.tenantId,
+      projectId: input.projectId,
+      name: input.name,
+      slug: input.slug,
+      provider: input.provider,
+      model: input.model,
+      body: input.body,
+      latestVersion: version,
+      isActive: true,
+    });
 
     // Create the first version record
-    await this.db.insert(promptVersions).values({
+    await this.repository.createPromptVersion({
       promptId: prompt.id,
       tenantId: input.tenantId,
       projectId: input.projectId,
@@ -68,7 +59,7 @@ export class PromptService {
     });
 
     // Create the initial router entry pointing to version 1
-    await this.db.insert(promptRouters).values({
+    await this.repository.createPromptRouter({
       promptId: prompt.id,
       tenantId: input.tenantId,
       projectId: input.projectId,
@@ -86,19 +77,13 @@ export class PromptService {
     projectId: number,
     promptId: number,
     input: UpdatePromptInput
-  ) {
+  ): Promise<{ count: number }> {
     // Get the current prompt to access current values and latest version
-    const [currentPrompt] = await this.db
-      .select()
-      .from(prompts)
-      .where(
-        and(
-          eq(prompts.id, promptId),
-          eq(prompts.tenantId, tenantId),
-          eq(prompts.projectId, projectId)
-        )
-      )
-      .limit(1);
+    const currentPrompt = await this.repository.findPromptById(
+      tenantId,
+      projectId,
+      promptId
+    );
 
     if (!currentPrompt) {
       throw new Error("Prompt not found");
@@ -107,26 +92,16 @@ export class PromptService {
     const newVersion = currentPrompt.latestVersion + 1;
 
     // Update the main prompt record
-    await this.db
-      .update(prompts)
-      .set({
-        name: input.name ?? currentPrompt.name,
-        provider: input.provider ?? currentPrompt.provider,
-        model: input.model ?? currentPrompt.model,
-        body: input.body ?? currentPrompt.body,
-        latestVersion: newVersion,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(prompts.id, promptId),
-          eq(prompts.tenantId, tenantId),
-          eq(prompts.projectId, projectId)
-        )
-      );
+    await this.repository.updatePrompt(tenantId, projectId, promptId, {
+      name: input.name ?? currentPrompt.name,
+      provider: input.provider ?? currentPrompt.provider,
+      model: input.model ?? currentPrompt.model,
+      body: input.body ?? currentPrompt.body,
+      latestVersion: newVersion,
+    });
 
     // Create a new version record with updated values
-    await this.db.insert(promptVersions).values({
+    await this.repository.createPromptVersion({
       promptId: promptId,
       tenantId: tenantId,
       projectId: projectId,
@@ -139,34 +114,23 @@ export class PromptService {
     });
 
     // Update or create the prompt router to point to the new version
-    // First, check if a router entry exists for this prompt
-    const [existingRouter] = await this.db
-      .select()
-      .from(promptRouters)
-      .where(
-        and(
-          eq(promptRouters.promptId, promptId),
-          eq(promptRouters.tenantId, tenantId),
-          eq(promptRouters.projectId, projectId)
-        )
-      )
-      .limit(1);
+    const existingRouter = await this.repository.findPromptRouter(
+      tenantId,
+      projectId,
+      promptId
+    );
 
     if (existingRouter) {
       // Update existing router to new version
-      await this.db
-        .update(promptRouters)
-        .set({ version: newVersion })
-        .where(
-          and(
-            eq(promptRouters.id, existingRouter.id),
-            eq(promptRouters.tenantId, tenantId),
-            eq(promptRouters.projectId, projectId)
-          )
-        );
+      await this.repository.updatePromptRouterVersion(
+        tenantId,
+        projectId,
+        existingRouter.id,
+        newVersion
+      );
     } else {
       // Create new router entry
-      await this.db.insert(promptRouters).values({
+      await this.repository.createPromptRouter({
         promptId: promptId,
         tenantId: tenantId,
         projectId: projectId,
@@ -185,39 +149,27 @@ export class PromptService {
     projectId: number,
     promptId: number
   ): Promise<(Prompt & { currentVersion: PromptVersion | null }) | null> {
-    const [prompt] = await this.db
-      .select()
-      .from(prompts)
-      .where(
-        and(
-          eq(prompts.id, promptId),
-          eq(prompts.tenantId, tenantId),
-          eq(prompts.projectId, projectId)
-        )
-      )
-      .limit(1);
+    const prompt = await this.repository.findPromptById(
+      tenantId,
+      projectId,
+      promptId
+    );
 
     if (!prompt) {
       return null;
     }
 
     // Get the latest version
-    const [latestVersion] = await this.db
-      .select()
-      .from(promptVersions)
-      .where(
-        and(
-          eq(promptVersions.promptId, prompt.id),
-          eq(promptVersions.tenantId, tenantId),
-          eq(promptVersions.projectId, projectId),
-          eq(promptVersions.version, prompt.latestVersion)
-        )
-      )
-      .limit(1);
+    const latestVersion = await this.repository.findPromptVersion(
+      tenantId,
+      projectId,
+      prompt.id,
+      prompt.latestVersion
+    );
 
     return {
       ...prompt,
-      currentVersion: latestVersion || null,
+      currentVersion: latestVersion ?? null,
     };
   }
 
@@ -230,20 +182,24 @@ export class PromptService {
     promptId: number,
     version: number
   ): Promise<PromptVersion | undefined> {
-    const [promptVersion] = await this.db
-      .select()
-      .from(promptVersions)
-      .where(
-        and(
-          eq(promptVersions.promptId, promptId),
-          eq(promptVersions.tenantId, tenantId),
-          eq(promptVersions.projectId, projectId),
-          eq(promptVersions.version, version)
-        )
-      )
-      .limit(1);
+    return await this.repository.findPromptVersion(
+      tenantId,
+      projectId,
+      promptId,
+      version
+    );
+  }
 
-    return promptVersion;
+  async getPromptVersionById(
+    tenantId: number,
+    projectId: number,
+    versionId: number
+  ): Promise<PromptVersion | undefined> {
+    return await this.repository.findPromptVersionById(
+      tenantId,
+      projectId,
+      versionId
+    );
   }
 
   /**
@@ -254,56 +210,29 @@ export class PromptService {
     projectId: number,
     promptId: number
   ): Promise<PromptVersion[]> {
-    return await this.db
-      .select()
-      .from(promptVersions)
-      .where(
-        and(
-          eq(promptVersions.promptId, promptId),
-          eq(promptVersions.tenantId, tenantId),
-          eq(promptVersions.projectId, projectId)
-        )
-      )
-      .orderBy(desc(promptVersions.version));
+    return await this.repository.findPromptVersions(
+      tenantId,
+      projectId,
+      promptId
+    );
   }
 
   /**
-   * List all prompts for a project
+   * List all prompts for a project (active only by default)
    */
   async listPrompts(tenantId: number, projectId: number): Promise<Prompt[]> {
-    return await this.db
-      .select()
-      .from(prompts)
-      .where(
-        and(
-          eq(prompts.tenantId, tenantId),
-          eq(prompts.projectId, projectId)
-        )
-      )
-      .orderBy(desc(prompts.updatedAt));
+    return await this.repository.findPrompts(tenantId, projectId, true);
   }
 
   /**
-   * Deactivate a prompt
+   * Deactivate a prompt (soft delete)
    */
   async deactivatePrompt(
     tenantId: number,
     projectId: number,
     promptId: number
-  ) {
-    return await this.db
-      .update(prompts)
-      .set({
-        isActive: false,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(prompts.id, promptId),
-          eq(prompts.tenantId, tenantId),
-          eq(prompts.projectId, projectId)
-        )
-      );
+  ): Promise<void> {
+    await this.repository.deactivatePrompt(tenantId, projectId, promptId);
   }
 
   /**
@@ -314,19 +243,7 @@ export class PromptService {
     projectId: number,
     slug: string
   ): Promise<Prompt | undefined> {
-    const [prompt] = await this.db
-      .select()
-      .from(prompts)
-      .where(
-        and(
-          eq(prompts.slug, slug),
-          eq(prompts.tenantId, tenantId),
-          eq(prompts.projectId, projectId)
-        )
-      )
-      .limit(1);
-
-    return prompt;
+    return await this.repository.findPromptBySlug(tenantId, projectId, slug);
   }
 
   /**
@@ -338,37 +255,25 @@ export class PromptService {
     promptId: number
   ): Promise<PromptVersion | null> {
     // Get the router to find which version is active
-    const [router] = await this.db
-      .select()
-      .from(promptRouters)
-      .where(
-        and(
-          eq(promptRouters.promptId, promptId),
-          eq(promptRouters.tenantId, tenantId),
-          eq(promptRouters.projectId, projectId)
-        )
-      )
-      .limit(1);
+    const router = await this.repository.findPromptRouter(
+      tenantId,
+      projectId,
+      promptId
+    );
 
     if (!router) {
       return null;
     }
 
     // Get the version specified by the router
-    const [version] = await this.db
-      .select()
-      .from(promptVersions)
-      .where(
-        and(
-          eq(promptVersions.promptId, promptId),
-          eq(promptVersions.tenantId, tenantId),
-          eq(promptVersions.projectId, projectId),
-          eq(promptVersions.version, router.version)
-        )
-      )
-      .limit(1);
+    const version = await this.repository.findPromptVersion(
+      tenantId,
+      projectId,
+      promptId,
+      router.version
+    );
 
-    return version || null;
+    return version ?? null;
   }
 
   /**
@@ -379,17 +284,11 @@ export class PromptService {
     projectId: number,
     promptId: number
   ): Promise<number | null> {
-    const [router] = await this.db
-      .select()
-      .from(promptRouters)
-      .where(
-        and(
-          eq(promptRouters.promptId, promptId),
-          eq(promptRouters.tenantId, tenantId),
-          eq(promptRouters.projectId, projectId)
-        )
-      )
-      .limit(1);
+    const router = await this.repository.findPromptRouter(
+      tenantId,
+      projectId,
+      promptId
+    );
 
     return router?.version ?? null;
   }
@@ -404,56 +303,187 @@ export class PromptService {
     version: number
   ): Promise<void> {
     // First check if the version exists
-    const [versionExists] = await this.db
-      .select()
-      .from(promptVersions)
-      .where(
-        and(
-          eq(promptVersions.promptId, promptId),
-          eq(promptVersions.tenantId, tenantId),
-          eq(promptVersions.projectId, projectId),
-          eq(promptVersions.version, version)
-        )
-      )
-      .limit(1);
+    const versionExists = await this.repository.findPromptVersion(
+      tenantId,
+      projectId,
+      promptId,
+      version
+    );
 
     if (!versionExists) {
       throw new Error("Version not found");
     }
 
     // Check if router exists
-    const [existingRouter] = await this.db
-      .select()
-      .from(promptRouters)
-      .where(
-        and(
-          eq(promptRouters.promptId, promptId),
-          eq(promptRouters.tenantId, tenantId),
-          eq(promptRouters.projectId, projectId)
-        )
-      )
-      .limit(1);
+    const existingRouter = await this.repository.findPromptRouter(
+      tenantId,
+      projectId,
+      promptId
+    );
 
     if (existingRouter) {
       // Update existing router
-      await this.db
-        .update(promptRouters)
-        .set({ version })
-        .where(
-          and(
-            eq(promptRouters.id, existingRouter.id),
-            eq(promptRouters.tenantId, tenantId),
-            eq(promptRouters.projectId, projectId)
-          )
-        );
+      await this.repository.updatePromptRouterVersion(
+        tenantId,
+        projectId,
+        existingRouter.id,
+        version
+      );
     } else {
       // Create new router entry
-      await this.db.insert(promptRouters).values({
+      await this.repository.createPromptRouter({
         promptId,
         tenantId,
         projectId,
         version,
       });
     }
+  }
+
+  /**
+   * Copy a prompt - creates a new prompt with the same configuration as the original
+   * Automatically generates a unique name and slug by appending " Copy" or " Copy N"
+   */
+  async copyPrompt(
+    tenantId: number,
+    projectId: number,
+    promptId: number
+  ): Promise<Prompt> {
+    // Get the source prompt
+    const sourcePrompt = await this.repository.findPromptById(
+      tenantId,
+      projectId,
+      promptId
+    );
+
+    if (!sourcePrompt) {
+      throw new Error("Source prompt not found");
+    }
+
+    // Generate a unique name and slug
+    let newName = `${sourcePrompt.name} Copy`;
+    let newSlug = `${sourcePrompt.slug}-copy`;
+    let copyNumber = 1;
+
+    // Keep trying until we find a unique name/slug combination
+    while (true) {
+      const existingPrompt = await this.repository.findPromptBySlug(
+        tenantId,
+        projectId,
+        newSlug
+      );
+
+      if (!existingPrompt) {
+        break;
+      }
+
+      copyNumber++;
+      newName = `${sourcePrompt.name} Copy ${copyNumber}`;
+      newSlug = `${sourcePrompt.slug}-copy-${copyNumber}`;
+    }
+
+    // Create the new prompt with the same configuration
+    const newPrompt = await this.repository.createPrompt({
+      tenantId: tenantId,
+      projectId: projectId,
+      name: newName,
+      slug: newSlug,
+      provider: sourcePrompt.provider,
+      model: sourcePrompt.model,
+      body: sourcePrompt.body,
+      latestVersion: 1,
+      isActive: true,
+    });
+
+    // Create the first version for the new prompt
+    await this.repository.createPromptVersion({
+      promptId: newPrompt.id,
+      tenantId: tenantId,
+      projectId: projectId,
+      version: 1,
+      name: newName,
+      provider: sourcePrompt.provider,
+      model: sourcePrompt.model,
+      body: sourcePrompt.body,
+      slug: newSlug,
+    });
+
+    // Create the initial router entry pointing to version 1
+    await this.repository.createPromptRouter({
+      promptId: newPrompt.id,
+      tenantId: tenantId,
+      projectId: projectId,
+      version: 1,
+    });
+
+    return newPrompt;
+  }
+
+  /**
+   * Generate a slug from a name
+   * Converts to lowercase and replaces non-alphanumeric characters with hyphens
+   */
+  private generateSlug(name: string): string {
+    return name
+      .toLowerCase()
+      .split(/[^a-z0-9]/)
+      .filter(Boolean)
+      .join("-");
+  }
+
+  /**
+   * Rename a prompt - updates the name and auto-generates slug from the name
+   * Validates that the new slug is unique within the project
+   */
+  async renamePrompt(params: {
+    tenantId: number;
+    projectId: number;
+    promptId: number;
+    name: string;
+    slug: string;
+  }): Promise<Prompt> {
+    // Check if prompt exists
+    const existingPrompt = await this.repository.findPromptById(
+      params.tenantId,
+      params.projectId,
+      params.promptId
+    );
+
+    if (!existingPrompt) {
+      throw new Error("Prompt not found");
+    }
+
+    // Generate slug from name (ignore the provided slug)
+    const generatedSlug = this.generateSlug(params.name);
+
+    // Check if new slug is already in use by another prompt
+    const slugConflict = await this.repository.findPromptBySlug(
+      params.tenantId,
+      params.projectId,
+      generatedSlug
+    );
+
+    if (slugConflict && slugConflict.id !== params.promptId) {
+      throw new Error("Slug already in use");
+    }
+
+    // Update the prompt with the generated slug
+    await this.repository.renamePrompt({
+      ...params,
+      slug: generatedSlug,
+    });
+
+    // Return the updated prompt
+    const updatedPrompt = await this.repository.findPromptById(
+      params.tenantId,
+      params.projectId,
+      params.promptId
+    );
+
+    if (!updatedPrompt) {
+      throw new Error("Failed to retrieve updated prompt");
+    }
+
+    return updatedPrompt;
   }
 }

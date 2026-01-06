@@ -1,13 +1,14 @@
+/* eslint-disable sonarjs/function-return-type */
+import type * as React from "react";
 import { Button } from "@/components/ui/button";
-import type { ReactNode } from "react";
 
-interface PageHeaderProps {
+type PageHeaderProps = Readonly<{
   title: string;
   description: string;
-  actionIcon?: ReactNode;
+  actionIcon?: React.ReactNode;
   actionLabel?: string;
   onAction?: () => void;
-}
+}>;
 
 export default function PageHeader({
   title,
@@ -15,7 +16,7 @@ export default function PageHeader({
   actionIcon,
   actionLabel,
   onAction,
-}: PageHeaderProps) {
+}: PageHeaderProps): React.ReactNode {
   return (
     <div className="border-b border-border bg-card shrink-0">
       <div className="px-8 py-6">

@@ -50,19 +50,19 @@ tracesRouter.get("/:projectId/traces", async (c) => {
 
     const sort = sortField ? {
       field: sortField,
-      direction: sortDirection || "desc",
+      direction: sortDirection ?? "desc",
     } : undefined;
 
     const db = drizzle(c.env.DB);
-    const traceService = new TraceService(db, c.env.PRIVATE_FILES);
+    const traceService = new TraceService(db);
 
-    const result = await traceService.listProjectTraces(
-      user.tenantId,
+    const result = await traceService.listProjectTraces({
+      tenantId: user.tenantId,
       projectId,
       page,
       pageSize,
-      sort
-    );
+      sort,
+    });
 
     return c.json(result);
   } catch (error) {
@@ -90,7 +90,7 @@ tracesRouter.get("/:projectId/traces/:traceId", async (c) => {
     }
 
     const db = drizzle(c.env.DB);
-    const traceService = new TraceService(db, c.env.PRIVATE_FILES);
+    const traceService = new TraceService(db);
 
     const result = await traceService.getTraceDetails(
       user.tenantId,

@@ -1,3 +1,5 @@
+/* eslint-disable sonarjs/function-return-type */
+import type * as React from "react";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -34,7 +36,7 @@ interface LogFiles {
   variables: unknown | null;
 }
 
-export default function LogDetail() {
+export default function LogDetail(): React.ReactNode {
   const { slug, logId } = useParams<{ slug: string; logId: string }>();
   const navigate = useNavigate();
   const [project, setProject] = useState<Project | null>(null);
@@ -44,7 +46,7 @@ export default function LogDetail() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchData();
+    void fetchData();
   }, [slug, logId]);
 
   const fetchData = async () => {
@@ -72,8 +74,8 @@ export default function LogDetail() {
         throw new Error(`Failed to fetch log: ${logResponse.statusText}`);
       }
       const logData = await logResponse.json();
-      setLog(logData.log || null);
-      setFiles(logData.files || null);
+      setLog(logData.log ?? null);
+      setFiles(logData.files ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load log");
       console.error("Error fetching log:", err);
@@ -99,8 +101,8 @@ export default function LogDetail() {
   if (error || !project || !log) {
     return (
       <div className="h-full flex flex-col items-center justify-center">
-        <div className="text-red-500 mb-4">{error || "Log not found"}</div>
-        <Button onClick={() => navigate(`/projects/${slug}/logs`)}>Back to Logs</Button>
+        <div className="text-red-500 mb-4">{error ?? "Log not found"}</div>
+        <Button onClick={() => { void navigate(`/projects/${slug}/logs`); }}>Back to Logs</Button>
       </div>
     );
   }
@@ -121,19 +123,18 @@ export default function LogDetail() {
                     return;
                   }
                   e.preventDefault();
-                  navigate(`/projects/${slug}/prompts/${log.promptSlug}`);
+                  void navigate(`/projects/${slug}/prompts/${log.promptSlug}`);
                 }}
                 className="hover:text-primary hover:underline"
               >
-                {log.promptName || "Unknown prompt"}
+                {log.promptName ?? "Unknown prompt"}
               </a>
             ) : (
-              <span>{log.promptName || "Unknown prompt"}</span>
+              <span>{log.promptName ?? "Unknown prompt"}</span>
             )}
             {" "}v{log.version} - {log.provider && log.model ? `${log.provider}/${log.model}` : "Unknown provider"}
           </span>
         }
-        onBack={() => navigate(`/projects/${project.slug}/logs`)}
         badge={
           <span
             className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
@@ -149,24 +150,6 @@ export default function LogDetail() {
 
       <div className="flex-1 overflow-y-auto px-8 py-6">
         <div className="w-full space-y-6">
-
-          {/*<div className="rounded-lg border border-border bg-card p-6 group">*/}
-          {/*  <div className="flex items-center justify-between gap-3">*/}
-          {/*    <h2 className="text-lg font-semibold text-foreground">Metadata</h2>*/}
-          {/*    <Button*/}
-          {/*        variant="ghost"*/}
-          {/*        size="sm"*/}
-          {/*        className="opacity-0 transition-opacity group-hover:opacity-100"*/}
-          {/*        onClick={() => copyToClipboard(files?.metadata ?? null)}*/}
-          {/*    >*/}
-          {/*      Copy*/}
-          {/*    </Button>*/}
-          {/*  </div>*/}
-          {/*  <pre className="mt-3 text-xs text-muted-foreground whitespace-pre-wrap">*/}
-          {/*    {stringifyData(files?.metadata ?? null)}*/}
-          {/*  </pre>*/}
-          {/*</div>*/}
-
           <div className="rounded-lg border border-border bg-card p-6">
             <div className="flex flex-wrap items-center gap-3">
               <span className="text-sm text-muted-foreground">
@@ -183,11 +166,11 @@ export default function LogDetail() {
             )}
           </div>
 
-          <JsonSection title="Variables" data={files?.variables} collapsed={false} contextTitle={log.promptName || undefined} logId={log.id} />
-          <JsonSection title="Response" data={files?.response} collapsed={false} contextTitle={log.promptName || undefined} logId={log.id} />
-          <JsonSection title="Result" data={files?.result} collapsed={2} contextTitle={log.promptName || undefined} logId={log.id} />
-          <JsonSection title="Input" data={files?.input} collapsed={2} contextTitle={log.promptName || undefined} logId={log.id} />
-          <JsonSection title="Output" data={files?.output} collapsed={2} contextTitle={log.promptName || undefined} logId={log.id} />
+          <JsonSection title="Variables" data={files?.variables} collapsed={false} contextTitle={log.promptName ?? undefined} logId={log.id} />
+          <JsonSection title="Response" data={files?.response} collapsed={false} contextTitle={log.promptName ?? undefined} logId={log.id} />
+          <JsonSection title="Result" data={files?.result} collapsed={2} contextTitle={log.promptName ?? undefined} logId={log.id} />
+          <JsonSection title="Input" data={files?.input} collapsed={2} contextTitle={log.promptName ?? undefined} logId={log.id} />
+          <JsonSection title="Output" data={files?.output} collapsed={2} contextTitle={log.promptName ?? undefined} logId={log.id} />
         </div>
       </div>
     </div>

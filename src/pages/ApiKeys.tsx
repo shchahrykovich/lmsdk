@@ -1,8 +1,10 @@
+/* eslint-disable sonarjs/function-return-type */
+import type * as React from "react";
 import { ApiKeysCard } from "@daveyplate/better-auth-ui";
 import { Button } from "@/components/ui/button";
 import { FileText } from "lucide-react";
 
-export default function ApiKeys() {
+export default function ApiKeys(): React.ReactNode {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* Header */}

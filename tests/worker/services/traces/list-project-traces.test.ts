@@ -46,7 +46,12 @@ describe("TraceService - listProjectTraces", () => {
 
   describe("Basic Functionality", () => {
     it("returns empty array when no traces exist for project", async () => {
-      const result = await traceService.listProjectTraces(1, 42, 1, 10);
+      const result = await traceService.listProjectTraces({
+        tenantId: 1,
+        projectId: 42,
+        page: 1,
+        pageSize: 10,
+      });
 
       expect(result.traces).toEqual([]);
       expect(result.total).toBe(0);
@@ -63,7 +68,12 @@ describe("TraceService - listProjectTraces", () => {
       // Create trace for different project (should not be returned)
       await createTrace(1, 99, "trace-3", { totalLogs: 2 });
 
-      const result = await traceService.listProjectTraces(1, 42, 1, 10);
+      const result = await traceService.listProjectTraces({
+        tenantId: 1,
+        projectId: 42,
+        page: 1,
+        pageSize: 10,
+      });
 
       expect(result.traces).toHaveLength(2);
       expect(result.total).toBe(2);
@@ -86,7 +96,12 @@ describe("TraceService - listProjectTraces", () => {
         await createTrace(1, 42, `trace-${i}`, { totalLogs: i });
       }
 
-      const result = await traceService.listProjectTraces(1, 42, 1, 10);
+      const result = await traceService.listProjectTraces({
+        tenantId: 1,
+        projectId: 42,
+        page: 1,
+        pageSize: 10,
+      });
 
       expect(result.traces).toHaveLength(10);
       expect(result.total).toBe(25);
@@ -107,7 +122,12 @@ describe("TraceService - listProjectTraces", () => {
     });
 
     it("returns first page correctly", async () => {
-      const result = await traceService.listProjectTraces(1, 42, 1, 10);
+      const result = await traceService.listProjectTraces({
+        tenantId: 1,
+        projectId: 42,
+        page: 1,
+        pageSize: 10,
+      });
 
       expect(result.page).toBe(1);
       expect(result.traces).toHaveLength(10);
@@ -116,7 +136,12 @@ describe("TraceService - listProjectTraces", () => {
     });
 
     it("returns second page correctly", async () => {
-      const result = await traceService.listProjectTraces(1, 42, 2, 10);
+      const result = await traceService.listProjectTraces({
+        tenantId: 1,
+        projectId: 42,
+        page: 2,
+        pageSize: 10,
+      });
 
       expect(result.page).toBe(2);
       expect(result.traces).toHaveLength(10);
@@ -125,7 +150,12 @@ describe("TraceService - listProjectTraces", () => {
     });
 
     it("returns last page with remaining items", async () => {
-      const result = await traceService.listProjectTraces(1, 42, 3, 10);
+      const result = await traceService.listProjectTraces({
+        tenantId: 1,
+        projectId: 42,
+        page: 3,
+        pageSize: 10,
+      });
 
       expect(result.page).toBe(3);
       expect(result.traces).toHaveLength(5);
@@ -134,7 +164,12 @@ describe("TraceService - listProjectTraces", () => {
     });
 
     it("returns empty array for page beyond total pages", async () => {
-      const result = await traceService.listProjectTraces(1, 42, 10, 10);
+      const result = await traceService.listProjectTraces({
+        tenantId: 1,
+        projectId: 42,
+        page: 10,
+        pageSize: 10,
+      });
 
       expect(result.page).toBe(10);
       expect(result.traces).toHaveLength(0);
@@ -143,7 +178,12 @@ describe("TraceService - listProjectTraces", () => {
     });
 
     it("handles custom page size", async () => {
-      const result = await traceService.listProjectTraces(1, 42, 1, 5);
+      const result = await traceService.listProjectTraces({
+        tenantId: 1,
+        projectId: 42,
+        page: 1,
+        pageSize: 5,
+      });
 
       expect(result.traces).toHaveLength(5);
       expect(result.pageSize).toBe(5);
@@ -152,14 +192,24 @@ describe("TraceService - listProjectTraces", () => {
 
     it("calculates totalPages correctly with exact division", async () => {
       // Total 25, page size 5 = exactly 5 pages
-      const result = await traceService.listProjectTraces(1, 42, 1, 5);
+      const result = await traceService.listProjectTraces({
+        tenantId: 1,
+        projectId: 42,
+        page: 1,
+        pageSize: 5,
+      });
 
       expect(result.totalPages).toBe(5);
     });
 
     it("calculates totalPages correctly with remainder", async () => {
       // Total 25, page size 7 = 4 pages (7+7+7+4)
-      const result = await traceService.listProjectTraces(1, 42, 1, 7);
+      const result = await traceService.listProjectTraces({
+        tenantId: 1,
+        projectId: 42,
+        page: 1,
+        pageSize: 7,
+      });
 
       expect(result.totalPages).toBe(4);
     });
@@ -196,7 +246,12 @@ describe("TraceService - listProjectTraces", () => {
     });
 
     it("sorts by createdAt descending by default", async () => {
-      const result = await traceService.listProjectTraces(1, 42, 1, 10);
+      const result = await traceService.listProjectTraces({
+        tenantId: 1,
+        projectId: 42,
+        page: 1,
+        pageSize: 10,
+      });
 
       expect(result.traces).toHaveLength(3);
       // Most recent first
@@ -206,9 +261,15 @@ describe("TraceService - listProjectTraces", () => {
     });
 
     it("sorts by createdAt ascending", async () => {
-      const result = await traceService.listProjectTraces(1, 42, 1, 10, {
+      const result = await traceService.listProjectTraces({
+        tenantId: 1,
+        projectId: 42,
+        page: 1,
+        pageSize: 10,
+        sort: {
         field: "createdAt",
         direction: "asc",
+        },
       });
 
       expect(result.traces).toHaveLength(3);
@@ -218,9 +279,15 @@ describe("TraceService - listProjectTraces", () => {
     });
 
     it("sorts by totalLogs descending", async () => {
-      const result = await traceService.listProjectTraces(1, 42, 1, 10, {
+      const result = await traceService.listProjectTraces({
+        tenantId: 1,
+        projectId: 42,
+        page: 1,
+        pageSize: 10,
+        sort: {
         field: "totalLogs",
         direction: "desc",
+        },
       });
 
       expect(result.traces).toHaveLength(3);
@@ -230,9 +297,15 @@ describe("TraceService - listProjectTraces", () => {
     });
 
     it("sorts by totalLogs ascending", async () => {
-      const result = await traceService.listProjectTraces(1, 42, 1, 10, {
+      const result = await traceService.listProjectTraces({
+        tenantId: 1,
+        projectId: 42,
+        page: 1,
+        pageSize: 10,
+        sort: {
         field: "totalLogs",
         direction: "asc",
+        },
       });
 
       expect(result.traces).toHaveLength(3);
@@ -242,9 +315,15 @@ describe("TraceService - listProjectTraces", () => {
     });
 
     it("sorts by totalDurationMs descending", async () => {
-      const result = await traceService.listProjectTraces(1, 42, 1, 10, {
+      const result = await traceService.listProjectTraces({
+        tenantId: 1,
+        projectId: 42,
+        page: 1,
+        pageSize: 10,
+        sort: {
         field: "totalDurationMs",
         direction: "desc",
+        },
       });
 
       expect(result.traces).toHaveLength(3);
@@ -254,9 +333,15 @@ describe("TraceService - listProjectTraces", () => {
     });
 
     it("sorts by totalDurationMs ascending", async () => {
-      const result = await traceService.listProjectTraces(1, 42, 1, 10, {
+      const result = await traceService.listProjectTraces({
+        tenantId: 1,
+        projectId: 42,
+        page: 1,
+        pageSize: 10,
+        sort: {
         field: "totalDurationMs",
         direction: "asc",
+        },
       });
 
       expect(result.traces).toHaveLength(3);
@@ -266,9 +351,15 @@ describe("TraceService - listProjectTraces", () => {
     });
 
     it("sorts by firstLogAt descending", async () => {
-      const result = await traceService.listProjectTraces(1, 42, 1, 10, {
+      const result = await traceService.listProjectTraces({
+        tenantId: 1,
+        projectId: 42,
+        page: 1,
+        pageSize: 10,
+        sort: {
         field: "firstLogAt",
         direction: "desc",
+        },
       });
 
       expect(result.traces).toHaveLength(3);
@@ -278,9 +369,15 @@ describe("TraceService - listProjectTraces", () => {
     });
 
     it("sorts by lastLogAt ascending", async () => {
-      const result = await traceService.listProjectTraces(1, 42, 1, 10, {
+      const result = await traceService.listProjectTraces({
+        tenantId: 1,
+        projectId: 42,
+        page: 1,
+        pageSize: 10,
+        sort: {
         field: "lastLogAt",
         direction: "asc",
+        },
       });
 
       expect(result.traces).toHaveLength(3);
@@ -300,7 +397,12 @@ describe("TraceService - listProjectTraces", () => {
       await createTrace(2, 42, "tenant2-trace1");
       await createTrace(2, 42, "tenant2-trace2");
 
-      const result = await traceService.listProjectTraces(1, 42, 1, 10);
+      const result = await traceService.listProjectTraces({
+        tenantId: 1,
+        projectId: 42,
+        page: 1,
+        pageSize: 10,
+      });
 
       expect(result.traces).toHaveLength(2);
       expect(result.total).toBe(2);
@@ -326,7 +428,12 @@ describe("TraceService - listProjectTraces", () => {
       await createTrace(1, 42, "trace-2");
 
       // Request with tenant 2
-      const result = await traceService.listProjectTraces(2, 42, 1, 10);
+      const result = await traceService.listProjectTraces({
+        tenantId: 2,
+        projectId: 42,
+        page: 1,
+        pageSize: 10,
+      });
 
       expect(result.traces).toEqual([]);
       expect(result.total).toBe(0);
@@ -354,22 +461,42 @@ describe("TraceService - listProjectTraces", () => {
       await createTrace(3, 10, "t3-p10-1");
 
       // Test tenant 1, project 10
-      const t1p10 = await traceService.listProjectTraces(1, 10, 1, 10);
+      const t1p10 = await traceService.listProjectTraces({
+        tenantId: 1,
+        projectId: 10,
+        page: 1,
+        pageSize: 10,
+      });
       expect(t1p10.total).toBe(2);
       expect(t1p10.traces.every(t => t.tenantId === 1 && t.projectId === 10)).toBe(true);
 
       // Test tenant 1, project 20
-      const t1p20 = await traceService.listProjectTraces(1, 20, 1, 10);
+      const t1p20 = await traceService.listProjectTraces({
+        tenantId: 1,
+        projectId: 20,
+        page: 1,
+        pageSize: 10,
+      });
       expect(t1p20.total).toBe(1);
       expect(t1p20.traces.every(t => t.tenantId === 1 && t.projectId === 20)).toBe(true);
 
       // Test tenant 2, project 20
-      const t2p20 = await traceService.listProjectTraces(2, 20, 1, 10);
+      const t2p20 = await traceService.listProjectTraces({
+        tenantId: 2,
+        projectId: 20,
+        page: 1,
+        pageSize: 10,
+      });
       expect(t2p20.total).toBe(2);
       expect(t2p20.traces.every(t => t.tenantId === 2 && t.projectId === 20)).toBe(true);
 
       // Test tenant 3, project 10
-      const t3p10 = await traceService.listProjectTraces(3, 10, 1, 10);
+      const t3p10 = await traceService.listProjectTraces({
+        tenantId: 3,
+        projectId: 10,
+        page: 1,
+        pageSize: 10,
+      });
       expect(t3p10.total).toBe(1);
       expect(t3p10.traces.every(t => t.tenantId === 3 && t.projectId === 10)).toBe(true);
 
@@ -392,13 +519,23 @@ describe("TraceService - listProjectTraces", () => {
       }
 
       // Request page 1 for tenant 1
-      const page1 = await traceService.listProjectTraces(1, 42, 1, 10);
+      const page1 = await traceService.listProjectTraces({
+        tenantId: 1,
+        projectId: 42,
+        page: 1,
+        pageSize: 10,
+      });
       expect(page1.traces).toHaveLength(10);
       expect(page1.total).toBe(15);
       expect(page1.traces.every(t => t.tenantId === 1)).toBe(true);
 
       // Request page 2 for tenant 1
-      const page2 = await traceService.listProjectTraces(1, 42, 2, 10);
+      const page2 = await traceService.listProjectTraces({
+        tenantId: 1,
+        projectId: 42,
+        page: 2,
+        pageSize: 10,
+      });
       expect(page2.traces).toHaveLength(5);
       expect(page2.total).toBe(15);
       expect(page2.traces.every(t => t.tenantId === 1)).toBe(true);
@@ -423,9 +560,15 @@ describe("TraceService - listProjectTraces", () => {
       await createTrace(2, 42, "t2-mid", { totalLogs: 75 });
 
       // Sort tenant 1 by totalLogs desc
-      const result = await traceService.listProjectTraces(1, 42, 1, 10, {
+      const result = await traceService.listProjectTraces({
+        tenantId: 1,
+        projectId: 42,
+        page: 1,
+        pageSize: 10,
+        sort: {
         field: "totalLogs",
         direction: "desc",
+        },
       });
 
       expect(result.traces).toHaveLength(2);
@@ -442,7 +585,12 @@ describe("TraceService - listProjectTraces", () => {
         lastLogAt: undefined,
       });
 
-      const result = await traceService.listProjectTraces(1, 42, 1, 10);
+      const result = await traceService.listProjectTraces({
+        tenantId: 1,
+        projectId: 42,
+        page: 1,
+        pageSize: 10,
+      });
 
       expect(result.traces).toHaveLength(1);
       expect(result.traces[0].firstLogAt).toBeNull();
@@ -457,7 +605,12 @@ describe("TraceService - listProjectTraces", () => {
         totalDurationMs: 0,
       });
 
-      const result = await traceService.listProjectTraces(1, 42, 1, 10);
+      const result = await traceService.listProjectTraces({
+        tenantId: 1,
+        projectId: 42,
+        page: 1,
+        pageSize: 10,
+      });
 
       expect(result.traces).toHaveLength(1);
       expect(result.traces[0].totalLogs).toBe(0);
@@ -468,7 +621,12 @@ describe("TraceService - listProjectTraces", () => {
     it("handles very large page numbers gracefully", async () => {
       await createTrace(1, 42, "trace-1");
 
-      const result = await traceService.listProjectTraces(1, 42, 999999, 10);
+      const result = await traceService.listProjectTraces({
+        tenantId: 1,
+        projectId: 42,
+        page: 999999,
+        pageSize: 10,
+      });
 
       expect(result.traces).toHaveLength(0);
       expect(result.page).toBe(999999);
@@ -479,7 +637,12 @@ describe("TraceService - listProjectTraces", () => {
       await createTrace(1, 42, "trace-1");
       await createTrace(1, 42, "trace-2");
 
-      const result = await traceService.listProjectTraces(1, 42, 1, 1);
+      const result = await traceService.listProjectTraces({
+        tenantId: 1,
+        projectId: 42,
+        page: 1,
+        pageSize: 1,
+      });
 
       expect(result.traces).toHaveLength(1);
       expect(result.pageSize).toBe(1);

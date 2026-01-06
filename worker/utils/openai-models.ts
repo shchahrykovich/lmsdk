@@ -97,7 +97,7 @@ void _typeCheck; // Suppress unused variable warning
 /**
  * Get all OpenAI models as an array
  */
-export function getOpenAIModels() {
+export function getOpenAIModels(): { id: ResponsesModel; name: string }[] {
   return OPENAI_MODELS.map((id) => ({
     id,
     name: formatModelName(id),
@@ -152,7 +152,7 @@ function formatModelName(modelId: string): string {
  * Get popular/recommended OpenAI models
  * Useful for showing a curated list in UI
  */
-export function getPopularOpenAIModels() {
+export function getPopularOpenAIModels(): { id: ResponsesModel; name: string }[] {
   const popular = [
     "gpt-5.2",
     "gpt-5.2-pro",

@@ -2,6 +2,8 @@ import { DrizzleD1Database } from "drizzle-orm/d1";
 import { eq, and, sql } from "drizzle-orm";
 import { traces, promptExecutionLogs } from "../db/schema";
 
+type UsageStats = Record<string, number>;
+
 /**
  * Service for extracting and aggregating trace statistics
  * Handles distributed processing with optimistic locking
@@ -41,20 +43,21 @@ export class TraceExtractionService {
         await this.processTrace(tenantId, projectId, traceId);
         return; // Success, exit
       } catch (error) {
-        if (error instanceof OptimisticLockError) {
-          retryCount++;
-          console.log(`Optimistic lock conflict for trace ${traceId}, retry ${retryCount}/${maxRetries}`);
-
-          if (retryCount >= maxRetries) {
-            console.error(`Failed to process trace ${traceId} after ${maxRetries} retries`);
-            throw error;
-          }
-
-          // Brief delay before retry
-          await new Promise(resolve => setTimeout(resolve, 100 * retryCount));
-        } else {
+        if (!(error instanceof OptimisticLockError)) {
           throw error;
         }
+
+        retryCount++;
+        console.log(`Optimistic lock conflict for trace ${traceId}, retry ${retryCount}/${maxRetries}`);
+
+        if (retryCount < maxRetries) {
+          // Brief delay before retry
+          await new Promise(resolve => setTimeout(resolve, 100 * retryCount));
+          continue;
+        }
+
+        console.error(`Failed to process trace ${traceId} after ${maxRetries} retries`);
+        throw error;
       }
     }
   }
@@ -80,13 +83,13 @@ export class TraceExtractionService {
     const stats = this.calculateTraceStats(logs);
 
     // Step 4: Store detailed trace data to R2
-    const tracePath = await this.storeTraceDataToR2(
+    const tracePath = await this.storeTraceDataToR2({
       tenantId,
       projectId,
       traceId,
       logs,
-      stats
-    );
+      stats,
+    });
 
     // Step 5: Update or insert trace record with optimistic locking
     const now = Math.floor(Date.now() / 1000);
@@ -252,7 +255,7 @@ export class TraceExtractionService {
       return false;
     }
 
-    const message = (error as { message?: string }).message || "";
+    const message = (error as { message?: string }).message ?? "";
     if (message.includes("UNIQUE constraint failed") || message.includes("SQLITE_CONSTRAINT")) {
       return true;
     }
@@ -277,7 +280,7 @@ export class TraceExtractionService {
     let lastLogAt: number | undefined;
 
     // Aggregate usage by provider and model
-    const providerStats = new Map<string, Map<string, { count: number; usage: any }>>();
+    const providerStats = new Map<string, Map<string, { count: number; usage: UsageStats }>>();
 
     for (const log of logs) {
       if (log.isSuccess) {
@@ -290,38 +293,12 @@ export class TraceExtractionService {
         totalDurationMs += log.durationMs;
       }
 
-      // Aggregate usage statistics
-      if (log.provider && log.model && log.usage) {
-        try {
-          const usage = JSON.parse(log.usage);
+      this.aggregateUsageStats(log, providerStats);
 
-          if (!providerStats.has(log.provider)) {
-            providerStats.set(log.provider, new Map());
-          }
-
-          const modelStats = providerStats.get(log.provider)!;
-
-          if (!modelStats.has(log.model)) {
-            modelStats.set(log.model, { count: 0, usage: this.initializeUsage(log.provider) });
-          }
-
-          const stats = modelStats.get(log.model)!;
-          stats.count++;
-          this.aggregateUsage(stats.usage, usage, log.provider);
-        } catch (error) {
-          console.error(`Failed to parse usage for log ${log.id}:`, error);
-        }
-      }
-
-      // Drizzle with mode: "timestamp" returns Date objects
-      const logTimestamp = log.createdAt instanceof Date
-        ? Math.floor(log.createdAt.getTime() / 1000)
-        : (log.createdAt as number);
-
+      const logTimestamp = this.getLogTimestamp(log.createdAt);
       if (!firstLogAt || logTimestamp < firstLogAt) {
         firstLogAt = logTimestamp;
       }
-
       if (!lastLogAt || logTimestamp > lastLogAt) {
         lastLogAt = logTimestamp;
       }
@@ -341,10 +318,45 @@ export class TraceExtractionService {
     };
   }
 
+  private getLogTimestamp(createdAt: Date | number) {
+    return createdAt instanceof Date
+      ? Math.floor(createdAt.getTime() / 1000)
+      : (createdAt as number);
+  }
+
+  private aggregateUsageStats(
+    log: typeof promptExecutionLogs.$inferSelect,
+    providerStats: Map<string, Map<string, { count: number; usage: UsageStats }>>,
+  ) {
+    if (!log.provider || !log.model || !log.usage) {
+      return;
+    }
+
+    try {
+      const usage = JSON.parse(log.usage) as unknown;
+
+      if (!providerStats.has(log.provider)) {
+        providerStats.set(log.provider, new Map());
+      }
+
+      const modelStats = providerStats.get(log.provider)!;
+
+      if (!modelStats.has(log.model)) {
+        modelStats.set(log.model, { count: 0, usage: this.initializeUsage(log.provider) });
+      }
+
+      const stats = modelStats.get(log.model)!;
+      stats.count++;
+      this.aggregateUsage(stats.usage, usage, log.provider);
+    } catch (error) {
+      console.error(`Failed to parse usage for log ${log.id}:`, error);
+    }
+  }
+
   /**
    * Initialize usage object based on provider
    */
-  private initializeUsage(provider: string): any {
+  private initializeUsage(provider: string): UsageStats {
     if (provider === 'openai') {
       return {
         input_tokens: 0,
@@ -369,27 +381,50 @@ export class TraceExtractionService {
   /**
    * Aggregate usage from a single log into the accumulated stats
    */
-  private aggregateUsage(accumulated: any, usage: any, provider: string): void {
-    if (provider === 'openai') {
-      accumulated.input_tokens += usage.input_tokens || 0;
-      accumulated.cached_tokens += usage.input_tokens_details?.cached_tokens || 0;
-      accumulated.output_tokens += usage.output_tokens || 0;
-      accumulated.reasoning_tokens += usage.output_tokens_details?.reasoning_tokens || 0;
-      accumulated.total_tokens += usage.total_tokens || 0;
-    } else if (provider === 'google') {
-      accumulated.prompt_tokens += usage.prompt_tokens || 0;
-      accumulated.cached_tokens += usage.cached_tokens || 0;
-      accumulated.response_tokens += usage.response_tokens || 0;
-      accumulated.thoughts_tokens += usage.thoughts_tokens || 0;
-      accumulated.tool_use_prompt_tokens += usage.tool_use_prompt_tokens || 0;
-      accumulated.total_tokens += usage.total_tokens || 0;
+  private aggregateUsage(accumulated: UsageStats, usage: unknown, provider: string): void {
+    if (!this.isRecord(usage)) {
+      return;
     }
+    if (provider === "openai") {
+      this.aggregateOpenAiUsage(accumulated, usage);
+      return;
+    }
+    if (provider === "google") {
+      this.aggregateGoogleUsage(accumulated, usage);
+    }
+  }
+
+  private aggregateOpenAiUsage(accumulated: UsageStats, usage: Record<string, unknown>): void {
+    accumulated.input_tokens += this.numberOrZero(usage.input_tokens);
+    const inputDetails = this.isRecord(usage.input_tokens_details)
+      ? usage.input_tokens_details
+      : undefined;
+    const outputDetails = this.isRecord(usage.output_tokens_details)
+      ? usage.output_tokens_details
+      : undefined;
+    accumulated.cached_tokens += this.numberOrZero(inputDetails?.cached_tokens);
+    accumulated.output_tokens += this.numberOrZero(usage.output_tokens);
+    accumulated.reasoning_tokens += this.numberOrZero(outputDetails?.reasoning_tokens);
+    accumulated.total_tokens += this.numberOrZero(usage.total_tokens);
+  }
+
+  private aggregateGoogleUsage(accumulated: UsageStats, usage: Record<string, unknown>): void {
+    accumulated.prompt_tokens += this.numberOrZero(usage.prompt_tokens);
+    accumulated.cached_tokens += this.numberOrZero(usage.cached_tokens);
+    accumulated.response_tokens += this.numberOrZero(usage.response_tokens);
+    accumulated.thoughts_tokens += this.numberOrZero(usage.thoughts_tokens);
+    accumulated.tool_use_prompt_tokens += this.numberOrZero(usage.tool_use_prompt_tokens);
+    accumulated.total_tokens += this.numberOrZero(usage.total_tokens);
+  }
+
+  private numberOrZero(value?: unknown): number {
+    return typeof value === "number" ? value : 0;
   }
 
   /**
    * Build stats JSON from aggregated provider statistics
    */
-  private buildStatsJson(providerStats: Map<string, Map<string, { count: number; usage: any }>>): string | null {
+  private buildStatsJson(providerStats: Map<string, Map<string, { count: number; usage: UsageStats }>>): string | null {
     if (providerStats.size === 0) {
       return null;
     }
@@ -413,17 +448,22 @@ export class TraceExtractionService {
     return JSON.stringify({ providers });
   }
 
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null;
+  }
+
   /**
    * Store detailed trace data to R2
    * Returns the R2 path where the data was stored
    */
-  private async storeTraceDataToR2(
-    tenantId: number,
-    projectId: number,
-    traceId: string,
-    logs: typeof promptExecutionLogs.$inferSelect[],
-    stats: ReturnType<typeof this.calculateTraceStats>
-  ): Promise<string> {
+  private async storeTraceDataToR2(params: {
+    tenantId: number;
+    projectId: number;
+    traceId: string;
+    logs: typeof promptExecutionLogs.$inferSelect[];
+    stats: unknown;
+  }): Promise<string> {
+    const { tenantId, projectId, traceId, logs, stats } = params;
     const now = new Date();
     const year = now.getUTCFullYear();
     const month = String(now.getUTCMonth() + 1).padStart(2, '0');

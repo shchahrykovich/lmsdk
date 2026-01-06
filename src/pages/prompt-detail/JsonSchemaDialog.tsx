@@ -1,3 +1,5 @@
+/* eslint-disable sonarjs/function-return-type */
+import type * as React from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -8,14 +10,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-interface JsonSchemaDialogProps {
+type JsonSchemaDialogProps = Readonly<{
   isSchemaDialogOpen: boolean;
   setIsSchemaDialogOpen: (value: boolean) => void;
   schemaEditValue: string;
   setSchemaEditValue: (value: string) => void;
   jsonSchema: string;
   setJsonSchema: (value: string) => void;
-}
+}>;
 
 export function JsonSchemaDialog({
   isSchemaDialogOpen,
@@ -24,7 +26,7 @@ export function JsonSchemaDialog({
   setSchemaEditValue,
   jsonSchema,
   setJsonSchema,
-}: JsonSchemaDialogProps) {
+}: JsonSchemaDialogProps): React.ReactNode {
   return (
     <Dialog open={isSchemaDialogOpen} onOpenChange={setIsSchemaDialogOpen}>
       <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
@@ -60,7 +62,7 @@ export function JsonSchemaDialog({
                 JSON.parse(schemaEditValue);
                 setJsonSchema(schemaEditValue);
                 setIsSchemaDialogOpen(false);
-              } catch (err) {
+              } catch {
                 alert("Invalid JSON format. Please check your schema.");
               }
             }}

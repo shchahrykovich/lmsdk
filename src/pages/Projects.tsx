@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+/* eslint-disable sonarjs/function-return-type */
+import {useState, useEffect} from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,7 +31,7 @@ interface Project {
   updatedAt: string;
 }
 
-export default function Projects() {
+export default function Projects(): React.ReactNode {
   const navigate = useNavigate();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,15 +47,16 @@ export default function Projects() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchProjects();
+    void fetchProjects();
   }, []);
 
   useEffect(() => {
     if (projectName) {
       const slug = projectName
         .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "");
+        .split(/[^a-z0-9]/)
+        .filter(Boolean)
+        .join("-");
       setProjectSlug(slug);
     } else {
       setProjectSlug("");
@@ -72,7 +74,7 @@ export default function Projects() {
       }
 
       const data = await response.json();
-      setProjects(data.projects || []);
+      setProjects(data.projects ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load projects");
       console.error("Error fetching projects:", err);
@@ -118,7 +120,7 @@ export default function Projects() {
 
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || `Failed to create project: ${response.statusText}`);
+        throw new Error(data.error ?? `Failed to create project: ${response.statusText}`);
       }
 
       setIsDialogOpen(false);
@@ -159,7 +161,7 @@ export default function Projects() {
 
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || `Failed to delete project: ${response.statusText}`);
+        throw new Error(data.error ?? `Failed to delete project: ${response.statusText}`);
       }
 
       setDeleteDialogOpen(false);
@@ -174,6 +176,128 @@ export default function Projects() {
     }
   };
 
+  let content: React.ReactNode;
+
+  if (loading) {
+    content = (
+      <div className="flex items-center justify-center py-16">
+        <div className="text-muted-foreground">Loading projects...</div>
+      </div>
+    );
+  } else if (error) {
+    content = (
+      <div className="flex flex-col items-center justify-center py-16">
+        <div className="text-red-500 mb-4">{error}</div>
+        <Button onClick={() => { void fetchProjects(); }}>Retry</Button>
+      </div>
+    );
+  } else if (projects.length === 0) {
+    content = (
+      <div className="flex flex-col items-center justify-center py-16">
+        <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
+          <Plus size={24} className="text-muted-foreground" />
+        </div>
+        <h3 className="text-lg font-medium text-foreground mb-2">No projects yet</h3>
+        <p className="text-sm text-muted-foreground mb-6 text-center max-w-sm">
+          Get started by creating your first project
+        </p>
+        <Button className="gap-2" onClick={openCreateDialog}>
+          <Plus size={18} strokeWidth={2} />
+          Create project
+        </Button>
+      </div>
+    );
+  } else {
+    content = (
+      <div className="border border-border rounded-lg overflow-hidden">
+        <table className="w-full">
+          <thead className="bg-muted/50">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Name
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Slug
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Status
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Created
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Updated
+              </th>
+              <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody className="bg-card divide-y divide-border">
+            {projects.map((project) => (
+              <tr
+                key={project.id}
+                className="hover:bg-muted/30 transition-colors cursor-pointer"
+                onClick={() => { void navigate(`/projects/${project.slug}`); }}
+              >
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="text-sm font-medium text-foreground">
+                    {project.name}
+                  </div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="text-sm text-muted-foreground">
+                    {project.slug}
+                  </div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <span
+                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      project.isActive
+                        ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                        : "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-400"
+                    }`}
+                  >
+                    {project.isActive ? "Active" : "Inactive"}
+                  </span>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
+                  {formatDate(project.createdAt)}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
+                  {formatDate(project.updatedAt)}
+                </td>
+                <td
+                  className="px-6 py-4 whitespace-nowrap text-right text-sm"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {project.isActive && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                          <MoreHorizontal size={18} />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          className="text-red-600 focus:text-red-600"
+                          onClick={() => openDeleteDialog(project)}
+                        >
+                          <Trash2 size={16} />
+                          Delete project
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
   return (
     <div className="h-full flex flex-col overflow-hidden">
       <PageHeader
@@ -186,117 +310,7 @@ export default function Projects() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-8 py-6">
-        {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <div className="text-muted-foreground">Loading projects...</div>
-          </div>
-        ) : error ? (
-          <div className="flex flex-col items-center justify-center py-16">
-            <div className="text-red-500 mb-4">{error}</div>
-            <Button onClick={fetchProjects}>Retry</Button>
-          </div>
-        ) : projects.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16">
-            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
-              <Plus size={24} className="text-muted-foreground" />
-            </div>
-            <h3 className="text-lg font-medium text-foreground mb-2">No projects yet</h3>
-            <p className="text-sm text-muted-foreground mb-6 text-center max-w-sm">
-              Get started by creating your first project
-            </p>
-            <Button className="gap-2" onClick={openCreateDialog}>
-              <Plus size={18} strokeWidth={2} />
-              Create project
-            </Button>
-          </div>
-        ) : (
-          <div className="border border-border rounded-lg overflow-hidden">
-            <table className="w-full">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Slug
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Created
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Updated
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-card divide-y divide-border">
-                {projects.map((project) => (
-                  <tr
-                    key={project.id}
-                    className="hover:bg-muted/30 transition-colors cursor-pointer"
-                    onClick={() => navigate(`/projects/${project.slug}`)}
-                  >
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-foreground">
-                        {project.name}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-muted-foreground">
-                        {project.slug}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          project.isActive
-                            ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                            : "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-400"
-                        }`}
-                      >
-                        {project.isActive ? "Active" : "Inactive"}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
-                      {formatDate(project.createdAt)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
-                      {formatDate(project.updatedAt)}
-                    </td>
-                    <td
-                      className="px-6 py-4 whitespace-nowrap text-right text-sm"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {project.isActive && (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <MoreHorizontal size={18} />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              className="text-red-600 focus:text-red-600"
-                              onClick={() => openDeleteDialog(project)}
-                            >
-                              <Trash2 size={16} />
-                              Delete project
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        {content}
       </div>
 
       {/* Create Project Dialog */}
@@ -325,7 +339,7 @@ export default function Projects() {
                 onChange={(e) => setProjectName(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !isCreating) {
-                    handleCreateProject();
+                    void handleCreateProject();
                   }
                 }}
               />
@@ -348,7 +362,7 @@ export default function Projects() {
               Cancel
             </Button>
             <Button
-              onClick={handleCreateProject}
+              onClick={() => { void handleCreateProject(); }}
               disabled={!projectName.trim() || !projectSlug.trim() || isCreating}
             >
               {isCreating ? "Creating..." : "Create project"}
@@ -383,7 +397,7 @@ export default function Projects() {
             </Button>
             <Button
               variant="destructive"
-              onClick={handleDeleteProject}
+              onClick={() => { void handleDeleteProject(); }}
               disabled={isDeleting}
             >
               {isDeleting ? "Deleting..." : "Delete"}

@@ -71,7 +71,7 @@ export interface IPromptExecutionLogger {
         projectId?: number;
         promptId?: number;
         version?: number;
-        variables: Record<string, any>;
+        variables: Record<string, unknown>;
     }): Promise<void>;
 
     /**
@@ -103,4 +103,3 @@ export interface IPromptExecutionLogger {
      */
     finish(): Promise<void>;
 }
-

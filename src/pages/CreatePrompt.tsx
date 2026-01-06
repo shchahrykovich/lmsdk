@@ -1,3 +1,5 @@
+/* eslint-disable sonarjs/function-return-type */
+import type * as React from "react";
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -11,7 +13,7 @@ interface Project {
   slug: string;
 }
 
-export default function CreatePrompt() {
+export default function CreatePrompt(): React.ReactNode {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const [project, setProject] = useState<Project | null>(null);
@@ -27,15 +29,16 @@ export default function CreatePrompt() {
   const [createError, setCreateError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchProject();
+    void fetchProject();
   }, [slug]);
 
   useEffect(() => {
     if (promptName) {
       const slug = promptName
         .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "");
+        .split(/[^a-z0-9]/)
+        .filter(Boolean)
+        .join("-");
       setPromptSlug(slug);
     } else {
       setPromptSlug("");
@@ -104,11 +107,11 @@ export default function CreatePrompt() {
 
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || `Failed to create prompt: ${response.statusText}`);
+        throw new Error(data.error ?? `Failed to create prompt: ${response.statusText}`);
       }
 
       // Navigate back to prompts list
-      navigate(`/projects/${slug}/prompts`);
+      void navigate(`/projects/${slug}/prompts`);
     } catch (err) {
       console.error("Error creating prompt:", err);
       setCreateError(err instanceof Error ? err.message : "Failed to create prompt");
@@ -128,8 +131,8 @@ export default function CreatePrompt() {
   if (error || !project) {
     return (
       <div className="h-full flex flex-col items-center justify-center">
-        <div className="text-red-500 mb-4">{error || "Project not found"}</div>
-        <Button onClick={() => navigate("/projects")}>Back to Projects</Button>
+        <div className="text-red-500 mb-4">{error ?? "Project not found"}</div>
+        <Button onClick={() => { void navigate("/projects"); }}>Back to Projects</Button>
       </div>
     );
   }
@@ -140,13 +143,12 @@ export default function CreatePrompt() {
         projectName={project.name}
         pageTitle="Create New Prompt"
         description="Add a new prompt to your project"
-        onBack={() => navigate(`/projects/${project.slug}/prompts`)}
       />
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-8 py-6">
         <div className="max-w-2xl">
-          <form onSubmit={handleCreatePrompt} className="space-y-6">
+          <form onSubmit={(event) => { void handleCreatePrompt(event); }} className="space-y-6">
             {createError && (
               <div className="rounded-md bg-red-50 dark:bg-red-900/10 p-3">
                 <p className="text-sm text-red-600 dark:text-red-400">
@@ -236,7 +238,7 @@ export default function CreatePrompt() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => navigate(`/projects/${project.slug}/prompts`)}
+                onClick={() => { void navigate(`/projects/${project.slug}/prompts`); }}
                 disabled={isCreating}
               >
                 Cancel

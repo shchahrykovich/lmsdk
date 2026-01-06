@@ -1,14 +1,42 @@
-import { useEffect, useState, useMemo } from "react";
+/* eslint-disable sonarjs/function-return-type */
+import type * as React from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import ProjectPageHeader from "@/components/ProjectPageHeader";
 import { DataTable } from "@/components/data-table/data-table";
 import { DataTableToolbar } from "@/components/data-table/data-table-toolbar";
 import { DataTableColumnHeader } from "@/components/data-table/data-table-column-header";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useDataTable } from "@/hooks/use-data-table";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Clock, AlertCircle, CheckCircle2, Timer } from "lucide-react";
+import {
+  applyDirectFilters,
+  applySortParams,
+  buildPromptFilter,
+  buildStatusFilter,
+  buildVariablesFilter,
+  formatLogDate,
+  type ActiveFilter,
+  type PromptOption,
+} from "@/pages/logs/logs-utils";
 
 interface Project {
   id: number;
@@ -39,13 +67,12 @@ interface LogsResponse {
   totalPages: number;
 }
 
-interface PromptOption {
-  promptId: number;
-  promptName: string;
-  version: number;
+interface DataSet {
+  id: number;
+  name: string;
 }
 
-export default function Logs() {
+export default function Logs(): React.ReactNode {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const location = useLocation();
@@ -53,18 +80,24 @@ export default function Logs() {
   const [logsData, setLogsData] = useState<LogsResponse | null>(null);
   const [promptOptions, setPromptOptions] = useState<PromptOption[]>([]);
   const [variablePathOptions, setVariablePathOptions] = useState<string[]>([]);
+  const [datasets, setDatasets] = useState<DataSet[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [selectedDatasetId, setSelectedDatasetId] = useState("");
+  const [isAdding, setIsAdding] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchProject();
+    void fetchProject();
   }, [slug]);
 
   // Fetch prompts and variables only once when project loads
   useEffect(() => {
     if (project) {
-      fetchPromptOptions();
-      fetchVariablePathOptions();
+      void fetchPromptOptions();
+      void fetchVariablePathOptions();
+      void fetchDatasets();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project]);
@@ -72,7 +105,7 @@ export default function Logs() {
   // Fetch logs when project or URL params change
   useEffect(() => {
     if (project) {
-      fetchLogs();
+      void fetchLogs();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project, location.search]);
@@ -133,6 +166,22 @@ export default function Logs() {
     }
   };
 
+  const fetchDatasets = async () => {
+    if (!project) return;
+
+    try {
+      const response = await fetch(`/api/projects/${project.id}/datasets`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch datasets: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      setDatasets(data.datasets ?? []);
+    } catch (err) {
+      console.error("Error fetching datasets:", err);
+    }
+  };
+
   const fetchLogs = async () => {
     if (!project) return;
 
@@ -143,101 +192,16 @@ export default function Logs() {
       // Build query string from URL params
       const params = new URLSearchParams(window.location.search);
 
-      // Map data table params to API params
-      const page = params.get("page") || "1";
-      const perPage = params.get("perPage") || "10";
-      const sort = params.get("sort");
-      const filters = params.get("filters");
-
-      // Check for direct filter params (alternative storage method)
-      const directStatus = params.get("status");
-      const directPrompt = params.get("prompt");
+      const page = params.get("page") ?? "1";
+      const perPage = params.get("perPage") ?? "10";
 
       const apiParams = new URLSearchParams({
         page,
         pageSize: perPage,
       });
 
-      // Handle direct URL param filters (takes precedence over JSON filters)
-      if (directStatus) {
-        console.log("Found direct status param:", directStatus);
-        apiParams.set("isSuccess", directStatus);
-      }
-
-      if (directPrompt) {
-        console.log("Found direct prompt param:", directPrompt);
-        const [promptId, version] = directPrompt.split("-");
-        if (promptId && version) {
-          apiParams.set("promptId", promptId);
-          apiParams.set("version", version);
-        }
-      }
-
-      // Parse and add sort parameters
-      if (sort) {
-        try {
-          const sortArray = JSON.parse(sort);
-          if (sortArray.length > 0) {
-            const firstSort = sortArray[0];
-            apiParams.set("sortField", firstSort.id);
-            apiParams.set("sortDirection", firstSort.desc ? "desc" : "asc");
-          }
-        } catch (e) {
-          console.error("Failed to parse sort:", e);
-        }
-      }
-
-      // Parse and add filter parameters
-      if (filters) {
-        try {
-          const filtersArray = JSON.parse(filters);
-          console.log("Filters array:", filtersArray); // Debug log
-          for (const filter of filtersArray) {
-            console.log("Processing filter:", filter); // Debug log
-            if (filter.id === "status") {
-              // Select filter - value is an array of selected values
-              console.log("Status filter value:", filter.value, "Type:", typeof filter.value, "IsArray:", Array.isArray(filter.value)); // Debug log
-              // For status, we need to check if the array contains "true" or "false"
-              if (Array.isArray(filter.value) && filter.value.length > 0) {
-                // Only set if exactly one value is selected
-                if (filter.value.length === 1) {
-                  apiParams.set("isSuccess", filter.value[0]);
-                }
-                // If both true and false are selected, don't filter (show all)
-              }
-            } else if (filter.id === "prompt") {
-              // Prompt filter - value is array of "promptId-version" strings
-              if (Array.isArray(filter.value) && filter.value.length > 0) {
-                // For now, only support single selection
-                if (filter.value.length === 1) {
-                  const [promptId, version] = filter.value[0].split("-");
-                  apiParams.set("promptId", promptId);
-                  apiParams.set("version", version);
-                }
-              }
-            } else if (filter.id === "variables") {
-              // Variables filter - object with path, value, and operator
-              if (filter.value && typeof filter.value === "object") {
-                const { path, value, operator } = filter.value;
-                if (path) {
-                  apiParams.set("variablePath", path);
-                }
-                // Always set value, even if empty (for "notEmpty" operator)
-                if (value !== undefined) {
-                  apiParams.set("variableValue", value);
-                }
-                if (operator) {
-                  apiParams.set("variableOperator", operator);
-                }
-              }
-            }
-          }
-        } catch (e) {
-          console.error("Failed to parse filters:", e);
-        }
-      }
-
-      console.log("Final API params:", apiParams.toString()); // Debug log
+      applyDirectFilters(params, apiParams);
+      applySortParams(params, apiParams);
 
       const logsResponse = await fetch(
         `/api/projects/${project.id}/logs?${apiParams.toString()}`
@@ -257,28 +221,49 @@ export default function Logs() {
     }
   };
 
-  const formatDate = (value: string | number) => {
-    const timestamp =
-      typeof value === "number" && value < 1_000_000_000_000 ? value * 1000 : value;
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return "Just now";
-    if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? "s" : ""} ago`;
-    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
-    if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`;
-
-    return date.toLocaleDateString();
-  };
-
   const columns = useMemo<ColumnDef<LogEntry>[]>(
     () => [
       {
-        id: "prompt",
+        id: "select",
+        header: ({ table }) => (
+          <div className="flex items-center justify-center">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-foreground"
+              checked={table.getIsAllPageRowsSelected()}
+              ref={(input) => {
+                if (input) {
+                  input.indeterminate =
+                    table.getIsSomePageRowsSelected() &&
+                    !table.getIsAllPageRowsSelected();
+                }
+              }}
+              onChange={(event) =>
+                table.toggleAllPageRowsSelected(event.target.checked)
+              }
+              onClick={(event) => event.stopPropagation()}
+              aria-label="Select all logs"
+            />
+          </div>
+        ),
+        cell: ({ row }) => (
+          <div className="flex items-center justify-center">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-foreground"
+              checked={row.getIsSelected()}
+              onChange={(event) => row.toggleSelected(event.target.checked)}
+              onClick={(event) => event.stopPropagation()}
+              aria-label="Select log"
+            />
+          </div>
+        ),
+        enableSorting: false,
+        enableHiding: false,
+        size: 40,
+      },
+      {
+        id: "promptName",
         accessorKey: "promptName",
         header: ({ column }) => (
           <DataTableColumnHeader column={column} label="Prompt" />
@@ -287,7 +272,7 @@ export default function Logs() {
           <div className="flex flex-col gap-1">
             <div>
               <span className="font-medium text-foreground">
-                {row.original.promptName || "Unknown prompt"}
+                {row.original.promptName ?? "Unknown prompt"}
               </span>
               {" "}
               <span className="text-xs text-muted-foreground">
@@ -323,7 +308,7 @@ export default function Logs() {
         },
       },
       {
-        id: "status",
+        id: "isSuccess",
         accessorKey: "isSuccess",
         header: ({ column }) => (
           <DataTableColumnHeader column={column} label="Status" />
@@ -399,7 +384,7 @@ export default function Logs() {
         enableColumnFilter: false,
       },
       {
-        id: "duration",
+        id: "durationMs",
         accessorKey: "durationMs",
         header: ({ column }) => (
           <DataTableColumnHeader column={column} label="Duration" />
@@ -424,7 +409,7 @@ export default function Logs() {
         cell: ({ row }) => (
           <div className="flex items-center gap-1.5 text-muted-foreground">
             <Clock className="h-3.5 w-3.5" />
-            {formatDate(row.original.createdAt)}
+            {formatLogDate(row.original.createdAt)}
           </div>
         ),
         enableColumnFilter: false,
@@ -435,9 +420,9 @@ export default function Logs() {
   );
 
   const { table } = useDataTable({
-    data: logsData?.logs || [],
+    data: logsData?.logs ?? [],
     columns,
-    pageCount: logsData?.totalPages || 0,
+    pageCount: logsData?.totalPages ?? 0,
     initialState: {
       sorting: [{ id: "createdAt", desc: true }],
       pagination: { pageIndex: 0, pageSize: 10 },
@@ -452,70 +437,77 @@ export default function Logs() {
 
   // Extract active filters for display
   const activeFilters = useMemo(() => {
-    const filters: {
-      id: string;
-      label: string;
-      value: string;
-      onRemove: () => void;
-    }[] = [];
-
     const columnFilters = table.getState().columnFilters;
 
-    columnFilters.forEach((filter) => {
+    return columnFilters.reduce<ActiveFilter[]>((filters, filter) => {
       const column = table.getColumn(filter.id);
-      const columnMeta = column?.columnDef.meta;
-      const label = columnMeta?.label || filter.id;
+      const label = column?.columnDef.meta?.label ?? filter.id;
+      const onRemove = () => column?.setFilterValue(undefined);
+      let nextFilter: ActiveFilter | null = null;
 
-      if (filter.id === "status") {
-        const value = Array.isArray(filter.value) ? filter.value : [filter.value];
-        if (value.length === 1) {
-          filters.push({
-            id: `${filter.id}`,
-            label,
-            value: value[0] === "true" ? "Success" : "Error",
-            onRemove: () => column?.setFilterValue(undefined),
-          });
-        }
-      } else if (filter.id === "prompt") {
-        const value = Array.isArray(filter.value) ? filter.value : [filter.value];
-        if (value.length > 0) {
-          const promptValue = value[0];
-          const [promptId, version] = promptValue.split("-");
-          const prompt = promptOptions.find(
-            (p) => p.promptId === parseInt(promptId) && p.version === parseInt(version)
-          );
-          if (prompt) {
-            filters.push({
-              id: `${filter.id}`,
-              label,
-              value: `${prompt.promptName} v${prompt.version}`,
-              onRemove: () => column?.setFilterValue(undefined),
-            });
-          }
-        }
+      if (filter.id === "isSuccess") {
+        nextFilter = buildStatusFilter(filter.value, label, onRemove);
+      } else if (filter.id === "promptName") {
+        nextFilter = buildPromptFilter(filter.value, label, onRemove, promptOptions);
       } else if (filter.id === "variables") {
-        const value = filter.value as { path?: string; value?: string; operator?: string };
-        if (value?.path) {
-          let displayValue: string;
-          if (value.operator === "notEmpty") {
-            displayValue = `${value.path} not empty`;
-          } else if (value.value) {
-            displayValue = `${value.path} contains "${value.value}"`;
-          } else {
-            displayValue = value.path;
-          }
-          filters.push({
-            id: `${filter.id}`,
-            label,
-            value: displayValue,
-            onRemove: () => column?.setFilterValue(undefined),
-          });
-        }
+        nextFilter = buildVariablesFilter(filter.value, label, onRemove);
       }
-    });
 
-    return filters;
+      if (nextFilter) {
+        filters.push(nextFilter);
+      }
+      return filters;
+    }, []);
   }, [table, promptOptions]);
+
+  const selectedRowCount = table.getFilteredSelectedRowModel().rows.length;
+
+  const openAddDialog = () => {
+    setAddError(null);
+    if (!selectedDatasetId && datasets.length > 0) {
+      setSelectedDatasetId(String(datasets[0].id));
+    }
+    setIsAddDialogOpen(true);
+  };
+
+  const handleAddToDataset = async () => {
+    if (!project || !selectedDatasetId) return;
+
+    const logIds = table.getSelectedRowModel().rows.map((row) => row.original.id);
+
+    try {
+      setIsAdding(true);
+      setAddError(null);
+
+      const response = await fetch(
+        `/api/projects/${project.id}/datasets/${selectedDatasetId}/logs`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ logIds }),
+        },
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.error ?? "Failed to add logs to dataset");
+      }
+
+      table.resetRowSelection();
+      setIsAddDialogOpen(false);
+      setSelectedDatasetId("");
+    } catch (err) {
+      setAddError(err instanceof Error ? err.message : "Failed to add logs to dataset");
+    } finally {
+      setIsAdding(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!selectedDatasetId && datasets.length > 0) {
+      setSelectedDatasetId(String(datasets[0].id));
+    }
+  }, [datasets, selectedDatasetId]);
 
 
   if (loading && !logsData) {
@@ -529,10 +521,18 @@ export default function Logs() {
   if (error || !project) {
     return (
       <div className="h-full flex flex-col items-center justify-center">
-        <div className="text-red-500 mb-4">{error || "Project not found"}</div>
-        <Button onClick={() => navigate("/projects")}>Back to Projects</Button>
+        <div className="text-red-500 mb-4">{error ?? "Project not found"}</div>
+        <Button onClick={() => { void navigate("/projects"); }}>Back to Projects</Button>
       </div>
     );
+  }
+
+  let pageDescription = "Review recent activity and request logs";
+
+  if (activeFilters.length > 0) {
+    pageDescription = `Review recent activity and request logs • ${activeFilters.length} active filter${
+      activeFilters.length > 1 ? "s" : ""
+    }`;
   }
 
   return (
@@ -540,12 +540,7 @@ export default function Logs() {
       <ProjectPageHeader
         projectName={project.name}
         pageTitle="Logs"
-        description={
-          activeFilters.length > 0
-            ? `Review recent activity and request logs • ${activeFilters.length} active filter${activeFilters.length > 1 ? "s" : ""}`
-            : "Review recent activity and request logs"
-        }
-        onBack={() => navigate(`/projects/${project.slug}`)}
+        description={pageDescription}
       />
 
       <div className="flex-1 overflow-y-auto px-8 py-6">
@@ -569,16 +564,84 @@ export default function Logs() {
                     window.open(url, '_blank');
                   } else {
                     // Normal navigation
-                    navigate(url);
+                    void navigate(url);
                   }
                 }}
               >
-                <DataTableToolbar table={table} />
+                <DataTableToolbar table={table}>
+                  {selectedRowCount > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">
+                        {selectedRowCount} selected
+                      </span>
+                      <Button size="sm" onClick={openAddDialog}>
+                        Add to dataset
+                      </Button>
+                    </div>
+                  )}
+                </DataTableToolbar>
               </DataTable>
             </>
           )}
         </div>
       </div>
+
+      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add logs to dataset</DialogTitle>
+            <DialogDescription>
+              Add {selectedRowCount} log{selectedRowCount === 1 ? "" : "s"} to a dataset.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="dataset-select">Dataset</Label>
+              <Select
+                value={selectedDatasetId}
+                onValueChange={setSelectedDatasetId}
+                disabled={datasets.length === 0}
+              >
+                <SelectTrigger id="dataset-select">
+                  <SelectValue
+                    placeholder={
+                      datasets.length === 0 ? "No datasets available" : "Select dataset"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {datasets.map((dataset) => (
+                    <SelectItem key={dataset.id} value={String(dataset.id)}>
+                      {dataset.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {addError && <div className="text-sm text-red-500">{addError}</div>}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsAddDialogOpen(false);
+                setAddError(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => { void handleAddToDataset(); }}
+              disabled={!selectedDatasetId || isAdding}
+            >
+              {isAdding ? "Adding..." : "Add logs"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

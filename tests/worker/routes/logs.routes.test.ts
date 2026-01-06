@@ -87,7 +87,14 @@ describe("Logs Routes", () => {
     expect(data.logs).toHaveLength(1);
     expect(data.logs[0].promptName).toBe("Prompt A");
     expect(data.logs[0].promptSlug).toBe("prompt-a");
-    expect(listProjectLogsMock).toHaveBeenCalledWith(1, projectId, 1, 10, undefined, undefined);
+    expect(listProjectLogsMock).toHaveBeenCalledWith({
+      tenantId: 1,
+      projectId: projectId,
+      page: 1,
+      pageSize: 10,
+      filters: undefined,
+      sort: undefined,
+    });
   });
 
   it("returns log details with stored files", async () => {
@@ -155,7 +162,14 @@ describe("Logs Routes", () => {
     const data = await response.json();
     expect(data.page).toBe(2);
     expect(data.pageSize).toBe(20);
-    expect(listProjectLogsMock).toHaveBeenCalledWith(1, projectId, 2, 20, undefined, undefined);
+    expect(listProjectLogsMock).toHaveBeenCalledWith({
+      tenantId: 1,
+      projectId: projectId,
+      page: 2,
+      pageSize: 20,
+      filters: undefined,
+      sort: undefined,
+    });
   });
 
   it("returns logs filtered by success status", async () => {
@@ -176,14 +190,14 @@ describe("Logs Routes", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(listProjectLogsMock).toHaveBeenCalledWith(
-      1,
-      projectId,
-      1,
-      10,
-      { isSuccess: true },
-      undefined
-    );
+    expect(listProjectLogsMock).toHaveBeenCalledWith({
+      tenantId: 1,
+      projectId: projectId,
+      page: 1,
+      pageSize: 10,
+      filters: { isSuccess: true },
+      sort: undefined,
+    });
   });
 
   it("returns logs filtered by promptId and version", async () => {
@@ -204,14 +218,14 @@ describe("Logs Routes", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(listProjectLogsMock).toHaveBeenCalledWith(
-      1,
-      projectId,
-      1,
-      10,
-      { promptId: 5, version: 3 },
-      undefined
-    );
+    expect(listProjectLogsMock).toHaveBeenCalledWith({
+      tenantId: 1,
+      projectId: projectId,
+      page: 1,
+      pageSize: 10,
+      filters: { promptId: 5, version: 3 },
+      sort: undefined,
+    });
   });
 
   it("returns logs with sorting parameters", async () => {
@@ -232,14 +246,14 @@ describe("Logs Routes", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(listProjectLogsMock).toHaveBeenCalledWith(
-      1,
-      projectId,
-      1,
-      10,
-      undefined,
-      { field: "durationMs", direction: "asc" }
-    );
+    expect(listProjectLogsMock).toHaveBeenCalledWith({
+      tenantId: 1,
+      projectId: projectId,
+      page: 1,
+      pageSize: 10,
+      filters: undefined,
+      sort: { field: "durationMs", direction: "asc" },
+    });
   });
 
   it("returns 400 for invalid project ID", async () => {
@@ -424,18 +438,18 @@ describe("Logs Routes", () => {
       );
 
       expect(response.status).toBe(200);
-      expect(listProjectLogsMock).toHaveBeenCalledWith(
-        1,
-        projectId,
-        1,
-        10,
-        {
+      expect(listProjectLogsMock).toHaveBeenCalledWith({
+      tenantId: 1,
+      projectId: projectId,
+      page: 1,
+      pageSize: 10,
+      filters: {
           variablePath: "user.name",
           variableValue: "Alice",
           variableOperator: "contains",
         },
-        undefined
-      );
+      sort: undefined,
+    });
     });
 
     it("returns logs filtered by variable path with notEmpty operator", async () => {
@@ -456,17 +470,17 @@ describe("Logs Routes", () => {
       );
 
       expect(response.status).toBe(200);
-      expect(listProjectLogsMock).toHaveBeenCalledWith(
-        1,
-        projectId,
-        1,
-        10,
-        {
+      expect(listProjectLogsMock).toHaveBeenCalledWith({
+      tenantId: 1,
+      projectId: projectId,
+      page: 1,
+      pageSize: 10,
+      filters: {
           variablePath: "user.name",
           variableOperator: "notEmpty",
         },
-        undefined
-      );
+      sort: undefined,
+    });
     });
 
     it("returns logs filtered by variable path only (without operator)", async () => {
@@ -487,14 +501,14 @@ describe("Logs Routes", () => {
       );
 
       expect(response.status).toBe(200);
-      expect(listProjectLogsMock).toHaveBeenCalledWith(
-        1,
-        projectId,
-        1,
-        10,
-        { variablePath: "user.email" },
-        undefined
-      );
+      expect(listProjectLogsMock).toHaveBeenCalledWith({
+      tenantId: 1,
+      projectId: projectId,
+      page: 1,
+      pageSize: 10,
+      filters: { variablePath: "user.email" },
+      sort: undefined,
+    });
     });
 
     it("returns logs with combined filters (status + variable)", async () => {
@@ -515,19 +529,19 @@ describe("Logs Routes", () => {
       );
 
       expect(response.status).toBe(200);
-      expect(listProjectLogsMock).toHaveBeenCalledWith(
-        1,
-        projectId,
-        1,
-        10,
-        {
+      expect(listProjectLogsMock).toHaveBeenCalledWith({
+      tenantId: 1,
+      projectId: projectId,
+      page: 1,
+      pageSize: 10,
+      filters: {
           isSuccess: true,
           variablePath: "user.name",
           variableValue: "Bob",
           variableOperator: "contains",
         },
-        undefined
-      );
+      sort: undefined,
+    });
     });
   });
 

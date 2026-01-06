@@ -5,7 +5,7 @@
 
 export interface PathValue {
   path: string;
-  value: any;
+  value: unknown;
 }
 
 export class ObjectToPathsService {
@@ -15,7 +15,7 @@ export class ObjectToPathsService {
    * @param prefix - Internal use for recursion (leave empty)
    * @returns Array of path-value pairs
    */
-  transform(obj: Record<string, any>, prefix: string = ""): PathValue[] {
+  transform(obj: Record<string, unknown>, prefix: string = ""): PathValue[] {
     const results: PathValue[] = [];
 
     for (const [key, value] of Object.entries(obj)) {
@@ -30,7 +30,7 @@ export class ObjectToPathsService {
       } else if (typeof value === "object") {
         // Recursively process non-empty objects, skip empty ones
         if (Object.keys(value).length > 0) {
-          results.push(...this.transform(value, currentPath));
+          results.push(...this.transform(value as Record<string, unknown>, currentPath));
         }
         // Empty objects are skipped entirely
       } else {
@@ -62,7 +62,18 @@ export class ObjectToPathsService {
       return `${String(value)}`;
     }
 
-    // For complex values (arrays stored as JSON)
-    return `${value}`;
+    if (typeof value === "object") {
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return "";
+      }
+    }
+
+    if (typeof value === "bigint" || typeof value === "symbol") {
+      return String(value);
+    }
+
+    return "";
   }
 }

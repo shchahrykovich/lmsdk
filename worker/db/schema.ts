@@ -208,6 +208,101 @@ export const promptExecutionLogs = sqliteTable("PromptExecutionLogs", {
   traceIdIdx: index("PromptExecutionLogs_traceId_idx").on(table.tenantId, table.projectId, table.traceId),
 }));
 
+// DataSets table
+export const dataSets = sqliteTable("DataSets", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  tenantId: integer("tenantId").notNull(),
+  projectId: integer("projectId").notNull(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull(),
+  isDeleted: integer("isDeleted", { mode: "boolean" }).notNull().default(false),
+  countOfRecords: integer("countOfRecords").notNull().default(0),
+  schema: text("schema").notNull().default("{}"),
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+}, (table) => ({
+  tenantIdProjectIdNameUnique: uniqueIndex("DataSets_tenantId_projectId_name_key").on(table.tenantId, table.projectId, table.name),
+  tenantIdProjectIdSlugUnique: uniqueIndex("DataSets_tenantId_projectId_slug_key").on(table.tenantId, table.projectId, table.slug),
+  tenantIdIdx: index("DataSets_tenantId_idx").on(table.tenantId),
+  projectIdTenantIdIdx: index("DataSets_projectId_tenantId_idx").on(table.projectId, table.tenantId),
+}));
+
+// DataSetRecords table
+export const dataSetRecords = sqliteTable("DataSetRecords", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  tenantId: integer("tenantId").notNull(),
+  projectId: integer("projectId").notNull(),
+  dataSetId: integer("dataSetId").notNull(),
+  variables: text("variables").notNull().default("{}"),
+  isDeleted: integer("isDeleted", { mode: "boolean" }).notNull().default(false),
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+}, (table) => ({
+  dataSetIdIdx: index("DataSetRecords_dataSetId_idx").on(table.dataSetId),
+  tenantIdIdx: index("DataSetRecords_tenantId_idx").on(table.tenantId),
+  projectIdTenantIdIdx: index("DataSetRecords_projectId_tenantId_idx").on(table.projectId, table.tenantId),
+}));
+
+// Evaluations table
+export const evaluations = sqliteTable("Evaluations", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  tenantId: integer("tenantId").notNull(),
+  projectId: integer("projectId").notNull(),
+  datasetId: integer("datasetId"),
+  name: text("name").notNull(),
+  slug: text("slug").notNull(),
+  type: text("type").notNull(),
+  state: text("state").notNull(),
+  workflowId: text("workflowId"),
+  durationMs: integer("durationMs"),
+  inputSchema: text("inputSchema").notNull().default("{}"),
+  outputSchema: text("outputSchema").notNull().default("{}"),
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+}, (table) => ({
+  tenantIdProjectIdNameUnique: uniqueIndex("Evaluations_tenantId_projectId_name_key").on(table.tenantId, table.projectId, table.name),
+  tenantIdProjectIdSlugUnique: uniqueIndex("Evaluations_tenantId_projectId_slug_key").on(table.tenantId, table.projectId, table.slug),
+  tenantIdIdx: index("Evaluations_tenantId_idx").on(table.tenantId),
+  projectIdTenantIdIdx: index("Evaluations_projectId_tenantId_idx").on(table.projectId, table.tenantId),
+  datasetIdIdx: index("Evaluations_datasetId_idx").on(table.datasetId),
+}));
+
+// EvaluationPrompts table
+export const evaluationPrompts = sqliteTable("EvaluationPrompts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  tenantId: integer("tenantId").notNull(),
+  projectId: integer("projectId").notNull(),
+  evaluationId: integer("evaluationId").notNull(),
+  promptId: integer("promptId").notNull(),
+  versionId: integer("versionId").notNull(),
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+}, (table) => ({
+  evaluationIdIdx: index("EvaluationPrompts_evaluationId_idx").on(table.evaluationId),
+  tenantIdIdx: index("EvaluationPrompts_tenantId_idx").on(table.tenantId),
+  projectIdTenantIdIdx: index("EvaluationPrompts_projectId_tenantId_idx").on(table.projectId, table.tenantId),
+}));
+
+// EvaluationResults table
+export const evaluationResults = sqliteTable("EvaluationResults", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  tenantId: integer("tenantId").notNull(),
+  projectId: integer("projectId").notNull(),
+  evaluationId: integer("evaluationId").notNull(),
+  dataSetRecordId: integer("dataSetRecordId").notNull(),
+  promptId: integer("promptId").notNull(),
+  versionId: integer("versionId").notNull(),
+  result: text("result").notNull().default("{}"),
+  durationMs: integer("durationMs"),
+  stats: text("stats").notNull().default("{}"),
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+}, (table) => ({
+  evaluationIdIdx: index("EvaluationResults_evaluationId_idx").on(table.evaluationId),
+  dataSetRecordIdIdx: index("EvaluationResults_dataSetRecordId_idx").on(table.dataSetRecordId),
+  tenantIdIdx: index("EvaluationResults_tenantId_idx").on(table.tenantId),
+  projectIdTenantIdIdx: index("EvaluationResults_projectId_tenantId_idx").on(table.projectId, table.tenantId),
+}));
+
 
 // Type exports for use in application code
 export type Tenant = typeof tenants.$inferSelect;
@@ -234,3 +329,13 @@ export type PromptExecutionLog = typeof promptExecutionLogs.$inferSelect;
 export type NewPromptExecutionLog = typeof promptExecutionLogs.$inferInsert;
 export type Trace = typeof traces.$inferSelect;
 export type NewTrace = typeof traces.$inferInsert;
+export type DataSet = typeof dataSets.$inferSelect;
+export type NewDataSet = typeof dataSets.$inferInsert;
+export type DataSetRecord = typeof dataSetRecords.$inferSelect;
+export type NewDataSetRecord = typeof dataSetRecords.$inferInsert;
+export type Evaluation = typeof evaluations.$inferSelect;
+export type NewEvaluation = typeof evaluations.$inferInsert;
+export type EvaluationPrompt = typeof evaluationPrompts.$inferSelect;
+export type NewEvaluationPrompt = typeof evaluationPrompts.$inferInsert;
+export type EvaluationResult = typeof evaluationResults.$inferSelect;
+export type NewEvaluationResult = typeof evaluationResults.$inferInsert;

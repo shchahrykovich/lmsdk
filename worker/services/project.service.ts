@@ -57,7 +57,7 @@ export class ProjectService {
     return project;
   }
 
-  async deactivateProject(tenantId: number, id: number) {
+  async deactivateProject(tenantId: number, id: number): Promise<unknown> {
     return await this.db
       .update(projects)
       .set({ isActive: false })

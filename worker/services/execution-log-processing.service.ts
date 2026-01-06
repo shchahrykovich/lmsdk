@@ -68,7 +68,7 @@ export class ExecutionLogProcessingService {
     }
 
     const variablesText = await variablesObject.text();
-    let variables: Record<string, any>;
+    let variables: Record<string, unknown>;
 
     try {
       variables = JSON.parse(variablesText);
@@ -119,101 +119,120 @@ export class ExecutionLogProcessingService {
     const outputPath = `${log.logPath}/output.json`;
     const inputPath = `${log.logPath}/input.json`;
 
-    // Load output.json (provider raw response)
-    const outputObject = await this.r2.get(outputPath);
-    if (!outputObject) {
-      console.warn(`No output.json found at ${outputPath}, skipping usage extraction`);
+    const outputText = await this.readR2Text(outputPath, "output.json");
+    if (!outputText) {
       return;
     }
 
-    // Load input.json to determine provider
-    const inputObject = await this.r2.get(inputPath);
-    if (!inputObject) {
-      // Consume the output object body to properly dispose of resources
-      await outputObject.text();
-      console.warn(`No input.json found at ${inputPath}, skipping usage extraction`);
+    const inputText = await this.readR2Text(inputPath, "input.json");
+    if (!inputText) {
       return;
     }
 
-    let outputText: string;
-    let inputText: string;
+    const output = this.parseJson(outputText, "output.json");
+    const input = this.parseJson(inputText, "input.json");
+
+    if (!output || !input) {
+      return;
+    }
+
+    const provider = this.determineProvider(input);
+    if (!provider) {
+      console.warn(`Could not determine provider for log ${log.id}`);
+      return;
+    }
+
+    const usageResult =
+      provider === "openai"
+        ? this.extractOpenAiUsage(output)
+        : this.extractGoogleUsage(output);
+
+    if (!usageResult) {
+      console.warn(`Missing model or usage in output.json for log ${log.id}`);
+      return;
+    }
+
+    await this.db
+      .update(promptExecutionLogs)
+      .set({
+        provider,
+        model: usageResult.model,
+        usage: JSON.stringify(usageResult.usage),
+      })
+      .where(eq(promptExecutionLogs.id, log.id));
+
+    console.log(`Updated usage statistics for log ${log.id}: ${provider}/${usageResult.model}`);
+  }
+
+  private async readR2Text(path: string, label: string): Promise<string | null> {
+    const object = await this.r2.get(path);
+    if (!object) {
+      console.warn(`No ${label} found at ${path}, skipping usage extraction`);
+      return null;
+    }
 
     try {
-      // Consume both R2 objects first to ensure proper resource disposal
-      outputText = await outputObject.text();
-      inputText = await inputObject.text();
+      return await object.text();
     } catch (error) {
-      console.error(`Failed to read JSON files:`, error);
-      return;
+      console.error(`Failed to read ${label}:`, error);
+      return null;
     }
+  }
 
+  private parseJson(text: string, label: string): unknown | null {
     try {
-      const output = JSON.parse(outputText);
-      const input = JSON.parse(inputText);
-
-      // Determine provider from input structure
-      const provider = this.determineProvider(input);
-
-      if (!provider) {
-        console.warn(`Could not determine provider for log ${log.id}`);
-        return;
-      }
-
-      let model: string | null = null;
-      let usage: any = null;
-
-      // Extract model and usage based on provider
-      if (provider === 'openai') {
-        // OpenAI output is a single response object
-        model = output.model;
-        usage = {
-          input_tokens: output.usage?.input_tokens || 0,
-          cached_tokens: output.usage?.input_tokens_details?.cached_tokens || 0,
-          output_tokens: output.usage?.output_tokens || 0,
-          reasoning_tokens: output.usage?.output_tokens_details?.reasoning_tokens || 0,
-          total_tokens: output.usage?.total_tokens || 0,
-        };
-      } else if (provider === 'google') {
-        // Google output is an array of chunks, find last chunk with usage
-        if (Array.isArray(output)) {
-          for (const chunk of output) {
-            if (chunk.modelVersion) {
-              model = chunk.modelVersion;
-            }
-            if (chunk.usageMetadata) {
-              usage = {
-                prompt_tokens: chunk.usageMetadata.promptTokenCount || 0,
-                cached_tokens: chunk.usageMetadata.cachedContentTokenCount || 0,
-                response_tokens: chunk.usageMetadata.candidatesTokenCount || 0,
-                thoughts_tokens: chunk.usageMetadata.thoughtsTokenCount || 0,
-                tool_use_prompt_tokens: chunk.usageMetadata.toolUsePromptTokenCount || 0,
-                total_tokens: chunk.usageMetadata.totalTokenCount || 0,
-              };
-            }
-          }
-        }
-      }
-
-      if (!model || !usage) {
-        console.warn(`Missing model or usage in output.json for log ${log.id}`);
-        return;
-      }
-
-      // Update the log record with usage statistics
-      await this.db
-        .update(promptExecutionLogs)
-        .set({
-          provider,
-          model,
-          usage: JSON.stringify(usage),
-        })
-        .where(eq(promptExecutionLogs.id, log.id));
-
-      console.log(`Updated usage statistics for log ${log.id}: ${provider}/${model}`);
+      return JSON.parse(text);
     } catch (error) {
-      console.error(`Failed to parse or process usage data:`, error);
-      // Note: outputObject and inputObject are already consumed in the outer try block
+      console.error(`Failed to parse ${label}:`, error);
+      return null;
     }
+  }
+
+  private extractOpenAiUsage(output: unknown) {
+    if (!this.isRecord(output) || !this.isRecord(output.usage)) {
+      return null;
+    }
+
+    const model = output.model;
+    if (typeof model !== "string") {
+      return null;
+    }
+
+    const usage = output.usage;
+    const inputDetails = this.isRecord(usage.input_tokens_details)
+      ? usage.input_tokens_details
+      : undefined;
+    const outputDetails = this.isRecord(usage.output_tokens_details)
+      ? usage.output_tokens_details
+      : undefined;
+
+    return {
+      model,
+      usage: {
+        input_tokens: this.numberOrZero(usage.input_tokens),
+        cached_tokens: this.numberOrZero(inputDetails?.cached_tokens),
+        output_tokens: this.numberOrZero(usage.output_tokens),
+        reasoning_tokens: this.numberOrZero(outputDetails?.reasoning_tokens),
+        total_tokens: this.numberOrZero(usage.total_tokens),
+      },
+    };
+  }
+
+  private extractGoogleUsage(output: unknown) {
+    if (!Array.isArray(output)) {
+      return null;
+    }
+
+    const usageResult = output.reduce(
+      (acc, chunk) => this.updateGoogleUsage(acc, chunk),
+      { model: null, usage: null as Record<string, number> | null }
+    );
+
+    if (!usageResult.model || !usageResult.usage) {
+      return null;
+    }
+
+    return { model: usageResult.model, usage: usageResult.usage };
   }
 
   /**
@@ -221,13 +240,53 @@ export class ExecutionLogProcessingService {
    * OpenAI has 'input', 'text', 'reasoning' fields
    * Google has 'config', 'contents' fields
    */
-  private determineProvider(input: any): string | null {
-    if (input.input && input.text && input.reasoning) {
+  private determineProvider(input: unknown): string | null {
+    if (!this.isRecord(input)) {
+      return null;
+    }
+    if ("input" in input && "text" in input && "reasoning" in input) {
       return 'openai';
     }
-    if (input.config && input.contents) {
+    if ("config" in input && "contents" in input) {
       return 'google';
     }
     return null;
+  }
+
+  private numberOrZero(value?: unknown): number {
+    return typeof value === "number" ? value : 0;
+  }
+
+  private updateGoogleUsage(
+    acc: { model: string | null; usage: Record<string, number> | null },
+    chunk: unknown
+  ): { model: string | null; usage: Record<string, number> | null } {
+    if (!this.isRecord(chunk)) {
+      return acc;
+    }
+
+    const model = typeof chunk.modelVersion === "string" ? chunk.modelVersion : acc.model;
+    const usageMetadata = this.isRecord(chunk.usageMetadata)
+      ? chunk.usageMetadata
+      : undefined;
+    if (!usageMetadata) {
+      return { model, usage: acc.usage };
+    }
+
+    return {
+      model,
+      usage: {
+        prompt_tokens: this.numberOrZero(usageMetadata.promptTokenCount),
+        cached_tokens: this.numberOrZero(usageMetadata.cachedContentTokenCount),
+        response_tokens: this.numberOrZero(usageMetadata.candidatesTokenCount),
+        thoughts_tokens: this.numberOrZero(usageMetadata.thoughtsTokenCount),
+        tool_use_prompt_tokens: this.numberOrZero(usageMetadata.toolUsePromptTokenCount),
+        total_tokens: this.numberOrZero(usageMetadata.totalTokenCount),
+      },
+    };
+  }
+
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null;
   }
 }

@@ -1,6 +1,11 @@
 # LM SDK
 
-Prompt lib, execution, proxy and helpers.
+Execute and manage AI prompts with version control and logging.
+- Prompt versioning
+- Prompt execution
+- Prompt logging
+- Multi-tenant architecture
+- Easy deployment to Cloudflare Workers
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/shchahrykovich/lmsdk)
 

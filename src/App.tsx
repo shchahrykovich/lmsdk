@@ -1,3 +1,5 @@
+/* eslint-disable sonarjs/function-return-type */
+import type * as React from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import AppLayout from './layouts/AppLayout'
 import Home from './pages/Home'
@@ -10,13 +12,18 @@ import Logs from './pages/Logs'
 import LogDetail from './pages/LogDetail'
 import Traces from './pages/Traces'
 import TraceDetail from './pages/TraceDetail'
+import Datasets from './pages/Datasets'
+import DatasetDetail from './pages/DatasetDetail'
+import Evaluations from './pages/Evaluations'
+import EvaluationWizard from './pages/EvaluationWizard'
+import EvaluationDetail from './pages/EvaluationDetail'
 import Users from './pages/Users'
 import SignIn from './pages/SignIn'
 import SignUp from './pages/SignUp'
 import { useSession } from './lib/auth-client'
 import './App.css'
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
+function ProtectedRoute({ children }: Readonly<{ children: React.ReactNode }>): React.ReactNode {
   const { data: session, isPending } = useSession()
 
   if (isPending) {
@@ -34,7 +41,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-function App() {
+function App(): React.ReactNode {
   return (
     <BrowserRouter>
       <Routes>
@@ -57,6 +64,11 @@ function App() {
           <Route path="/projects/:slug/logs/:logId" element={<LogDetail />} />
           <Route path="/projects/:slug/traces" element={<Traces />} />
           <Route path="/projects/:slug/traces/:traceId" element={<TraceDetail />} />
+          <Route path="/projects/:slug/datasets" element={<Datasets />} />
+          <Route path="/projects/:slug/datasets/:datasetSlug" element={<DatasetDetail />} />
+          <Route path="/projects/:slug/evaluations" element={<Evaluations />} />
+          <Route path="/projects/:slug/evaluations/new" element={<EvaluationWizard />} />
+          <Route path="/projects/:slug/evaluations/:evaluationId" element={<EvaluationDetail />} />
           <Route path="/api-keys" element={<ApiKeys />} />
           <Route path="/users" element={<Users />} />
         </Route>

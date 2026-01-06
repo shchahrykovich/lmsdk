@@ -1,30 +1,42 @@
+/* eslint-disable sonarjs/function-return-type */
+import type * as React from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import JsonView from "@uiw/react-json-view";
 
-interface PromptTestingPanelProps {
+type ResponseType = "text" | "json";
+type ReasoningEffort = "low" | "medium" | "high";
+type ReasoningSummary = "auto" | "enabled" | "disabled";
+type ThinkingLevel =
+  | "THINKING_LEVEL_UNSPECIFIED"
+  | "LOW"
+  | "MEDIUM"
+  | "HIGH"
+  | "MINIMAL";
+
+const getUsageNumber = (usage: Record<string, unknown>, key: string): number => {
+  const value = usage[key];
+  return typeof value === "number" ? value : 0;
+};
+
+type PromptTestingPanelProps = Readonly<{
   variables: Record<string, string>;
   setVariables: Dispatch<SetStateAction<Record<string, string>>>;
   provider: string;
   model: string;
   proxy: "none" | "cloudflare";
-  responseType: "text" | "json";
+  responseType: ResponseType;
   jsonSchema: string;
   systemMessage: string;
   userMessage: string;
-  reasoningEffort: "low" | "medium" | "high";
-  reasoningSummary: "auto" | "enabled" | "disabled";
+  reasoningEffort: ReasoningEffort;
+  reasoningSummary: ReasoningSummary;
   storeEnabled: boolean;
   includeEncryptedReasoning: boolean;
   includeThoughts: boolean;
   thinkingBudget: number;
-  thinkingLevel:
-    | "THINKING_LEVEL_UNSPECIFIED"
-    | "LOW"
-    | "MEDIUM"
-    | "HIGH"
-    | "MINIMAL";
+  thinkingLevel: ThinkingLevel;
   googleSearchEnabled: boolean;
   cacheSystemMessage: boolean;
   projectId: number;
@@ -33,7 +45,7 @@ interface PromptTestingPanelProps {
   setTestOutput: (value: string) => void;
   isTesting: boolean;
   setIsTesting: (value: boolean) => void;
-}
+}>;
 
 export function PromptTestingPanel({
   variables,
@@ -60,36 +72,109 @@ export function PromptTestingPanel({
   setTestOutput,
   isTesting,
   setIsTesting,
-}: PromptTestingPanelProps) {
+}: PromptTestingPanelProps): React.ReactNode {
+  const buildMessages = () => {
+    const messages = [];
+    if (systemMessage.trim()) {
+      messages.push({ role: "system", content: systemMessage });
+    }
+    if (userMessage.trim()) {
+      messages.push({ role: "user", content: userMessage });
+    }
+    return messages;
+  };
+
+  const buildResponseFormat = () => {
+    if (responseType !== "json" || !jsonSchema.trim()) {
+      return { responseFormat: { type: "text" as const } };
+    }
+
+    try {
+      const parsedSchema = JSON.parse(jsonSchema);
+      return {
+        responseFormat: {
+          type: "json_schema" as const,
+          json_schema: parsedSchema,
+        },
+      };
+    } catch {
+      return { error: "Invalid JSON schema format" };
+    }
+  };
+
+  const formatUsage = (usage: Record<string, unknown> | null | undefined) => {
+    if (!usage) {
+      return "N/A";
+    }
+
+    const parts = [
+      `Prompt: ${getUsageNumber(usage, "prompt_tokens")}`,
+      `Completion: ${getUsageNumber(usage, "completion_tokens")}`,
+    ];
+
+    const thoughtsTokens = getUsageNumber(usage, "thoughts_tokens");
+    if (thoughtsTokens > 0) {
+      parts.push(`Thinking: ${thoughtsTokens}`);
+    }
+
+    const toolUseTokens = getUsageNumber(usage, "tool_use_prompt_tokens");
+    if (toolUseTokens > 0) {
+      parts.push(`Tool Use: ${toolUseTokens}`);
+    }
+
+    const cachedTokens = getUsageNumber(usage, "cached_content_tokens");
+    if (cachedTokens > 0) {
+      parts.push(`Cached: ${cachedTokens}`);
+    }
+
+    parts.push(`Total: ${getUsageNumber(usage, "total_tokens")}`);
+    return parts.join(" | ");
+  };
+
+  const getValidationError = () => {
+    if (!provider.trim() || !model.trim()) {
+      return "Provider and model must be selected";
+    }
+    if (!systemMessage.trim() && !userMessage.trim()) {
+      return "At least one message is required";
+    }
+    return null;
+  };
+
+  const applyProviderSettings = (requestBody: Record<string, unknown>) => {
+    if (provider === "openai") {
+      requestBody.openai_settings = {
+        reasoning_effort: reasoningEffort,
+        reasoning_summary: reasoningSummary,
+        store: storeEnabled,
+        include_encrypted_reasoning: includeEncryptedReasoning,
+      };
+    }
+
+    if (provider === "google") {
+      requestBody.google_settings = {
+        include_thoughts: includeThoughts,
+        thinking_budget: thinkingBudget,
+        thinking_level: thinkingLevel,
+        google_search_enabled: googleSearchEnabled,
+        cache_system_message: cacheSystemMessage,
+      };
+    }
+  };
+
   const handleRunTest = async () => {
     try {
       setIsTesting(true);
       setTestOutput("");
 
-      // Validate
-      if (!provider.trim() || !model.trim()) {
-        setTestOutput("Error: Provider and model must be selected");
+      const validationError = getValidationError();
+      if (validationError) {
+        setTestOutput(`Error: ${validationError}`);
         return;
       }
 
-      if (!systemMessage.trim() && !userMessage.trim()) {
-        setTestOutput("Error: At least one message is required");
-        return;
-      }
+      const messages = buildMessages();
 
-      // Build messages array (without variable substitution - backend handles it)
-      const messages = [
-        systemMessage.trim() && {
-          role: "system",
-          content: systemMessage,
-        },
-        userMessage.trim() && {
-          role: "user",
-          content: userMessage,
-        },
-      ].filter(Boolean);
-
-      // Build request body
       const requestBody: Record<string, unknown> = {
         provider,
         model,
@@ -100,42 +185,15 @@ export function PromptTestingPanel({
         promptSlug,
       };
 
-      // Add response format if JSON schema is selected
-      if (responseType === "json" && jsonSchema.trim()) {
-        try {
-          const parsedSchema = JSON.parse(jsonSchema);
-          requestBody.response_format = {
-            type: "json_schema",
-            json_schema: parsedSchema,
-          };
-        } catch (err) {
-          setTestOutput("Error: Invalid JSON schema format");
-          return;
-        }
+      const responseFormat = buildResponseFormat();
+      if ("error" in responseFormat) {
+        setTestOutput(`Error: ${responseFormat.error}`);
+        return;
       }
+      requestBody.response_format = responseFormat.responseFormat;
 
-      // Add OpenAI-specific settings (only for openai provider)
-      if (provider === "openai") {
-        requestBody.openai_settings = {
-          reasoning_effort: reasoningEffort,
-          reasoning_summary: reasoningSummary,
-          store: storeEnabled,
-          include_encrypted_reasoning: includeEncryptedReasoning,
-        };
-      }
+      applyProviderSettings(requestBody);
 
-      // Add Google-specific settings (only for google provider)
-      if (provider === "google") {
-        requestBody.google_settings = {
-          include_thoughts: includeThoughts,
-          thinking_budget: thinkingBudget,
-          thinking_level: thinkingLevel,
-          google_search_enabled: googleSearchEnabled,
-          cache_system_message: cacheSystemMessage,
-        };
-      }
-
-      // Call the execute endpoint
       const response = await fetch("/api/providers/execute", {
         method: "POST",
         headers: {
@@ -147,43 +205,16 @@ export function PromptTestingPanel({
       const data = await response.json();
 
       if (!response.ok) {
-        setTestOutput(`Error: ${data.error || "Failed to execute prompt"}`);
+        setTestOutput(`Error: ${data.error ?? "Failed to execute prompt"}`);
         return;
       }
 
-      // Display the result
       if (data.success && data.result) {
         const result = data.result;
-        const usage = result.usage;
-        let usageText = "N/A";
+        const usageText = formatUsage(result.usage);
         const durationMs =
           typeof result.duration_ms === "number" ? result.duration_ms : null;
         const durationText = durationMs !== null ? `${durationMs} ms` : "N/A";
-
-        if (usage) {
-          const parts = [
-            `Prompt: ${usage.prompt_tokens || 0}`,
-            `Completion: ${usage.completion_tokens || 0}`,
-          ];
-
-          // Add thinking tokens if present (for Google reasoning models)
-          if (usage.thoughts_tokens && usage.thoughts_tokens > 0) {
-            parts.push(`Thinking: ${usage.thoughts_tokens}`);
-          }
-
-          // Add tool use tokens if present (for Google tool use)
-          if (usage.tool_use_prompt_tokens && usage.tool_use_prompt_tokens > 0) {
-            parts.push(`Tool Use: ${usage.tool_use_prompt_tokens}`);
-          }
-
-          // Add cached tokens if present (for Google cached content)
-          if (usage.cached_content_tokens && usage.cached_content_tokens > 0) {
-            parts.push(`Cached: ${usage.cached_content_tokens}`);
-          }
-
-          parts.push(`Total: ${usage.total_tokens || 0}`);
-          usageText = parts.join(" | ");
-        }
 
         setTestOutput(
           `${result.content}\n\n---\nModel: ${result.model}\nTokens: ${usageText}\nExecution: ${durationText}`
@@ -233,7 +264,7 @@ export function PromptTestingPanel({
         )}
         {/* Run Test Button */}
         <div className="flex justify-end pt-2">
-          <Button onClick={handleRunTest} disabled={isTesting} size="sm">
+          <Button onClick={() => { void handleRunTest(); }} disabled={isTesting} size="sm">
             {isTesting ? "Running..." : "Run"}
           </Button>
         </div>

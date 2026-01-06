@@ -1,3 +1,5 @@
+/* eslint-disable sonarjs/function-return-type */
+import type * as React from "react";
 import { useEffect, useState, useMemo } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -23,12 +25,14 @@ interface TraceEntry {
   successCount: number;
   errorCount: number;
   totalDurationMs: number;
-  firstLogAt: number | string | null;
-  lastLogAt: number | string | null;
+  firstLogAt: TraceTimestamp;
+  lastLogAt: TraceTimestamp;
   tracePath: string | null;
-  createdAt: number | string;
-  updatedAt: number | string;
+  createdAt: TraceTimestamp;
+  updatedAt: TraceTimestamp;
 }
+
+type TraceTimestamp = number | string | null;
 
 interface TracesResponse {
   traces: TraceEntry[];
@@ -38,7 +42,7 @@ interface TracesResponse {
   totalPages: number;
 }
 
-export default function Traces() {
+export default function Traces(): React.ReactNode {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const location = useLocation();
@@ -48,13 +52,13 @@ export default function Traces() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchProject();
+    void fetchProject();
   }, [slug]);
 
   // Fetch traces when project or URL params change
   useEffect(() => {
     if (project) {
-      fetchTraces();
+      void fetchTraces();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project, location.search]);
@@ -83,6 +87,23 @@ export default function Traces() {
     }
   };
 
+  const getSortParams = (sortParam: string | null) => {
+    if (!sortParam) return null;
+    try {
+      const sortArray = JSON.parse(sortParam);
+      if (!Array.isArray(sortArray) || sortArray.length === 0) return null;
+      const firstSort = sortArray[0];
+      if (!firstSort?.id) return null;
+      return {
+        field: firstSort.id,
+        direction: firstSort.desc ? "desc" : "asc",
+      };
+    } catch (e) {
+      console.error("Failed to parse sort:", e);
+      return null;
+    }
+  };
+
   const fetchTraces = async () => {
     if (!project) return;
 
@@ -94,8 +115,8 @@ export default function Traces() {
       const params = new URLSearchParams(window.location.search);
 
       // Map data table params to API params
-      const page = params.get("page") || "1";
-      const perPage = params.get("perPage") || "10";
+      const page = params.get("page") ?? "1";
+      const perPage = params.get("perPage") ?? "10";
       const sort = params.get("sort");
 
       const apiParams = new URLSearchParams({
@@ -103,18 +124,10 @@ export default function Traces() {
         pageSize: perPage,
       });
 
-      // Parse and add sort parameters
-      if (sort) {
-        try {
-          const sortArray = JSON.parse(sort);
-          if (sortArray.length > 0) {
-            const firstSort = sortArray[0];
-            apiParams.set("sortField", firstSort.id);
-            apiParams.set("sortDirection", firstSort.desc ? "desc" : "asc");
-          }
-        } catch (e) {
-          console.error("Failed to parse sort:", e);
-        }
+      const sortParams = getSortParams(sort);
+      if (sortParams) {
+        apiParams.set("sortField", sortParams.field);
+        apiParams.set("sortDirection", sortParams.direction);
       }
 
       const tracesResponse = await fetch(
@@ -270,9 +283,9 @@ export default function Traces() {
   );
 
   const { table } = useDataTable({
-    data: tracesData?.traces || [],
+    data: tracesData?.traces ?? [],
     columns,
-    pageCount: tracesData?.totalPages || 0,
+    pageCount: tracesData?.totalPages ?? 0,
     initialState: {
       sorting: [{ id: "createdAt", desc: true }],
       pagination: { pageIndex: 0, pageSize: 10 },
@@ -293,8 +306,8 @@ export default function Traces() {
   if (error || !project) {
     return (
       <div className="h-full flex flex-col items-center justify-center">
-        <div className="text-red-500 mb-4">{error || "Project not found"}</div>
-        <Button onClick={() => navigate("/projects")}>Back to Projects</Button>
+        <div className="text-red-500 mb-4">{error ?? "Project not found"}</div>
+        <Button onClick={() => { void navigate("/projects"); }}>Back to Projects</Button>
       </div>
     );
   }
@@ -305,7 +318,6 @@ export default function Traces() {
         projectName={project.name}
         pageTitle="Traces"
         description="View trace aggregations and request flows"
-        onBack={() => navigate(`/projects/${project.slug}`)}
       />
 
       <div className="flex-1 overflow-y-auto px-8 py-6">
@@ -329,7 +341,7 @@ export default function Traces() {
                     window.open(url, '_blank');
                   } else {
                     // Normal navigation
-                    navigate(url);
+                    void navigate(url);
                   }
                 }}
               >

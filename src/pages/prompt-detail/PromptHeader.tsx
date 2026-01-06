@@ -1,4 +1,6 @@
-import { ArrowLeft, Check, ChevronDown } from "lucide-react";
+/* eslint-disable sonarjs/function-return-type */
+import type * as React from "react";
+import { Check, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -16,7 +18,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { Prompt, Project, PromptVersion, Provider } from "@/pages/prompt-detail.types";
 
-interface PromptHeaderProps {
+type PromptHeaderProps = Readonly<{
   prompt: Prompt;
   project: Project;
   selectedVersion: number | null;
@@ -33,8 +35,7 @@ interface PromptHeaderProps {
   providers: Provider[];
   isSaving: boolean;
   handleSave: () => void;
-  onBack: () => void;
-}
+}>;
 
 export function PromptHeader({
   prompt,
@@ -53,15 +54,11 @@ export function PromptHeader({
   providers,
   isSaving,
   handleSave,
-  onBack,
-}: PromptHeaderProps) {
+}: PromptHeaderProps): React.ReactNode {
   return (
     <div className="border-b border-border bg-card shrink-0">
       <div className="px-8 py-6">
         <div className="flex items-start gap-4">
-          <Button variant="ghost" size="icon" onClick={onBack} className="mt-1">
-            <ArrowLeft size={18} />
-          </Button>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 mb-1">
               <h1 className="text-2xl font-semibold text-foreground">
@@ -71,7 +68,7 @@ export function PromptHeader({
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/40 transition-colors">
-                      v{selectedVersion || prompt.latestVersion}
+                      v{selectedVersion ?? prompt.latestVersion}
                       {selectedVersion === routerVersion && (
                         <span className="text-[10px] ml-0.5 opacity-70">
                           • active
@@ -125,9 +122,8 @@ export function PromptHeader({
             </p>
           </div>
 
-          {/* Provider, Model, and Publish */}
           <div className="flex gap-3 shrink-0 items-end">
-            <div className="w-48">
+            <div className="w-34">
               <Label htmlFor="provider" className="text-xs font-medium mb-1 block">
                 Provider <span className="text-red-500">*</span>
               </Label>
@@ -160,7 +156,7 @@ export function PromptHeader({
                       <SelectItem key={modelItem.id} value={modelItem.id}>
                         {modelItem.name}
                       </SelectItem>
-                    )) || (
+                    )) ?? (
                     <SelectItem value="" disabled>
                       Select a provider first
                     </SelectItem>
@@ -169,7 +165,7 @@ export function PromptHeader({
               </Select>
             </div>
 
-            <div className="w-48">
+            <div className="w-34">
               <Label htmlFor="proxy" className="text-xs font-medium mb-1 block">
                 Proxy
               </Label>

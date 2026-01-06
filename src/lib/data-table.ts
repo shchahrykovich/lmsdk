@@ -18,26 +18,31 @@ export function getCommonPinningStyles<TData>({
     isPinned === "left" && column.getIsLastColumn("left");
   const isFirstRightPinnedColumn =
     isPinned === "right" && column.getIsFirstColumn("right");
+  let boxShadow: string | undefined;
+
+  if (withBorder) {
+    if (isLastLeftPinnedColumn) {
+      boxShadow = "-4px 0 4px -4px var(--border) inset";
+    } else if (isFirstRightPinnedColumn) {
+      boxShadow = "4px 0 4px -4px var(--border) inset";
+    }
+  }
 
   return {
-    boxShadow: withBorder
-      ? isLastLeftPinnedColumn
-        ? "-4px 0 4px -4px var(--border) inset"
-        : isFirstRightPinnedColumn
-          ? "4px 0 4px -4px var(--border) inset"
-          : undefined
-      : undefined,
+    boxShadow,
     left: isPinned === "left" ? `${column.getStart("left")}px` : undefined,
     right: isPinned === "right" ? `${column.getAfter("right")}px` : undefined,
     opacity: isPinned ? 0.97 : 1,
     position: isPinned ? "sticky" : "relative",
-    background: isPinned ? "var(--background)" : "var(--background)",
+    background: "var(--background)",
     width: column.getSize(),
     zIndex: isPinned ? 1 : undefined,
   };
 }
 
-export function getFilterOperators(filterVariant: FilterVariant) {
+export function getFilterOperators(
+  filterVariant: FilterVariant,
+): { label: string; value: FilterOperator }[] {
   const operatorMap: Record<
     FilterVariant,
     { label: string; value: FilterOperator }[]
@@ -56,7 +61,9 @@ export function getFilterOperators(filterVariant: FilterVariant) {
   return operatorMap[filterVariant] ?? dataTableConfig.textOperators;
 }
 
-export function getDefaultFilterOperator(filterVariant: FilterVariant) {
+export function getDefaultFilterOperator(
+  filterVariant: FilterVariant,
+): FilterOperator {
   const operators = getFilterOperators(filterVariant);
 
   return operators[0]?.value ?? (filterVariant === "text" ? "iLike" : "eq");
@@ -65,14 +72,20 @@ export function getDefaultFilterOperator(filterVariant: FilterVariant) {
 export function getValidFilters<TData>(
   filters: ExtendedColumnFilter<TData>[],
 ): ExtendedColumnFilter<TData>[] {
+  const hasValue = (value: unknown) => {
+    if (Array.isArray(value)) {
+      return value.length > 0;
+    }
+    if (typeof value === "string") {
+      return value !== "";
+    }
+    return value !== null && value !== undefined;
+  };
+
   return filters.filter(
     (filter) =>
       filter.operator === "isEmpty" ||
       filter.operator === "isNotEmpty" ||
-      (Array.isArray(filter.value)
-        ? filter.value.length > 0
-        : filter.value !== "" &&
-          filter.value !== null &&
-          filter.value !== undefined),
+      hasValue(filter.value),
   );
 }

@@ -1,14 +1,109 @@
 import { Hono } from "hono";
+import type { Context } from "hono";
 import { drizzle } from "drizzle-orm/d1";
 import { requireAuth } from "../middleware/auth.middleware";
 import { getUserFromContext } from "../middleware/auth";
 import { LogService } from "../services/logs.service";
+import type { LogFilters, LogSort } from "../services/logs.service";
 import type { HonoEnv } from "./app";
 
 const logs = new Hono<HonoEnv>();
 
 // Apply authentication middleware to all routes
 logs.use("/*", requireAuth);
+
+type ParseError = { error: Response };
+
+type ParsedProjectId = { projectId: number };
+
+type ParsedListLogsRequest = {
+  projectId: number;
+  page: number;
+  pageSize: number;
+  sort: LogSort | undefined;
+  filters: LogFilters | undefined;
+};
+
+const parseProjectId = (c: Context): ParsedProjectId | ParseError => {
+  const projectId = parseInt(c.req.param("projectId"), 10);
+  if (Number.isNaN(projectId)) {
+    return { error: c.json({ error: "Invalid project ID" }, 400) };
+  }
+  return { projectId };
+};
+
+const parsePagination = (c: Context) => {
+  const pageParam = c.req.query("page");
+  const pageSizeParam = c.req.query("pageSize");
+  const page = pageParam ? Math.max(1, parseInt(pageParam, 10)) : 1;
+  const pageSize = pageSizeParam
+    ? Math.min(100, Math.max(1, parseInt(pageSizeParam, 10)))
+    : 10;
+  return { page, pageSize };
+};
+
+const parseSort = (c: Context): LogSort | undefined => {
+  const sortField = c.req.query("sortField") as LogSort["field"] | undefined;
+  if (!sortField) {
+    return undefined;
+  }
+  const sortDirection = c.req.query("sortDirection") as LogSort["direction"] | undefined;
+  return {
+    field: sortField,
+    direction: sortDirection ?? "desc",
+  };
+};
+
+const parseFilters = (c: Context): LogFilters | undefined => {
+  const filters: LogFilters = {};
+
+  const isSuccess = c.req.query("isSuccess");
+  if (isSuccess !== undefined) {
+    filters.isSuccess = isSuccess === "true";
+  }
+
+  const promptId = c.req.query("promptId");
+  if (promptId) {
+    filters.promptId = parseInt(promptId, 10);
+  }
+
+  const version = c.req.query("version");
+  if (version) {
+    filters.version = parseInt(version, 10);
+  }
+
+  const variablePath = c.req.query("variablePath");
+  if (variablePath) {
+    filters.variablePath = variablePath;
+  }
+
+  const variableValue = c.req.query("variableValue");
+  if (variableValue) {
+    filters.variableValue = variableValue;
+  }
+
+  const variableOperator = c.req.query("variableOperator") as "contains" | "notEmpty" | undefined;
+  if (variableOperator) {
+    filters.variableOperator = variableOperator;
+  }
+
+  return Object.keys(filters).length > 0 ? filters : undefined;
+};
+
+const parseListLogsRequest = (
+  c: Context,
+): ParsedListLogsRequest | ParseError => {
+  const projectIdResult = parseProjectId(c);
+  if ("error" in projectIdResult) {
+    return projectIdResult;
+  }
+
+  const { page, pageSize } = parsePagination(c);
+  const sort = parseSort(c);
+  const filters = parseFilters(c);
+
+  return { projectId: projectIdResult.projectId, page, pageSize, sort, filters };
+};
 
 /**
  * GET /api/projects/:projectId/logs/prompts
@@ -17,10 +112,9 @@ logs.use("/*", requireAuth);
 logs.get("/:projectId/logs/prompts", async (c) => {
   try {
     const user = getUserFromContext(c);
-    const projectId = parseInt(c.req.param("projectId"));
-
-    if (isNaN(projectId)) {
-      return c.json({ error: "Invalid project ID" }, 400);
+    const projectIdResult = parseProjectId(c);
+    if ("error" in projectIdResult) {
+      return projectIdResult.error;
     }
 
     const db = drizzle(c.env.DB);
@@ -28,7 +122,7 @@ logs.get("/:projectId/logs/prompts", async (c) => {
 
     const prompts = await logService.getUniquePromptsForProject(
       user.tenantId,
-      projectId
+      projectIdResult.projectId
     );
 
     return c.json({ prompts });
@@ -45,10 +139,9 @@ logs.get("/:projectId/logs/prompts", async (c) => {
 logs.get("/:projectId/logs/variables", async (c) => {
   try {
     const user = getUserFromContext(c);
-    const projectId = parseInt(c.req.param("projectId"));
-
-    if (isNaN(projectId)) {
-      return c.json({ error: "Invalid project ID" }, 400);
+    const projectIdResult = parseProjectId(c);
+    if ("error" in projectIdResult) {
+      return projectIdResult.error;
     }
 
     const db = drizzle(c.env.DB);
@@ -56,7 +149,7 @@ logs.get("/:projectId/logs/variables", async (c) => {
 
     const variablePaths = await logService.getUniqueVariablePathsForProject(
       user.tenantId,
-      projectId
+      projectIdResult.projectId
     );
 
     return c.json({ variablePaths });
@@ -85,73 +178,22 @@ logs.get("/:projectId/logs/variables", async (c) => {
 logs.get("/:projectId/logs", async (c) => {
   try {
     const user = getUserFromContext(c);
-    const projectId = parseInt(c.req.param("projectId"));
-
-    if (isNaN(projectId)) {
-      return c.json({ error: "Invalid project ID" }, 400);
-    }
-
-    // Parse pagination parameters
-    const pageParam = c.req.query("page");
-    const pageSizeParam = c.req.query("pageSize");
-    const page = pageParam ? Math.max(1, parseInt(pageParam, 10)) : 1;
-    const pageSize = pageSizeParam
-      ? Math.min(100, Math.max(1, parseInt(pageSizeParam, 10)))
-      : 10;
-
-    // Parse sort parameters
-    const sortField = c.req.query("sortField") as "createdAt" | "durationMs" | "promptName" | "isSuccess" | "provider" | undefined;
-    const sortDirection = c.req.query("sortDirection") as "asc" | "desc" | undefined;
-
-    const sort = sortField ? {
-      field: sortField,
-      direction: sortDirection || "desc",
-    } : undefined;
-
-    // Parse filter parameters
-    const filters: any = {};
-
-    const isSuccess = c.req.query("isSuccess");
-    if (isSuccess !== undefined) {
-      filters.isSuccess = isSuccess === "true";
-    }
-
-    const promptId = c.req.query("promptId");
-    if (promptId) {
-      filters.promptId = parseInt(promptId, 10);
-    }
-
-    const version = c.req.query("version");
-    if (version) {
-      filters.version = parseInt(version, 10);
-    }
-
-    const variablePath = c.req.query("variablePath");
-    if (variablePath) {
-      filters.variablePath = variablePath;
-    }
-
-    const variableValue = c.req.query("variableValue");
-    if (variableValue) {
-      filters.variableValue = variableValue;
-    }
-
-    const variableOperator = c.req.query("variableOperator") as "contains" | "notEmpty" | undefined;
-    if (variableOperator) {
-      filters.variableOperator = variableOperator;
+    const parsed = parseListLogsRequest(c);
+    if ("error" in parsed) {
+      return parsed.error;
     }
 
     const db = drizzle(c.env.DB);
     const logService = new LogService(db, c.env.PRIVATE_FILES, c.env.DB);
 
-    const result = await logService.listProjectLogs(
-      user.tenantId,
-      projectId,
-      page,
-      pageSize,
-      Object.keys(filters).length > 0 ? filters : undefined,
-      sort
-    );
+    const result = await logService.listProjectLogs({
+      tenantId: user.tenantId,
+      projectId: parsed.projectId,
+      page: parsed.page,
+      pageSize: parsed.pageSize,
+      filters: parsed.filters,
+      sort: parsed.sort,
+    });
 
     return c.json(result);
   } catch (error) {

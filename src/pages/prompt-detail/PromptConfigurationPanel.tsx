@@ -1,3 +1,5 @@
+/* eslint-disable sonarjs/function-return-type */
+import type * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -8,20 +10,30 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-interface PromptConfigurationPanelProps {
+type ResponseType = "text" | "json";
+type ReasoningEffort = "low" | "medium" | "high";
+type ReasoningSummary = "auto" | "enabled" | "disabled";
+type ThinkingLevel =
+  | "THINKING_LEVEL_UNSPECIFIED"
+  | "LOW"
+  | "MEDIUM"
+  | "HIGH"
+  | "MINIMAL";
+
+type PromptConfigurationPanelProps = Readonly<{
   saveError: string | null;
-  responseType: "text" | "json";
-  setResponseType: (value: "text" | "json") => void;
+  responseType: ResponseType;
+  setResponseType: (value: ResponseType) => void;
   onEditSchema: () => void;
   provider: string;
   systemMessage: string;
   setSystemMessage: (value: string) => void;
   userMessage: string;
   setUserMessage: (value: string) => void;
-  reasoningEffort: "low" | "medium" | "high";
-  setReasoningEffort: (value: "low" | "medium" | "high") => void;
-  reasoningSummary: "auto" | "enabled" | "disabled";
-  setReasoningSummary: (value: "auto" | "enabled" | "disabled") => void;
+  reasoningEffort: ReasoningEffort;
+  setReasoningEffort: (value: ReasoningEffort) => void;
+  reasoningSummary: ReasoningSummary;
+  setReasoningSummary: (value: ReasoningSummary) => void;
   storeEnabled: boolean;
   setStoreEnabled: (value: boolean) => void;
   includeEncryptedReasoning: boolean;
@@ -30,25 +42,13 @@ interface PromptConfigurationPanelProps {
   setIncludeThoughts: (value: boolean) => void;
   thinkingBudget: number;
   setThinkingBudget: (value: number) => void;
-  thinkingLevel:
-    | "THINKING_LEVEL_UNSPECIFIED"
-    | "LOW"
-    | "MEDIUM"
-    | "HIGH"
-    | "MINIMAL";
-  setThinkingLevel: (
-    value:
-      | "THINKING_LEVEL_UNSPECIFIED"
-      | "LOW"
-      | "MEDIUM"
-      | "HIGH"
-      | "MINIMAL"
-  ) => void;
+  thinkingLevel: ThinkingLevel;
+  setThinkingLevel: (value: ThinkingLevel) => void;
   googleSearchEnabled: boolean;
   setGoogleSearchEnabled: (value: boolean) => void;
   cacheSystemMessage: boolean;
   setCacheSystemMessage: (value: boolean) => void;
-}
+}>;
 
 export function PromptConfigurationPanel({
   saveError,
@@ -78,7 +78,7 @@ export function PromptConfigurationPanel({
   setGoogleSearchEnabled,
   cacheSystemMessage,
   setCacheSystemMessage,
-}: PromptConfigurationPanelProps) {
+}: PromptConfigurationPanelProps): React.ReactNode {
   return (
     <div className="w-1/2 border-r border-border overflow-y-auto">
       <div className="p-6 space-y-4">
@@ -97,7 +97,7 @@ export function PromptConfigurationPanel({
             <div className="flex items-center gap-2">
               <Select
                 value={responseType}
-                onValueChange={(value: "text" | "json") => setResponseType(value)}
+                onValueChange={(value: ResponseType) => setResponseType(value)}
               >
                 <SelectTrigger className="h-9">
                   <SelectValue />

@@ -1,4 +1,5 @@
 import {Hono} from "hono";
+import {type Auth} from "better-auth";
 import {fromHono} from "chanfana";
 import {createAuth} from "../../auth";
 import projectsRouter from "./projects.routes";
@@ -6,6 +7,8 @@ import promptsRouter from "./prompts.routes";
 import providersRouter from "./providers.routes";
 import logsRouter from "./logs.routes";
 import tracesRouter from "./traces.routes";
+import datasetsRouter from "./datasets.routes";
+import evaluationsRouter from "./evaluations.routes";
 import usersRouter from "./users.routes";
 import authRouter from "./auth.routes";
 import type {AuthenticatedUser} from "../middleware/auth";
@@ -21,12 +24,12 @@ import {getVersion} from "../utils/get-version";
 export interface HonoEnv {
 	Bindings: Env;
 	Variables: {
-		auth: ReturnType<typeof createAuth>;
+		auth: Auth;
 		user?: AuthenticatedUser;
 	};
 }
 
-export function createHonoApp() {
+export function createHonoApp(): Hono<HonoEnv> {
 
 	const app = new Hono<HonoEnv>();
 
@@ -73,6 +76,8 @@ export function createHonoApp() {
 	app.route("/api/projects", promptsRouter);
 	app.route("/api/projects", logsRouter);
 	app.route("/api/projects", tracesRouter);
+	app.route("/api/projects", datasetsRouter);
+	app.route("/api/projects", evaluationsRouter);
 	app.route("/api/providers", providersRouter);
 	app.route("/api/users", usersRouter);
 

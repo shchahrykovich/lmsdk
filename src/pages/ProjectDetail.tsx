@@ -1,3 +1,5 @@
+/* eslint-disable sonarjs/function-return-type */
+import type * as React from "react";
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -13,7 +15,7 @@ interface Project {
   updatedAt: string;
 }
 
-export default function ProjectDetail() {
+export default function ProjectDetail(): React.ReactNode {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const [project, setProject] = useState<Project | null>(null);
@@ -21,7 +23,7 @@ export default function ProjectDetail() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchProject();
+    void fetchProject();
   }, [slug]);
 
   const fetchProject = async () => {
@@ -71,8 +73,8 @@ export default function ProjectDetail() {
   if (error || !project) {
     return (
       <div className="h-full flex flex-col items-center justify-center">
-        <div className="text-red-500 mb-4">{error || "Project not found"}</div>
-        <Button onClick={() => navigate("/projects")}>Back to Projects</Button>
+        <div className="text-red-500 mb-4">{error ?? "Project not found"}</div>
+        <Button onClick={() => { void navigate("/projects"); }}>Back to Projects</Button>
       </div>
     );
   }
@@ -82,7 +84,6 @@ export default function ProjectDetail() {
       <ProjectPageHeader
         projectName={project.name}
         description={`Slug: ${project.slug}`}
-        onBack={() => navigate("/projects")}
         badge={
           <span
             className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${

@@ -12,6 +12,7 @@ import {
   type PaginationState,
   type RowSelectionState,
   type SortingState,
+  type Table,
   type TableOptions,
   type TableState,
   type Updater,
@@ -21,7 +22,6 @@ import {
 import {
   parseAsArrayOf,
   parseAsInteger,
-  parseAsJson,
   parseAsString,
   type SingleParser,
   type UseQueryStateOptions,
@@ -31,17 +31,36 @@ import {
 import * as React from "react";
 
 import { useDebouncedCallback } from "@/hooks/use-debounced-callback";
-import { getSortingStateParser } from "@/lib/parsers";
 import type { ExtendedColumnSort, QueryKeys } from "@/types/data-table";
 
 const PAGE_KEY = "page";
 const PER_PAGE_KEY = "perPage";
-const SORT_KEY = "sort";
-const FILTERS_KEY = "filters";
+const SORT_FIELD_KEY = "sort-field";
+const SORT_DIRECTION_KEY = "sort-direction";
 const JOIN_OPERATOR_KEY = "joinOperator";
 const ARRAY_SEPARATOR = ",";
 const DEBOUNCE_MS = 300;
 const THROTTLE_MS = 50;
+
+const resolveQueryKeys = (queryKeys?: Partial<QueryKeys>) => ({
+  pageKey: queryKeys?.page ?? PAGE_KEY,
+  perPageKey: queryKeys?.perPage ?? PER_PAGE_KEY,
+  sortFieldKey: SORT_FIELD_KEY,
+  sortDirectionKey: SORT_DIRECTION_KEY,
+  joinOperatorKey: queryKeys?.joinOperator ?? JOIN_OPERATOR_KEY,
+});
+
+const resolveInitialPageSize = <TData,>(
+  initialState?: UseDataTableProps<TData>["initialState"],
+) => initialState?.pagination?.pageSize ?? 10;
+
+const resolveInitialSorting = <TData,>(
+  initialState?: UseDataTableProps<TData>["initialState"],
+) => initialState?.sorting ?? [];
+
+const isVariablesDialogFilter = (
+  column: { meta?: { variant?: string; filterComponent?: string } } | undefined,
+) => column?.meta?.variant === "custom" && column?.meta?.filterComponent === "variablesDialog";
 
 interface UseDataTableProps<TData>
   extends Omit<
@@ -68,7 +87,14 @@ interface UseDataTableProps<TData>
   startTransition?: React.TransitionStartFunction;
 }
 
-export function useDataTable<TData>(props: UseDataTableProps<TData>) {
+export function useDataTable<TData>(
+  props: UseDataTableProps<TData>,
+): {
+  table: Table<TData>;
+  shallow: boolean;
+  debounceMs: number;
+  throttleMs: number;
+} {
   const {
     columns,
     pageCount = -1,
@@ -84,11 +110,8 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
     startTransition,
     ...tableProps
   } = props;
-  const pageKey = queryKeys?.page ?? PAGE_KEY;
-  const perPageKey = queryKeys?.perPage ?? PER_PAGE_KEY;
-  const sortKey = queryKeys?.sort ?? SORT_KEY;
-  const filtersKey = queryKeys?.filters ?? FILTERS_KEY;
-  const joinOperatorKey = queryKeys?.joinOperator ?? JOIN_OPERATOR_KEY;
+  const { pageKey, perPageKey, sortFieldKey, sortDirectionKey, joinOperatorKey } =
+    resolveQueryKeys(queryKeys);
 
   const queryStateOptions = React.useMemo<
     Omit<UseQueryStateOptions<string>, "parse">
@@ -127,7 +150,7 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
     perPageKey,
     parseAsInteger
       .withOptions(queryStateOptions)
-      .withDefault(initialState?.pagination?.pageSize ?? 10),
+      .withDefault(resolveInitialPageSize(initialState)),
   );
 
   const pagination: PaginationState = React.useMemo(() => {
@@ -151,29 +174,45 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
     [pagination, setPage, setPerPage],
   );
 
-  const columnIds = React.useMemo(() => {
-    return new Set(
-      columns.map((column) => column.id).filter(Boolean) as string[],
-    );
-  }, [columns]);
-
-  const [sorting, setSorting] = useQueryState(
-    sortKey,
-    getSortingStateParser<TData>(columnIds)
-      .withOptions(queryStateOptions)
-      .withDefault(initialState?.sorting ?? []),
+  const [sortField, setSortField] = useQueryState(
+    sortFieldKey,
+    parseAsString.withOptions(queryStateOptions),
   );
+
+  const [sortDirection, setSortDirection] = useQueryState(
+    sortDirectionKey,
+    parseAsString.withOptions(queryStateOptions),
+  );
+
+  const sorting: SortingState = React.useMemo(() => {
+    if (!sortField) {
+      return resolveInitialSorting(initialState);
+    }
+    return [
+      {
+        id: sortField,
+        desc: sortDirection === "desc",
+      },
+    ];
+  }, [sortField, sortDirection, initialState]);
 
   const onSortingChange = React.useCallback(
     (updaterOrValue: Updater<SortingState>) => {
-      if (typeof updaterOrValue === "function") {
-        const newSorting = updaterOrValue(sorting);
-        setSorting(newSorting as ExtendedColumnSort<TData>[]);
+      const newSorting =
+        typeof updaterOrValue === "function"
+          ? updaterOrValue(sorting)
+          : updaterOrValue;
+
+      if (newSorting.length === 0) {
+        void setSortField(null);
+        void setSortDirection(null);
       } else {
-        setSorting(updaterOrValue as ExtendedColumnSort<TData>[]);
+        const firstSort = newSorting[0];
+        void setSortField(firstSort.id);
+        void setSortDirection(firstSort.desc ? "desc" : "asc");
       }
     },
-    [sorting, setSorting],
+    [sorting, setSortField, setSortDirection],
   );
 
   const filterableColumns = React.useMemo(() => {
@@ -182,40 +221,57 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
     return columns.filter((column) => column.enableColumnFilter);
   }, [columns, enableAdvancedFilter]);
 
+  // Map column IDs to URL parameter names
+  const getFilterParamName = (columnId: string): string => {
+    const mapping: Record<string, string> = {
+      promptName: "promptId", // Maps to promptId-version format, will need special handling
+      isSuccess: "isSuccess",
+      variables: "variablePath", // Variables use multiple params (variablePath, variableValue, variableOperator)
+    };
+    return mapping[columnId] ?? columnId;
+  };
+
   const filterParsers = React.useMemo(() => {
     if (enableAdvancedFilter) return {};
 
     return filterableColumns.reduce<
       Record<string, SingleParser<string> | SingleParser<string[]>>
     >((acc, column) => {
+      const columnId = column.id ?? "";
+
       // Handle custom filter types (like variables dialog with object values)
-      if (column.meta?.variant === "custom" && column.meta?.filterComponent === "variablesDialog") {
-        // For variables, we'll use the filters key instead of individual column keys
-        // This is handled separately below
+      if (isVariablesDialogFilter(column)) {
+        // Variables use multiple URL params, handled separately
+        acc.variablePath = parseAsString.withOptions(queryStateOptions);
+        acc.variableValue = parseAsString.withOptions(queryStateOptions);
+        acc.variableOperator = parseAsString.withOptions(queryStateOptions);
         return acc;
       }
 
-      if (column.meta?.options) {
-        acc[column.id ?? ""] = parseAsArrayOf(
+      // For promptName, we need both promptId and version params
+      if (columnId === "promptName") {
+        acc.promptId = parseAsString.withOptions(queryStateOptions);
+        acc.version = parseAsString.withOptions(queryStateOptions);
+        return acc;
+      }
+
+      const paramName = getFilterParamName(columnId);
+      // isSuccess should be a single value, not an array, even though it has options
+      if (columnId === "isSuccess") {
+        acc[paramName] = parseAsString.withOptions(queryStateOptions);
+      } else if (column.meta?.options) {
+        acc[paramName] = parseAsArrayOf(
           parseAsString,
           ARRAY_SEPARATOR,
         ).withOptions(queryStateOptions);
       } else {
-        acc[column.id ?? ""] = parseAsString.withOptions(queryStateOptions);
+        acc[paramName] = parseAsString.withOptions(queryStateOptions);
       }
       return acc;
     }, {});
   }, [filterableColumns, queryStateOptions, enableAdvancedFilter]);
 
   const [filterValues, setFilterValues] = useQueryStates(filterParsers);
-
-  // Separate query state for complex filters (objects, etc.)
-  const [complexFilters, setComplexFilters] = useQueryState(
-    filtersKey,
-    parseAsJson<ColumnFiltersState>((value) => value as ColumnFiltersState)
-      .withOptions(queryStateOptions)
-      .withDefault([]),
-  );
 
   const debouncedSetFilterValues = useDebouncedCallback(
     (values: typeof filterValues) => {
@@ -225,42 +281,92 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
     debounceMs,
   );
 
-  const debouncedSetComplexFilters = useDebouncedCallback(
-    (filters: ColumnFiltersState) => {
-      void setPage(1);
-      void setComplexFilters(filters);
-    },
-    debounceMs,
-  );
+  const toSingleValue = (value: string | string[] | null | undefined): string | undefined => {
+    if (!value) return undefined;
+    return typeof value === "string" ? value : value[0];
+  };
 
   const initialColumnFilters: ColumnFiltersState = React.useMemo(() => {
     if (enableAdvancedFilter) return [];
 
-    const simpleFilters = Object.entries(filterValues).reduce<ColumnFiltersState>(
-      (filters, [key, value]) => {
-        if (value !== null) {
-          const processedValue = Array.isArray(value)
-            ? value
-            : typeof value === "string" && /[^a-zA-Z0-9]/.test(value)
-              ? value.split(/[^a-zA-Z0-9]+/).filter(Boolean)
-              : [value];
+    const filters: ColumnFiltersState = [];
 
-          filters.push({
-            id: key,
-            value: processedValue,
-          });
-        }
-        return filters;
-      },
-      [],
-    );
+    if (filterValues.isSuccess) {
+      // isSuccess is always a string (not array) in URL, but table expects array
+      filters.push({ id: "isSuccess", value: [filterValues.isSuccess] });
+    }
 
-    // Merge with complex filters from URL
-    return [...simpleFilters, ...complexFilters];
-  }, [filterValues, complexFilters, enableAdvancedFilter]);
+    if (filterValues.promptId && filterValues.version) {
+      const promptId = toSingleValue(filterValues.promptId);
+      const version = toSingleValue(filterValues.version);
+      if (promptId && version) {
+        filters.push({ id: "promptName", value: [`${promptId}-${version}`] });
+      }
+    }
+
+    if (filterValues.variablePath) {
+      filters.push({
+        id: "variables",
+        value: {
+          path: toSingleValue(filterValues.variablePath),
+          value: toSingleValue(filterValues.variableValue),
+          operator: toSingleValue(filterValues.variableOperator),
+        },
+      });
+    }
+
+    return filters;
+  }, [filterValues, enableAdvancedFilter]);
 
   const [columnFilters, setColumnFilters] =
     React.useState<ColumnFiltersState>(initialColumnFilters);
+
+  const handleIsSuccessFilter = (value: unknown, updates: Record<string, string | null>) => {
+    // Table stores filter value as array, but URL should have single string value
+    const values = Array.isArray(value) ? value : [value];
+    if (values.length > 0 && values[0] !== null && values[0] !== undefined) {
+      updates.isSuccess = String(values[0]);
+    }
+  };
+
+  const handlePromptNameFilter = (value: unknown, updates: Record<string, string | null>) => {
+    const values = Array.isArray(value) ? value : [value];
+    if (values.length === 1 && typeof values[0] === "string") {
+      const [promptId, version] = values[0].split("-");
+      updates.promptId = promptId;
+      updates.version = version;
+    }
+  };
+
+  const handleVariablesFilter = (value: unknown, updates: Record<string, string | null>) => {
+    const varsFilter = value as { path?: string; value?: string; operator?: string };
+    updates.variablePath = varsFilter.path ?? null;
+    updates.variableValue = varsFilter.value ?? null;
+    updates.variableOperator = varsFilter.operator ?? null;
+  };
+
+  const buildFilterUpdates = React.useCallback((filters: ColumnFiltersState) => {
+    const updates: Record<string, string | null> = {
+      isSuccess: null,
+      promptId: null,
+      version: null,
+      variablePath: null,
+      variableValue: null,
+      variableOperator: null,
+    };
+
+    for (const filter of filters) {
+      if (filter.id === "isSuccess") {
+        handleIsSuccessFilter(filter.value, updates);
+      } else if (filter.id === "promptName") {
+        handlePromptNameFilter(filter.value, updates);
+      } else if (filter.id === "variables") {
+        handleVariablesFilter(filter.value, updates);
+      }
+    }
+
+    return updates;
+  }, []);
 
   const onColumnFiltersChange = React.useCallback(
     (updaterOrValue: Updater<ColumnFiltersState>) => {
@@ -272,44 +378,12 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
             ? updaterOrValue(prev)
             : updaterOrValue;
 
-        // Separate simple and complex filters
-        const simpleFilterUpdates = next.reduce<
-          Record<string, string | string[] | null>
-        >((acc, filter) => {
-          const column = filterableColumns.find((col) => col.id === filter.id);
-          // Skip custom filters that use object values (handled via filters JSON param)
-          if (column?.meta?.variant === "custom" && column?.meta?.filterComponent === "variablesDialog") {
-            return acc;
-          }
-          if (column) {
-            acc[filter.id] = filter.value as string | string[];
-          }
-          return acc;
-        }, {});
-
-        // Collect complex filters for JSON serialization
-        const complexFiltersList = next.filter((filter) => {
-          const column = filterableColumns.find((col) => col.id === filter.id);
-          return column?.meta?.variant === "custom" && column?.meta?.filterComponent === "variablesDialog";
-        });
-
-        for (const prevFilter of prev) {
-          const column = filterableColumns.find((col) => col.id === prevFilter.id);
-          // Skip custom filters
-          if (column?.meta?.variant === "custom" && column?.meta?.filterComponent === "variablesDialog") {
-            continue;
-          }
-          if (!next.some((filter) => filter.id === prevFilter.id)) {
-            simpleFilterUpdates[prevFilter.id] = null;
-          }
-        }
-
-        debouncedSetFilterValues(simpleFilterUpdates);
-        debouncedSetComplexFilters(complexFiltersList);
+        const updates = buildFilterUpdates(next);
+        debouncedSetFilterValues(updates);
         return next;
       });
     },
-    [debouncedSetFilterValues, debouncedSetComplexFilters, filterableColumns, enableAdvancedFilter],
+    [debouncedSetFilterValues, enableAdvancedFilter, buildFilterUpdates],
   );
 
   const table = useReactTable({
@@ -349,8 +423,8 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
       queryKeys: {
         page: pageKey,
         perPage: perPageKey,
-        sort: sortKey,
-        filters: filtersKey,
+        sortField: sortFieldKey,
+        sortDirection: sortDirectionKey,
         joinOperator: joinOperatorKey,
       },
     },

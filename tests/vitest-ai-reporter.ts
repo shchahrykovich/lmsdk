@@ -35,17 +35,22 @@ export default class AiReporter implements Reporter {
     const failed = allTests.filter(test => test.result?.state === 'fail')
     const skipped = allTests.filter(test => test.mode === 'skip' || test.mode === 'todo')
 
-    // Summary
-    console.log(`Tests: ${passed.length} passed, ${failed.length} failed, ${skipped.length} skipped, ${allTests.length} total`)
+    const passedCount = passed.length
+    const failedCount = failed.length
+    const skippedCount = skipped.length
+    const totalCount = allTests.length
 
-    if (passed.length > 0) {
-      console.log(`✓ ${passed.length} tests passed`)
+    // Summary
+    console.log(`Tests: ${passedCount} passed, ${failedCount} failed, ${skippedCount} skipped, ${totalCount} total`)
+
+    if (passedCount > 0) {
+      console.log(`✓ ${passedCount} tests passed`)
     }
 
     // Show first 10 failed tests with details
-    if (failed.length > 0) {
-      console.log()
-      console.log(`Failed Tests (showing ${Math.min(failed.length, this.maxFailedTests)} of ${failed.length}):`)
+    if (failedCount > 0) {
+      const shownCount = Math.min(failedCount, this.maxFailedTests)
+      console.log(`Failed Tests (showing ${shownCount} of ${failedCount}):`)
       console.log()
 
       const failedToShow = failed.slice(0, this.maxFailedTests)
@@ -56,8 +61,8 @@ export default class AiReporter implements Reporter {
 
         if (test.result?.errors) {
           for (const error of test.result.errors) {
-            const errorMessage = error instanceof Error ? error.message : String(error)
-            const stack = error instanceof Error ? error.stack : undefined
+						const errorMessage = error.message;
+						const stack = error.stack;
 
             console.log(`  ${errorMessage}`)
             if (stack) {

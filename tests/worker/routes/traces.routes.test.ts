@@ -81,7 +81,13 @@ describe("Traces Routes", () => {
       expect(data.traces).toHaveLength(1);
       expect(data.traces[0].traceId).toBe("trace-abc-123");
       expect(data.traces[0].totalLogs).toBe(5);
-      expect(listProjectTracesMock).toHaveBeenCalledWith(1, projectId, 1, 10, undefined);
+      expect(listProjectTracesMock).toHaveBeenCalledWith({
+        tenantId: 1,
+        projectId: projectId,
+        page: 1,
+        pageSize: 10,
+        sort: undefined,
+      });
     });
 
     it("returns traces with pagination parameters", async () => {
@@ -105,7 +111,13 @@ describe("Traces Routes", () => {
       const data = await response.json();
       expect(data.page).toBe(2);
       expect(data.pageSize).toBe(20);
-      expect(listProjectTracesMock).toHaveBeenCalledWith(1, projectId, 2, 20, undefined);
+      expect(listProjectTracesMock).toHaveBeenCalledWith({
+        tenantId: 1,
+        projectId: projectId,
+        page: 2,
+        pageSize: 20,
+        sort: undefined,
+      });
     });
 
     it("returns traces with sorting by createdAt", async () => {
@@ -126,13 +138,13 @@ describe("Traces Routes", () => {
       );
 
       expect(response.status).toBe(200);
-      expect(listProjectTracesMock).toHaveBeenCalledWith(
-        1,
-        projectId,
-        1,
-        10,
-        { field: "createdAt", direction: "asc" }
-      );
+      expect(listProjectTracesMock).toHaveBeenCalledWith({
+        tenantId: 1,
+        projectId: projectId,
+        page: 1,
+        pageSize: 10,
+        sort: { field: "createdAt", direction: "asc" },
+      });
     });
 
     it("returns traces with sorting by totalLogs descending", async () => {
@@ -153,13 +165,13 @@ describe("Traces Routes", () => {
       );
 
       expect(response.status).toBe(200);
-      expect(listProjectTracesMock).toHaveBeenCalledWith(
-        1,
-        projectId,
-        1,
-        10,
-        { field: "totalLogs", direction: "desc" }
-      );
+      expect(listProjectTracesMock).toHaveBeenCalledWith({
+        tenantId: 1,
+        projectId: projectId,
+        page: 1,
+        pageSize: 10,
+        sort: { field: "totalLogs", direction: "desc" },
+      });
     });
 
     it("returns traces with sorting by totalDurationMs", async () => {
@@ -180,13 +192,13 @@ describe("Traces Routes", () => {
       );
 
       expect(response.status).toBe(200);
-      expect(listProjectTracesMock).toHaveBeenCalledWith(
-        1,
-        projectId,
-        1,
-        10,
-        { field: "totalDurationMs", direction: "asc" }
-      );
+      expect(listProjectTracesMock).toHaveBeenCalledWith({
+        tenantId: 1,
+        projectId: projectId,
+        page: 1,
+        pageSize: 10,
+        sort: { field: "totalDurationMs", direction: "asc" },
+      });
     });
 
     it("defaults to desc when sortDirection is not provided", async () => {
@@ -207,13 +219,13 @@ describe("Traces Routes", () => {
       );
 
       expect(response.status).toBe(200);
-      expect(listProjectTracesMock).toHaveBeenCalledWith(
-        1,
-        projectId,
-        1,
-        10,
-        { field: "createdAt", direction: "desc" }
-      );
+      expect(listProjectTracesMock).toHaveBeenCalledWith({
+        tenantId: 1,
+        projectId: projectId,
+        page: 1,
+        pageSize: 10,
+        sort: { field: "createdAt", direction: "desc" },
+      });
     });
 
     it("returns 400 for invalid project ID", async () => {
@@ -515,7 +527,13 @@ describe("Traces Routes", () => {
         { DB: {} as any, PRIVATE_FILES: {} as any }
       );
 
-      expect(listProjectTracesMock).toHaveBeenCalledWith(5, projectId, 1, 10, undefined);
+      expect(listProjectTracesMock).toHaveBeenCalledWith({
+        tenantId: 5,
+        projectId: projectId,
+        page: 1,
+        pageSize: 10,
+        sort: undefined,
+      });
     });
 
     it("passes correct tenantId from authenticated user to service for trace details", async () => {

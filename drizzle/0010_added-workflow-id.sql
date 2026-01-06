@@ -1,0 +1,1 @@
+ALTER TABLE `Evaluations` ADD `workflowId` text;

@@ -1,4 +1,4 @@
-import {betterAuth} from "better-auth";
+import {type Auth, betterAuth} from "better-auth";
 import {drizzleAdapter} from "better-auth/adapters/drizzle";
 import {apiKey} from "better-auth/plugins";
 import {drizzle, DrizzleD1Database} from 'drizzle-orm/d1';
@@ -6,7 +6,7 @@ import * as schema from './worker/db/schema'
 import {createPostSignUpHook} from "./worker/utils/auth-helpers";
 import {hashPassword, verifyPassword} from "./worker/utils/security-helpers";
 
-export function createAuth(env: Cloudflare.Env) {
+export function createAuth(env: Cloudflare.Env): Auth {
     const database: DrizzleD1Database = drizzle(env.DB, {schema}) as unknown as DrizzleD1Database;
 
     return betterAuth({

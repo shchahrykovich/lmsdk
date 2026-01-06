@@ -131,4 +131,45 @@ describe("PromptService - listPrompts", () => {
     expect(project1Prompts[0].projectId).toBe(1);
     expect(project2Prompts[0].projectId).toBe(2);
   });
+
+  it("should only return active prompts by default", async () => {
+    // Create active prompts
+    const prompt1 = await promptService.createPrompt({
+      tenantId: 1,
+      projectId: 1,
+      name: "Active Prompt",
+      slug: "active-prompt",
+      provider: "openai",
+      model: "gpt-4",
+      body: "{}",
+    });
+
+    const prompt2 = await promptService.createPrompt({
+      tenantId: 1,
+      projectId: 1,
+      name: "Inactive Prompt",
+      slug: "inactive-prompt",
+      provider: "openai",
+      model: "gpt-4",
+      body: "{}",
+    });
+
+    // Deactivate the second prompt
+    await promptService.deactivatePrompt(1, 1, prompt2.id);
+
+    const prompts = await promptService.listPrompts(1, 1);
+
+    // Should only return active prompts
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0].id).toBe(prompt1.id);
+    expect(prompts[0].isActive).toBe(true);
+
+    // Verify using direct SQL that inactive prompt exists but is not returned
+    const allPrompts = await env.DB.prepare(
+      "SELECT * FROM Prompts WHERE tenantId = ? AND projectId = ?"
+    ).bind(1, 1).all<Prompt>();
+
+    expect(allPrompts.results).toHaveLength(2);
+    expect(allPrompts.results.find(p => p.id === prompt2.id)?.isActive).toBe(0); // SQLite stores false as 0
+  });
 });

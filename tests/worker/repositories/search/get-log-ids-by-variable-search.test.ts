@@ -44,13 +44,13 @@ describe("SearchRepository - getLogIdsByVariableSearch", () => {
         },
       ]);
 
-      const logIds = await repository.getLogIdsByVariableSearch(
-        1,
-        10,
-        "user.name",
-        "Alice",
-        "contains"
-      );
+      const logIds = await repository.getLogIdsByVariableSearch({
+        tenantId: 1,
+        projectId: 10,
+        variablePath: "user.name",
+        searchValue: "Alice",
+        operator: "contains",
+      });
 
       expect(logIds).toHaveLength(1);
       expect(logIds).toContain(1);
@@ -78,13 +78,13 @@ describe("SearchRepository - getLogIdsByVariableSearch", () => {
         },
       ]);
 
-      const logIds = await repository.getLogIdsByVariableSearch(
-        1,
-        10,
-        "config.apiUrl",
-        "example",
-        "contains"
-      );
+      const logIds = await repository.getLogIdsByVariableSearch({
+        tenantId: 1,
+        projectId: 10,
+        variablePath: "config.apiUrl",
+        searchValue: "example",
+        operator: "contains",
+      });
 
       expect(logIds).toHaveLength(1);
       expect(logIds).toContain(1);
@@ -112,13 +112,13 @@ describe("SearchRepository - getLogIdsByVariableSearch", () => {
         },
       ]);
 
-      const logIds = await repository.getLogIdsByVariableSearch(
-        1,
-        10,
-        "user.name",
-        "alice",
-        "contains"
-      );
+      const logIds = await repository.getLogIdsByVariableSearch({
+        tenantId: 1,
+        projectId: 10,
+        variablePath: "user.name",
+        searchValue: "alice",
+        operator: "contains",
+      });
 
       expect(logIds).toHaveLength(1);
       expect(logIds).toContain(1);
@@ -146,13 +146,13 @@ describe("SearchRepository - getLogIdsByVariableSearch", () => {
         },
       ]);
 
-      const logIds = await repository.getLogIdsByVariableSearch(
-        1,
-        10,
-        "user.name",
-        "Alice",
-        "contains"
-      );
+      const logIds = await repository.getLogIdsByVariableSearch({
+        tenantId: 1,
+        projectId: 10,
+        variablePath: "user.name",
+        searchValue: "Alice",
+        operator: "contains",
+      });
 
       expect(logIds).toHaveLength(1);
       expect(logIds).toContain(1);
@@ -181,13 +181,13 @@ describe("SearchRepository - getLogIdsByVariableSearch", () => {
         },
       ]);
 
-      const logIds = await repository.getLogIdsByVariableSearch(
-        1,
-        10,
-        "user.name",
-        "Alice",
-        "contains"
-      );
+      const logIds = await repository.getLogIdsByVariableSearch({
+        tenantId: 1,
+        projectId: 10,
+        variablePath: "user.name",
+        searchValue: "Alice",
+        operator: "contains",
+      });
 
       expect(logIds).toHaveLength(1);
       expect(logIds).toContain(1);
@@ -205,13 +205,13 @@ describe("SearchRepository - getLogIdsByVariableSearch", () => {
         createdAt: 1000,
       });
 
-      const logIds = await repository.getLogIdsByVariableSearch(
-        1,
-        10,
-        "user.name",
-        "Alice",
-        "contains"
-      );
+      const logIds = await repository.getLogIdsByVariableSearch({
+        tenantId: 1,
+        projectId: 10,
+        variablePath: "user.name",
+        searchValue: "Alice",
+        operator: "contains",
+      });
 
       expect(logIds).toHaveLength(0);
     });
@@ -239,13 +239,13 @@ describe("SearchRepository - getLogIdsByVariableSearch", () => {
         },
       ]);
 
-      const logIds = await repository.getLogIdsByVariableSearch(
-        1,
-        10,
-        "user.name",
-        "Alice",
-        "contains"
-      );
+      const logIds = await repository.getLogIdsByVariableSearch({
+        tenantId: 1,
+        projectId: 10,
+        variablePath: "user.name",
+        searchValue: "Alice",
+        operator: "contains",
+      });
 
       expect(logIds).toHaveLength(1);
       expect(logIds).toContain(1);
@@ -273,13 +273,13 @@ describe("SearchRepository - getLogIdsByVariableSearch", () => {
         },
       ]);
 
-      const logIds = await repository.getLogIdsByVariableSearch(
-        1,
-        10,
-        "user.age",
-        "25",
-        "contains"
-      );
+      const logIds = await repository.getLogIdsByVariableSearch({
+        tenantId: 1,
+        projectId: 10,
+        variablePath: "user.age",
+        searchValue: "25",
+        operator: "contains",
+      });
 
       expect(logIds).toHaveLength(1);
       expect(logIds).toContain(1);
@@ -318,13 +318,14 @@ describe("SearchRepository - getLogIdsByVariableSearch", () => {
         },
       ]);
 
-      const logIds = await repository.getLogIdsByVariableSearch(
-        1,
-        10,
-        "user.name",
-        "", // Value is ignored for notEmpty
-        "notEmpty"
-      );
+      const logIds = await repository.getLogIdsByVariableSearch({
+        tenantId: 1,
+        projectId: 10,
+        variablePath: "user.name",
+        searchValue: "",
+        operator: // Value is ignored for notEmpty
+        "notEmpty",
+      });
 
       expect(logIds).toHaveLength(2);
       expect(logIds).toContain(1);
@@ -353,13 +354,13 @@ describe("SearchRepository - getLogIdsByVariableSearch", () => {
         },
       ]);
 
-      const logIds = await repository.getLogIdsByVariableSearch(
-        1,
-        10,
-        "user.name",
-        "",
-        "notEmpty"
-      );
+      const logIds = await repository.getLogIdsByVariableSearch({
+        tenantId: 1,
+        projectId: 10,
+        variablePath: "user.name",
+        searchValue: "",
+        operator: "notEmpty",
+      });
 
       expect(logIds).toHaveLength(1);
       expect(logIds).toContain(1);
@@ -388,13 +389,13 @@ describe("SearchRepository - getLogIdsByVariableSearch", () => {
         },
       ]);
 
-      const logIds = await repository.getLogIdsByVariableSearch(
-        1,
-        10,
-        "user.name",
-        "",
-        "notEmpty"
-      );
+      const logIds = await repository.getLogIdsByVariableSearch({
+        tenantId: 1,
+        projectId: 10,
+        variablePath: "user.name",
+        searchValue: "",
+        operator: "notEmpty",
+      });
 
       expect(logIds).toHaveLength(1);
       expect(logIds).toContain(1);
@@ -412,13 +413,13 @@ describe("SearchRepository - getLogIdsByVariableSearch", () => {
         createdAt: 1000,
       });
 
-      const logIds = await repository.getLogIdsByVariableSearch(
-        1,
-        10,
-        "user.email",
-        "",
-        "notEmpty"
-      );
+      const logIds = await repository.getLogIdsByVariableSearch({
+        tenantId: 1,
+        projectId: 10,
+        variablePath: "user.email",
+        searchValue: "",
+        operator: "notEmpty",
+      });
 
       expect(logIds).toHaveLength(0);
     });
@@ -447,13 +448,13 @@ describe("SearchRepository - getLogIdsByVariableSearch", () => {
         },
       ]);
 
-      const logIds = await repository.getLogIdsByVariableSearch(
-        1,
-        10,
-        "user.name",
-        "",
-        "notEmpty"
-      );
+      const logIds = await repository.getLogIdsByVariableSearch({
+        tenantId: 1,
+        projectId: 10,
+        variablePath: "user.name",
+        searchValue: "",
+        operator: "notEmpty",
+      });
 
       expect(logIds).toHaveLength(2);
       expect(logIds[0]).not.toBe(logIds[1]);
@@ -472,13 +473,13 @@ describe("SearchRepository - getLogIdsByVariableSearch", () => {
         createdAt: 1000,
       });
 
-      const logIds = await repository.getLogIdsByVariableSearch(
-        1,
-        10,
-        "user.name",
-        "Alice"
-        // operator not specified
-      );
+      const logIds = await repository.getLogIdsByVariableSearch({
+        tenantId: 1,
+        projectId: 10,
+        variablePath: "user.name",
+        searchValue: "Alice"
+        // operator not specified,
+      });
 
       expect(logIds).toHaveLength(1);
       expect(logIds).toContain(1);
@@ -517,13 +518,13 @@ describe("SearchRepository - getLogIdsByVariableSearch", () => {
         },
       ]);
 
-      const logIds = await repository.getLogIdsByVariableSearch(
-        1,
-        10,
-        "user.name",
-        "Alice",
-        "contains"
-      );
+      const logIds = await repository.getLogIdsByVariableSearch({
+        tenantId: 1,
+        projectId: 10,
+        variablePath: "user.name",
+        searchValue: "Alice",
+        operator: "contains",
+      });
 
       expect(logIds).toEqual([3, 2, 1]); // DESC order
     });

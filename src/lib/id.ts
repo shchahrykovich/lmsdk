@@ -10,7 +10,7 @@ interface GenerateIdOptions {
 export function generateId(
   prefixOrOptions?: keyof typeof prefixes | GenerateIdOptions,
   inputOptions: GenerateIdOptions = {},
-) {
+): string {
   const finalOptions =
     typeof prefixOrOptions === "object" ? prefixOrOptions : inputOptions;
 

@@ -1,3 +1,5 @@
+/* eslint-disable sonarjs/function-return-type */
+import type * as React from "react";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -66,7 +68,7 @@ interface LogFiles {
   variables: unknown | null;
 }
 
-export default function TraceDetail() {
+export default function TraceDetail(): React.ReactNode {
   const { slug, traceId } = useParams<{ slug: string; traceId: string }>();
   const navigate = useNavigate();
   const [project, setProject] = useState<Project | null>(null);
@@ -82,7 +84,7 @@ export default function TraceDetail() {
   const [logLoading, setLogLoading] = useState(false);
 
   useEffect(() => {
-    fetchData();
+    void fetchData();
   }, [slug, traceId]);
 
   const fetchData = async () => {
@@ -112,8 +114,8 @@ export default function TraceDetail() {
         throw new Error(`Failed to fetch trace: ${traceResponse.statusText}`);
       }
       const traceData = await traceResponse.json();
-      setTrace(traceData.trace || null);
-      setLogs(traceData.logs || []);
+      setTrace(traceData.trace ?? null);
+      setLogs(traceData.logs ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load trace");
       console.error("Error fetching trace:", err);
@@ -135,7 +137,7 @@ export default function TraceDetail() {
         throw new Error(`Failed to fetch log: ${logResponse.statusText}`);
       }
       const logData = await logResponse.json();
-      setLogFiles(logData.files || null);
+      setLogFiles(logData.files ?? null);
     } catch (err) {
       console.error("Error fetching log details:", err);
       setLogFiles(null);
@@ -161,8 +163,8 @@ export default function TraceDetail() {
   if (error || !project || !trace) {
     return (
       <div className="h-full flex flex-col items-center justify-center">
-        <div className="text-red-500 mb-4">{error || "Trace not found"}</div>
-        <Button onClick={() => navigate(`/projects/${slug}/traces`)}>
+        <div className="text-red-500 mb-4">{error ?? "Trace not found"}</div>
+        <Button onClick={() => { void navigate(`/projects/${slug}/traces`); }}>
           Back to Traces
         </Button>
       </div>
@@ -178,7 +180,6 @@ export default function TraceDetail() {
         projectName={project.name}
         pageTitle={`Trace: ${trace.traceId}`}
         description={`${trace.totalLogs} log${trace.totalLogs !== 1 ? "s" : ""} in trace`}
-        onBack={() => navigate(`/projects/${project.slug}/traces`)}
       />
 
       <div className="flex-1 overflow-y-auto px-8 py-6">
@@ -228,7 +229,7 @@ export default function TraceDetail() {
 
           {/* Waterfall Chart */}
           <div>
-            <SpanWaterfall logs={logs} onSpanClick={handleSpanClick} />
+            <SpanWaterfall logs={logs} onSpanClick={(log) => { void handleSpanClick(log); }} />
           </div>
         </div>
       </div>

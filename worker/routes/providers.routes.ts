@@ -2,11 +2,95 @@ import { Hono } from "hono";
 import type { HonoEnv } from "./app";
 import { requireAuth } from "../middleware/auth.middleware";
 import { ProviderService } from "../services/provider.service";
-import type { AIMessage } from "../providers/base-provider";
+import type { AIMessage, GoogleSettings, OpenAISettings, ResponseFormat } from "../providers/base-provider";
 
 import {NullPromptExecutionLogger} from "../providers/logger/null-prompt-execution-logger";
 
 const providers = new Hono<HonoEnv>();
+
+type ParsedExecuteRequest = {
+  provider: string;
+  model: string;
+  messages: { role: AIMessage["role"]; content: string }[];
+  response_format?: ResponseFormat;
+  variables?: Record<string, unknown>;
+  google_settings?: GoogleSettings;
+  openai_settings?: OpenAISettings;
+  projectId?: number;
+  promptSlug?: string;
+  proxy?: "none" | "cloudflare";
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const getString = (value: unknown): string | undefined =>
+  typeof value === "string" ? value : undefined;
+
+const getNumber = (value: unknown): number | undefined =>
+  typeof value === "number" ? value : undefined;
+
+const getRecord = (value: unknown): Record<string, unknown> | undefined =>
+  isRecord(value) ? value : undefined;
+
+const getProxy = (value: unknown): "none" | "cloudflare" | undefined =>
+  value === "cloudflare" || value === "none" ? value : undefined;
+
+const isMessage = (value: unknown): value is { role: AIMessage["role"]; content: string } =>
+  isRecord(value) && typeof value.role === "string" && typeof value.content === "string";
+
+const isResponseFormat = (value: unknown): value is ResponseFormat =>
+  isRecord(value) && (value.type === "text" || value.type === "json_schema" || value.type === "json");
+
+const parseMessages = (
+  value: unknown
+): { messages?: ParsedExecuteRequest["messages"]; error?: string } => {
+  if (!Array.isArray(value)) {
+    return { error: "Missing required fields: provider, model, and messages are required" };
+  }
+  if (value.length === 0) {
+    return { error: "At least one message is required" };
+  }
+  if (value.some((msg) => !isMessage(msg))) {
+    return { error: "Each message must have 'role' and 'content' fields" };
+  }
+  return { messages: value as ParsedExecuteRequest["messages"] };
+};
+
+const parseExecuteBody = (
+  value: unknown
+): { data?: ParsedExecuteRequest; error?: string } => {
+  if (!isRecord(value)) {
+    return { error: "Missing required fields: provider, model, and messages are required" };
+  }
+
+  const provider = getString(value.provider);
+  const model = getString(value.model);
+  const messagesResult = parseMessages(value.messages);
+
+  if (!provider || !model) {
+    return { error: "Missing required fields: provider, model, and messages are required" };
+  }
+
+  if (!messagesResult.messages) {
+    return { error: messagesResult.error ?? "Missing required fields: provider, model, and messages are required" };
+  }
+
+  return {
+    data: {
+      provider,
+      model,
+      messages: messagesResult.messages,
+      response_format: isResponseFormat(value.response_format) ? value.response_format : undefined,
+      variables: getRecord(value.variables),
+      google_settings: getRecord(value.google_settings) as GoogleSettings | undefined,
+      openai_settings: getRecord(value.openai_settings) as OpenAISettings | undefined,
+      projectId: getNumber(value.projectId),
+      promptSlug: getString(value.promptSlug),
+      proxy: getProxy(value.proxy),
+    },
+  };
+};
 
 // Require authentication for all provider routes
 providers.use("/*", requireAuth);
@@ -45,30 +129,9 @@ providers.get("/", (c) => {
 providers.post("/execute", async (c) => {
   try {
     const body = await c.req.json();
-    const { provider, model, messages, response_format, variables, google_settings, openai_settings, projectId, promptSlug, proxy } = body;
-
-    // Validate required fields
-    if (!provider || !model || !messages || !Array.isArray(messages)) {
-      return c.json(
-        {
-          error: "Missing required fields: provider, model, and messages are required",
-        },
-        400
-      );
-    }
-
-    // Validate messages format
-    if (messages.length === 0) {
-      return c.json({ error: "At least one message is required" }, 400);
-    }
-
-    for (const msg of messages) {
-      if (!msg.role || !msg.content) {
-        return c.json(
-          { error: "Each message must have 'role' and 'content' fields" },
-          400
-        );
-      }
+    const parseResult = parseExecuteBody(body);
+    if (parseResult.error || !parseResult.data) {
+      return c.json({ error: parseResult.error ?? "Invalid request body" }, 400);
     }
 
     // Initialize provider service with NullLogger
@@ -80,16 +143,13 @@ providers.post("/execute", async (c) => {
       cloudflareAiGatewayBaseUrl: c.env.CLOUDFLARE_AI_GATEWAY_BASE_URL,
     }, new NullPromptExecutionLogger(), c.env.CACHE);
 
-    // Convert messages to AIMessage format
-    const aiMessages: AIMessage[] = messages.map((msg: any) => ({
-      role: msg.role,
-      content: msg.content,
-    }));
+    const { provider, model, messages, variables, response_format, google_settings, openai_settings, proxy, projectId, promptSlug } =
+      parseResult.data;
 
     // Execute the prompt using the provider service
     const result = await providerService.executePrompt(provider, {
       model,
-      messages: aiMessages,
+      messages,
       variables,
       response_format,
       google_settings,

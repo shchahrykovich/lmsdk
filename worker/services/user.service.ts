@@ -11,6 +11,17 @@ interface CreateUserInput {
     tenantId: number;
 }
 
+interface UserSummary {
+    id: string;
+    name: string;
+    email: string;
+    emailVerified: boolean;
+    image: string | null;
+    tenantId: number;
+    createdAt: Date;
+    updatedAt: Date;
+}
+
 export class UserService {
     private db: DrizzleD1Database;
     private tenantService: TenantService;
@@ -20,7 +31,7 @@ export class UserService {
         this.tenantService = new TenantService(db);
     }
 
-    async assignTenantToUser(userId: string) {
+    async assignTenantToUser(userId: string): Promise<{userId: string; tenantId: number}> {
         // Create a new tenant
         const tenant = await this.tenantService.createTenant();
 
@@ -33,7 +44,7 @@ export class UserService {
         return {userId, tenantId: tenant.id};
     }
 
-    async getUsersByTenantId(tenantId: number) {
+    async getUsersByTenantId(tenantId: number): Promise<UserSummary[]> {
         const users = await this.db
             .select({
                 id: user.id,
@@ -51,7 +62,10 @@ export class UserService {
         return users;
     }
 
-    async createUser(auth: ReturnType<typeof createAuth>, input: CreateUserInput) {
+    async createUser(
+        auth: ReturnType<typeof createAuth>,
+        input: CreateUserInput
+    ): Promise<UserSummary | undefined> {
         // Create user using better-auth API
         const signUpResult = await auth.api.signUpEmail({
             body: {
@@ -61,7 +75,7 @@ export class UserService {
             },
         });
 
-        if (!signUpResult || !signUpResult.user) {
+        if (!signUpResult?.user) {
             throw new Error("Failed to create user");
         }
 

@@ -71,23 +71,26 @@ export interface TracesListResponse {
     totalPages: number;
 }
 
+export interface ListProjectTracesParams {
+    tenantId: number;
+    projectId: number;
+    page?: number;
+    pageSize?: number;
+    sort?: TraceSort;
+}
+
 export class TraceService {
     private db: DrizzleD1Database;
 
-    constructor(db: DrizzleD1Database, _r2?: R2Bucket) {
+    constructor(db: DrizzleD1Database) {
         this.db = db;
     }
 
     /**
      * List traces for a project with pagination and sorting
      */
-    async listProjectTraces(
-        tenantId: number,
-        projectId: number,
-        page: number = 1,
-        pageSize: number = 10,
-        sort?: TraceSort
-    ): Promise<TracesListResponse> {
+    async listProjectTraces(params: ListProjectTracesParams): Promise<TracesListResponse> {
+        const {tenantId, projectId, page = 1, pageSize = 10, sort} = params;
         // Build where conditions
         const whereConditions = [
             eq(traces.tenantId, tenantId),

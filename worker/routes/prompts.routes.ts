@@ -68,7 +68,7 @@ prompts.post("/:projectId/prompts", async (c) => {
       slug,
       provider,
       model,
-      body: promptBody || "{}",
+      body: promptBody ?? "{}",
     });
 
     return c.json({ prompt }, 201);
@@ -332,6 +332,99 @@ prompts.put("/:projectId/prompts/:promptId/router", async (c) => {
   } catch (error) {
     console.error("Error setting router version:", error);
     const errorMessage = error instanceof Error ? error.message : "Failed to set router version";
+    return c.json({ error: errorMessage }, 500);
+  }
+});
+
+/**
+ * POST /api/projects/:projectId/prompts/:promptId/copy
+ * Copy a prompt - automatically generates a unique name and slug
+ */
+prompts.post("/:projectId/prompts/:promptId/copy", async (c) => {
+  try {
+    const user = getUserFromContext(c);
+    const projectId = parseInt(c.req.param("projectId"));
+    const promptId = parseInt(c.req.param("promptId"));
+
+    if (isNaN(projectId) || isNaN(promptId)) {
+      return c.json({ error: "Invalid project or prompt ID" }, 400);
+    }
+
+    const db = drizzle(c.env.DB);
+    const promptService = new PromptService(db);
+
+    // Verify source prompt exists and belongs to user's tenant
+    const sourcePrompt = await promptService.getPromptById(
+      user.tenantId,
+      projectId,
+      promptId
+    );
+
+    if (!sourcePrompt) {
+      return c.json({ error: "Source prompt not found" }, 404);
+    }
+
+    const copiedPrompt = await promptService.copyPrompt(
+      user.tenantId,
+      projectId,
+      promptId
+    );
+
+    return c.json({ prompt: copiedPrompt }, 201);
+  } catch (error) {
+    console.error("Error copying prompt:", error);
+    const errorMessage = error instanceof Error ? error.message : "Failed to copy prompt";
+    return c.json({ error: errorMessage }, 500);
+  }
+});
+
+/**
+ * PATCH /api/projects/:projectId/prompts/:promptId/rename
+ * Rename a prompt - updates name and slug
+ */
+prompts.patch("/:projectId/prompts/:promptId/rename", async (c) => {
+  try {
+    const user = getUserFromContext(c);
+    const projectId = parseInt(c.req.param("projectId"));
+    const promptId = parseInt(c.req.param("promptId"));
+
+    if (isNaN(projectId) || isNaN(promptId)) {
+      return c.json({ error: "Invalid project or prompt ID" }, 400);
+    }
+
+    const body = await c.req.json();
+    const { name, slug } = body;
+
+    if (!name || !slug) {
+      return c.json({ error: "Name and slug are required" }, 400);
+    }
+
+    const db = drizzle(c.env.DB);
+    const promptService = new PromptService(db);
+
+    // Verify prompt exists and belongs to user's tenant
+    const existingPrompt = await promptService.getPromptById(
+      user.tenantId,
+      projectId,
+      promptId
+    );
+
+    if (!existingPrompt) {
+      return c.json({ error: "Prompt not found" }, 404);
+    }
+
+    const renamedPrompt = await promptService.renamePrompt({
+      tenantId: user.tenantId,
+      projectId,
+      promptId,
+      name: name.trim(),
+      slug: slug.trim(),
+    });
+
+    return c.json({ prompt: renamedPrompt });
+  } catch (error) {
+    console.error("Error renaming prompt:", error);
+    const errorMessage = error instanceof Error ? error.message : "Failed to rename prompt";
     return c.json({ error: errorMessage }, 500);
   }
 });

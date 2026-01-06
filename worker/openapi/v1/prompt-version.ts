@@ -27,14 +27,14 @@ export class V1PromptVersion extends OpenAPIRoute {
           example: "3",
           description: "Prompt version number",
         }),
-      }) as any,
+      }),
     },
     responses: {
       "200": {
         description: "Prompt version",
         content: {
           "application/json": {
-            schema: PromptVersionResponse as any,
+            schema: PromptVersionResponse,
           },
         },
       },
@@ -42,7 +42,7 @@ export class V1PromptVersion extends OpenAPIRoute {
         description: "Invalid version",
         content: {
           "application/json": {
-            schema: ErrorResponse as any,
+            schema: ErrorResponse,
           },
         },
       },
@@ -50,7 +50,7 @@ export class V1PromptVersion extends OpenAPIRoute {
         description: "Project, prompt, or version not found",
         content: {
           "application/json": {
-            schema: ErrorResponse as any,
+            schema: ErrorResponse,
           },
         },
       },
@@ -58,20 +58,35 @@ export class V1PromptVersion extends OpenAPIRoute {
         description: "Internal server error",
         content: {
           "application/json": {
-            schema: ErrorResponse as any,
+            schema: ErrorResponse,
           },
         },
       },
     },
   };
 
-  async handle(c: Context) {
+  async handle(
+    c: Context,
+  ): Promise<
+    | Response
+    | {
+        version: number;
+        name: string;
+        slug: string;
+        body: unknown;
+        createdAt: string;
+      }
+  > {
     const db = drizzle(c.env.DB);
 
     try {
       const user = getUserFromContext(c);
       const data = await this.getValidatedData<typeof this.schema>();
-      const { projectSlugOrId, promptSlugOrId, versionId } = data.params as any;
+      const { projectSlugOrId, promptSlugOrId, versionId } = data.params as {
+        projectSlugOrId: string;
+        promptSlugOrId: string;
+        versionId: string;
+      };
 
       const parsedVersion = parseInt(versionId);
       if (isNaN(parsedVersion)) {
@@ -105,6 +120,10 @@ export class V1PromptVersion extends OpenAPIRoute {
         return Response.json({ error: "Prompt not found" }, { status: 404 });
       }
 
+      if (!prompt.isActive) {
+        return Response.json({ error: "Prompt is not active" }, { status: 400 });
+      }
+
       const promptVersion = await promptService.getPromptVersion(
         user.tenantId,
         project.id,
@@ -119,7 +138,7 @@ export class V1PromptVersion extends OpenAPIRoute {
       let parsedBody: unknown;
       try {
         parsedBody = JSON.parse(promptVersion.body);
-      } catch (error) {
+      } catch {
         return Response.json({ error: "Invalid prompt body format" }, { status: 500 });
       }
 

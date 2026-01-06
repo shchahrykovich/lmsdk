@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { env } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
+import { eq } from "drizzle-orm";
 import { projects, prompts, promptVersions } from "../../../../worker/db/schema";
 import { requestWithApiKey, setupApiKeyUser } from "./helpers";
 
@@ -111,5 +112,21 @@ describe("V1 Prompt Latest Version Routes", () => {
     expect(response.status).toBe(404);
     const data = await response.json();
     expect(data).toEqual({ error: "Prompt not found" });
+  });
+
+  it("should return 400 when prompt is not active", async () => {
+    const db = drizzle(env.DB);
+
+    // Deactivate the prompt
+    await db.update(prompts).set({ isActive: false }).where(eq(prompts.id, promptId));
+
+    const response = await requestWithApiKey(
+      `/api/v1/projects/${projectId}/prompts/${promptId}/versions/latest`,
+      testApiKey
+    );
+
+    expect(response.status).toBe(400);
+    const data = await response.json();
+    expect(data).toEqual({ error: "Prompt is not active" });
   });
 });

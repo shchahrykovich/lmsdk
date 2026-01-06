@@ -14,7 +14,7 @@ export class CFPromptExecutionLogger implements IPromptExecutionLogger {
     private outputData?: unknown;
     private resultData?: unknown;
     private responseData?: unknown;
-    private variablesData?: Record<string, any>;
+    private variablesData?: Record<string, unknown>;
     private pendingTasks: Promise<void>[] = [];
     private queueMessage?: ExecutionLogQueueMessage;
     private rawTraceId?: string;
@@ -189,7 +189,7 @@ export class CFPromptExecutionLogger implements IPromptExecutionLogger {
         projectId?: number;
         promptId?: number;
         version?: number;
-        variables: Record<string, any>;
+        variables: Record<string, unknown>;
     }): Promise<void> {
         // Just accumulate data - persistence happens in finish
         this.variablesData = params.variables;
@@ -203,71 +203,18 @@ export class CFPromptExecutionLogger implements IPromptExecutionLogger {
         version?: number;
         durationMs: number;
     }): Promise<void> {
-        const tenantId = params.tenantId ?? this.context?.tenantId;
-        const projectId = params.projectId ?? this.context?.projectId;
-        const promptId = params.promptId ?? this.context?.promptId;
-        const version = params.version ?? this.context?.version;
-
-        if (tenantId === undefined || projectId === undefined || promptId === undefined || version === undefined) {
-            return Promise.reject(new Error("Missing required context"));
+        let context: { tenantId: number; projectId: number; promptId: number; version: number };
+        try {
+            context = this.resolveContextParams(params, "Missing required context");
+        } catch (error) {
+            const reason = error instanceof Error ? error : new Error(String(error));
+            return Promise.reject(reason);
         }
-
-        const durationMs = params.durationMs;
-        const now = new Date();
-        const timestamp = now.toISOString();
-
-        // Add all persistence operations as a single task
-        const task = (async () => {
-            // Insert log record and get the ID
-            const [logRecord] = await this.db.insert(promptExecutionLogs).values({
-                tenantId,
-                projectId,
-                promptId,
-                version,
-                isSuccess: true,
-                durationMs,
-                rawTraceId: this.rawTraceId,
-                traceId: this.traceId,
-                createdAt: this.createdAt,
-            }).returning();
-
-            if (!logRecord) {
-                throw new Error("Failed to create log record");
-            }
-
-            // Generate R2 path for the log directory
-            const year = now.getUTCFullYear();
-            const month = String(now.getUTCMonth() + 1).padStart(2, '0');
-            const day = String(now.getUTCDate()).padStart(2, '0');
-            const currentDay = `${year}-${month}-${day}`;
-            const logPath = `logs/${tenantId}/${currentDay}/${projectId}/${promptId}/${version}/${logRecord.id}`;
-
-            // Update the log record with the R2 path
-            await this.db.update(promptExecutionLogs)
-                .set({logPath})
-                .where(eq(promptExecutionLogs.id, logRecord.id));
-
-            this.logRecord = {
-                tenantId,
-                projectId,
-                promptId,
-                version,
-                logId: logRecord.id,
-                logPath,
-                durationMs,
-                timestamp,
-                isSuccess: true,
-            };
-
-            // Prepare queue message for background processing
-            this.queueMessage = {
-                tenantId,
-                projectId,
-                promptId,
-                version,
-                logId: logRecord.id,
-            };
-        })();
+        const task = this.createLogTask({
+            ...context,
+            durationMs: params.durationMs,
+            isSuccess: true,
+        });
 
         this.pendingTasks.push(task);
         return Promise.resolve();
@@ -281,76 +228,129 @@ export class CFPromptExecutionLogger implements IPromptExecutionLogger {
         durationMs: number;
         errorMessage: string;
     }): Promise<void> {
-        const tenantId = params.tenantId ?? this.context?.tenantId;
-        const projectId = params.projectId ?? this.context?.projectId;
-        const promptId = params.promptId ?? this.context?.promptId;
-        const version = params.version ?? this.context?.version;
-
-        if (tenantId === undefined || projectId === undefined || promptId === undefined || version === undefined) {
-            return Promise.reject(new Error("Missing required context: tenantId, projectId, promptId, and version must be provided either via setContext() or params"));
+        let context: { tenantId: number; projectId: number; promptId: number; version: number };
+        try {
+            context = this.resolveContextParams(
+                params,
+                "Missing required context: tenantId, projectId, promptId, and version must be provided either via setContext() or params"
+            );
+        } catch (error) {
+            const reason = error instanceof Error ? error : new Error(String(error));
+            return Promise.reject(reason);
         }
-
-        const durationMs = params.durationMs;
-        const errorMessage = params.errorMessage;
-        const now = new Date();
-        const timestamp = now.toISOString();
-
-        // Add all persistence operations as a single task
-        const task = (async () => {
-            // Insert log record and get the ID
-            const [logRecord] = await this.db.insert(promptExecutionLogs).values({
-                tenantId,
-                projectId,
-                promptId,
-                version,
-                isSuccess: false,
-                errorMessage,
-                durationMs,
-                rawTraceId: this.rawTraceId,
-                traceId: this.traceId,
-                createdAt: this.createdAt,
-            }).returning();
-
-            if (!logRecord) {
-                throw new Error("Failed to create log record");
-            }
-
-            // Generate R2 path for the log directory
-            const year = now.getUTCFullYear();
-            const month = String(now.getUTCMonth() + 1).padStart(2, '0');
-            const day = String(now.getUTCDate()).padStart(2, '0');
-            const currentDay = `${year}-${month}-${day}`;
-            const logPath = `logs/${tenantId}/${currentDay}/${projectId}/${promptId}/${version}/${logRecord.id}`;
-
-            // Update the log record with the R2 path
-            await this.db.update(promptExecutionLogs)
-                .set({logPath})
-                .where(eq(promptExecutionLogs.id, logRecord.id));
-
-            this.logRecord = {
-                tenantId,
-                projectId,
-                promptId,
-                version,
-                logId: logRecord.id,
-                logPath,
-                durationMs,
-                timestamp,
-                isSuccess: false,
-                errorMessage,
-            };
-
-            // Prepare queue message for background processing
-            this.queueMessage = {
-                tenantId,
-                projectId,
-                promptId,
-                version,
-                logId: logRecord.id,
-            };
-        })();
+        const task = this.createLogTask({
+            ...context,
+            durationMs: params.durationMs,
+            isSuccess: false,
+            errorMessage: params.errorMessage,
+        });
 
         this.pendingTasks.push(task);
         return Promise.resolve();
+    }
+
+    private resolveContextParams(
+        params: {
+            tenantId?: number;
+            projectId?: number;
+            promptId?: number;
+            version?: number;
+        },
+        errorMessage: string
+    ) {
+        const resolved = {
+            tenantId: params.tenantId ?? this.context?.tenantId,
+            projectId: params.projectId ?? this.context?.projectId,
+            promptId: params.promptId ?? this.context?.promptId,
+            version: params.version ?? this.context?.version,
+        };
+
+        const missing = Object.values(resolved).some((value) => value === undefined);
+        if (missing) {
+            throw new Error(errorMessage);
+        }
+
+        return resolved as { tenantId: number; projectId: number; promptId: number; version: number };
+    }
+
+    private buildLogPath(params: {
+        tenantId: number;
+        projectId: number;
+        promptId: number;
+        version: number;
+        logId: number;
+        now: Date;
+    }): string {
+        const { tenantId, projectId, promptId, version, logId, now } = params;
+        const year = now.getUTCFullYear();
+        const month = String(now.getUTCMonth() + 1).padStart(2, "0");
+        const day = String(now.getUTCDate()).padStart(2, "0");
+        const currentDay = `${year}-${month}-${day}`;
+        return `logs/${tenantId}/${currentDay}/${projectId}/${promptId}/${version}/${logId}`;
+    }
+
+    private async createLogTask(params: {
+        tenantId: number;
+        projectId: number;
+        promptId: number;
+        version: number;
+        durationMs: number;
+        isSuccess: boolean;
+        errorMessage?: string;
+    }): Promise<void> {
+        const { tenantId, projectId, promptId, version, durationMs, isSuccess, errorMessage } = params;
+        const now = new Date();
+        const timestamp = now.toISOString();
+
+        const [logRecord] = await this.db.insert(promptExecutionLogs).values({
+            tenantId,
+            projectId,
+            promptId,
+            version,
+            isSuccess,
+            errorMessage,
+            durationMs,
+            rawTraceId: this.rawTraceId,
+            traceId: this.traceId,
+            createdAt: this.createdAt,
+        }).returning();
+
+        if (!logRecord) {
+            throw new Error("Failed to create log record");
+        }
+
+        const logPath = this.buildLogPath({
+            tenantId,
+            projectId,
+            promptId,
+            version,
+            logId: logRecord.id,
+            now,
+        });
+
+        await this.db.update(promptExecutionLogs)
+            .set({ logPath })
+            .where(eq(promptExecutionLogs.id, logRecord.id));
+
+        this.logRecord = {
+            tenantId,
+            projectId,
+            promptId,
+            version,
+            logId: logRecord.id,
+            logPath,
+            durationMs,
+            timestamp,
+            isSuccess,
+            errorMessage,
+        };
+
+        this.queueMessage = {
+            tenantId,
+            projectId,
+            promptId,
+            version,
+            logId: logRecord.id,
+        };
     }
 }

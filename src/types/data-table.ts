@@ -3,12 +3,12 @@ import type { DataTableConfig } from "@/config/data-table";
 import type { FilterItemSchema } from "@/lib/parsers";
 
 declare module "@tanstack/react-table" {
-  // biome-ignore lint/correctness/noUnusedVariables: TData is used in the TableMeta interface
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- TData is required for module augmentation.
   interface TableMeta<TData extends RowData> {
     queryKeys?: QueryKeys;
   }
 
-  // biome-ignore lint/correctness/noUnusedVariables: TData and TValue are used in the ColumnMeta interface
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- TData and TValue are required for module augmentation.
   interface ColumnMeta<TData extends RowData, TValue> {
     label?: string;
     placeholder?: string;
@@ -25,9 +25,10 @@ declare module "@tanstack/react-table" {
 export interface QueryKeys {
   page: string;
   perPage: string;
-  sort: string;
-  filters: string;
+  sortField: string;
+  sortDirection: string;
   joinOperator: string;
+  filters?: string; // Optional for backward compatibility with advanced filters
 }
 
 export interface Option {

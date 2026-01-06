@@ -1,3 +1,5 @@
+/* eslint-disable sonarjs/function-return-type */
+import type * as React from "react";
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -7,7 +9,25 @@ import { PromptConfigurationPanel } from "@/pages/prompt-detail/PromptConfigurat
 import { PromptTestingPanel } from "@/pages/prompt-detail/PromptTestingPanel";
 import { JsonSchemaDialog } from "@/pages/prompt-detail/JsonSchemaDialog";
 
-export default function PromptDetail() {
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const isReasoningEffort = (value: unknown): value is "low" | "medium" | "high" =>
+  value === "low" || value === "medium" || value === "high";
+
+const isReasoningSummary = (value: unknown): value is "auto" | "enabled" | "disabled" =>
+  value === "auto" || value === "enabled" || value === "disabled";
+
+const isThinkingLevel = (
+  value: unknown
+): value is "THINKING_LEVEL_UNSPECIFIED" | "LOW" | "MEDIUM" | "HIGH" | "MINIMAL" =>
+  value === "THINKING_LEVEL_UNSPECIFIED" ||
+  value === "LOW" ||
+  value === "MEDIUM" ||
+  value === "HIGH" ||
+  value === "MINIMAL";
+
+export default function PromptDetail(): React.ReactNode {
   const { slug: projectSlug, promptSlug } = useParams<{ slug: string; promptSlug: string }>();
   const navigate = useNavigate();
   const [prompt, setPrompt] = useState<Prompt | null>(null);
@@ -59,7 +79,7 @@ export default function PromptDetail() {
   const [routerVersion, setRouterVersion] = useState<number | null>(null);
 
   useEffect(() => {
-    fetchData();
+    void fetchData();
   }, [projectSlug, promptSlug]);
 
   // Reset model when provider changes if the current model is not available
@@ -78,13 +98,168 @@ export default function PromptDetail() {
 
   // Extract variables from messages
   const extractVariables = (text: string): string[] => {
-    const regex = /\{\{([^}]+)\}\}/g;
+    const regex = /\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g;
     const matches = text.matchAll(regex);
     const vars = new Set<string>();
     for (const match of matches) {
       vars.add(match[1].trim());
     }
     return Array.from(vars);
+  };
+
+  const applyMessages = (parsedBody: unknown) => {
+    if (!isRecord(parsedBody) || !Array.isArray(parsedBody.messages)) {
+      return;
+    }
+
+    const systemMsg = parsedBody.messages.find(
+      (message) => isRecord(message) && message.role === "system"
+    );
+    const userMsg = parsedBody.messages.find(
+      (message) => isRecord(message) && message.role === "user"
+    );
+
+    const systemContent =
+      systemMsg && isRecord(systemMsg) && typeof systemMsg.content === "string"
+        ? systemMsg.content
+        : "";
+    const userContent =
+      userMsg && isRecord(userMsg) && typeof userMsg.content === "string"
+        ? userMsg.content
+        : "";
+
+    setSystemMessage(systemContent);
+    setUserMessage(userContent);
+  };
+
+  const applyResponseFormat = (parsedBody: unknown) => {
+    if (!isRecord(parsedBody) || !isRecord(parsedBody.response_format)) {
+      setResponseType("text");
+      return;
+    }
+
+    const responseFormat = parsedBody.response_format;
+    if (responseFormat.type === "json_schema") {
+      setResponseType("json");
+      if (responseFormat.json_schema !== undefined) {
+        setJsonSchema(JSON.stringify(responseFormat.json_schema, null, 2));
+      }
+      return;
+    }
+
+    setResponseType("text");
+  };
+
+  const applyOpenAiSettings = (parsedBody: unknown) => {
+    if (!isRecord(parsedBody) || !isRecord(parsedBody.openai_settings)) {
+      return;
+    }
+
+    const openaiSettings = parsedBody.openai_settings;
+
+    if (isReasoningEffort(openaiSettings.reasoning_effort)) {
+      setReasoningEffort(openaiSettings.reasoning_effort);
+    }
+    if (isReasoningSummary(openaiSettings.reasoning_summary)) {
+      setReasoningSummary(openaiSettings.reasoning_summary);
+    }
+    if (typeof openaiSettings.store === "boolean") {
+      setStoreEnabled(openaiSettings.store);
+    }
+    if (typeof openaiSettings.include_encrypted_reasoning === "boolean") {
+      setIncludeEncryptedReasoning(openaiSettings.include_encrypted_reasoning);
+    }
+  };
+
+  const applyGoogleSettings = (parsedBody: unknown) => {
+    if (isRecord(parsedBody) && isRecord(parsedBody.google_settings)) {
+      const googleSettings = parsedBody.google_settings;
+
+      setIncludeThoughts(googleSettings.include_thoughts === true);
+      setThinkingBudget(
+        typeof googleSettings.thinking_budget === "number" ? googleSettings.thinking_budget : 0
+      );
+      setThinkingLevel(
+        isThinkingLevel(googleSettings.thinking_level)
+          ? googleSettings.thinking_level
+          : "THINKING_LEVEL_UNSPECIFIED"
+      );
+      setGoogleSearchEnabled(googleSettings.google_search_enabled === true);
+      setCacheSystemMessage(googleSettings.cache_system_message === true);
+      return;
+    }
+
+    setIncludeThoughts(false);
+    setThinkingBudget(0);
+    setThinkingLevel("THINKING_LEVEL_UNSPECIFIED");
+    setGoogleSearchEnabled(false);
+    setCacheSystemMessage(false);
+  };
+
+  const applyParsedBody = (parsedBody: unknown) => {
+    const proxyValue = isRecord(parsedBody) ? parsedBody.proxy : undefined;
+    setProxy(proxyValue === "cloudflare" ? "cloudflare" : "none");
+    applyMessages(parsedBody);
+    applyResponseFormat(parsedBody);
+    applyOpenAiSettings(parsedBody);
+    applyGoogleSettings(parsedBody);
+  };
+
+  const loadProviders = async () => {
+    const providersResponse = await fetch("/api/providers");
+    if (!providersResponse.ok) return;
+    const providersData = await providersResponse.json();
+    setProviders(providersData.providers ?? []);
+  };
+
+  const loadProject = async (): Promise<Project | null> => {
+    const projectsResponse = await fetch("/api/projects");
+    if (!projectsResponse.ok) {
+      throw new Error(`Failed to fetch projects: ${projectsResponse.statusText}`);
+    }
+    const projectsData = await projectsResponse.json();
+    const foundProject = projectsData.projects.find((p: Project) => p.slug === projectSlug);
+
+    if (!foundProject) {
+      setError("Project not found");
+      return null;
+    }
+
+    return foundProject;
+  };
+
+  const loadPrompt = async (projectId: number): Promise<Prompt | null> => {
+    const promptsResponse = await fetch(`/api/projects/${projectId}/prompts`);
+    if (!promptsResponse.ok) {
+      throw new Error(`Failed to fetch prompts: ${promptsResponse.statusText}`);
+    }
+    const promptsData = await promptsResponse.json();
+    const foundPrompt = promptsData.prompts.find((p: Prompt) => p.slug === promptSlug);
+
+    if (!foundPrompt) {
+      setError("Prompt not found");
+      return null;
+    }
+
+    return foundPrompt;
+  };
+
+  const loadVersionsAndRouter = async (projectId: number, promptId: number) => {
+    const versionsResponse = await fetch(
+      `/api/projects/${projectId}/prompts/${promptId}/versions`,
+    );
+    if (versionsResponse.ok) {
+      const versionsData = await versionsResponse.json();
+      setVersions(versionsData.versions ?? []);
+    }
+
+    const routerResponse = await fetch(
+      `/api/projects/${projectId}/prompts/${promptId}/router`,
+    );
+    if (routerResponse.ok) {
+      const routerData = await routerResponse.json();
+      setRouterVersion(routerData.routerVersion);
+    }
   };
 
   // Get all variables from system and user messages
@@ -100,7 +275,7 @@ export default function PromptDetail() {
     setVariables((prev) => {
       const newVars: Record<string, string> = {};
       allVars.forEach((varName) => {
-        newVars[varName] = prev[varName] || "";
+        newVars[varName] = prev[varName] ?? "";
       });
       return newVars;
     });
@@ -111,133 +286,33 @@ export default function PromptDetail() {
       setLoading(true);
       setError(null);
 
-      // Fetch providers
-      const providersResponse = await fetch("/api/providers");
-      if (providersResponse.ok) {
-        const providersData = await providersResponse.json();
-        setProviders(providersData.providers || []);
-      }
-
-      // Fetch project first
-      const projectsResponse = await fetch("/api/projects");
-      if (!projectsResponse.ok) {
-        throw new Error(`Failed to fetch projects: ${projectsResponse.statusText}`);
-      }
-      const projectsData = await projectsResponse.json();
-      const foundProject = projectsData.projects.find((p: Project) => p.slug === projectSlug);
-
+      await loadProviders();
+      const foundProject = await loadProject();
       if (!foundProject) {
-        setError("Project not found");
-        setLoading(false);
+        return;
+      }
+      setProject(foundProject);
+
+      const foundPrompt = await loadPrompt(foundProject.id);
+      if (!foundPrompt) {
         return;
       }
 
-      setProject(foundProject);
+      setPrompt(foundPrompt);
+      setProvider(foundPrompt.provider);
+      setModel(foundPrompt.model);
 
-      // Fetch prompts for this project
-      const promptsResponse = await fetch(`/api/projects/${foundProject.id}/prompts`);
-      if (!promptsResponse.ok) {
-        throw new Error(`Failed to fetch prompts: ${promptsResponse.statusText}`);
+      await loadVersionsAndRouter(foundProject.id, foundPrompt.id);
+
+      if (selectedVersion === null) {
+        setSelectedVersion(foundPrompt.latestVersion);
       }
-      const promptsData = await promptsResponse.json();
-      const foundPrompt = promptsData.prompts.find((p: Prompt) => p.slug === promptSlug);
 
-      if (!foundPrompt) {
-        setError("Prompt not found");
-      } else {
-        setPrompt(foundPrompt);
-        // Initialize editable fields
-        setProvider(foundPrompt.provider);
-        setModel(foundPrompt.model);
-
-        // Fetch all versions for this prompt
-        const versionsResponse = await fetch(`/api/projects/${foundProject.id}/prompts/${foundPrompt.id}/versions`);
-        if (versionsResponse.ok) {
-          const versionsData = await versionsResponse.json();
-          setVersions(versionsData.versions || []);
-        }
-
-        // Fetch the active router version
-        const routerResponse = await fetch(`/api/projects/${foundProject.id}/prompts/${foundPrompt.id}/router`);
-        if (routerResponse.ok) {
-          const routerData = await routerResponse.json();
-          setRouterVersion(routerData.routerVersion);
-        }
-
-        // Set selected version to latest if not already set
-        if (selectedVersion === null) {
-          setSelectedVersion(foundPrompt.latestVersion);
-        }
-
-        // Parse body to populate form fields
-        try {
-          const parsedBody = JSON.parse(foundPrompt.body);
-          // Load proxy setting
-          if (parsedBody.proxy) {
-            setProxy(parsedBody.proxy);
-          }
-          if (parsedBody.messages && Array.isArray(parsedBody.messages)) {
-            const systemMsg = parsedBody.messages.find((m: { role: string }) => m.role === "system");
-            const userMsg = parsedBody.messages.find((m: { role: string }) => m.role === "user");
-            if (systemMsg) setSystemMessage(systemMsg.content || "");
-            if (userMsg) setUserMessage(userMsg.content || "");
-          }
-          // Load response format
-          if (parsedBody.response_format) {
-            if (parsedBody.response_format.type === "json_schema") {
-              setResponseType("json");
-              if (parsedBody.response_format.json_schema) {
-                setJsonSchema(JSON.stringify(parsedBody.response_format.json_schema, null, 2));
-              }
-            } else {
-              setResponseType("text");
-            }
-          } else {
-            setResponseType("text");
-          }
-          // Load OpenAI-specific settings (only for openai provider)
-          if (parsedBody.openai_settings) {
-            if (parsedBody.openai_settings.reasoning_effort) {
-              setReasoningEffort(parsedBody.openai_settings.reasoning_effort);
-            }
-            if (parsedBody.openai_settings.reasoning_summary) {
-              setReasoningSummary(parsedBody.openai_settings.reasoning_summary);
-            }
-            if (parsedBody.openai_settings.store !== undefined) {
-              setStoreEnabled(parsedBody.openai_settings.store);
-            }
-            if (parsedBody.openai_settings.include_encrypted_reasoning !== undefined) {
-              setIncludeEncryptedReasoning(parsedBody.openai_settings.include_encrypted_reasoning);
-            }
-          }
-          // Load Google-specific settings (only for google provider)
-          if (parsedBody.google_settings) {
-            if (parsedBody.google_settings.include_thoughts !== undefined) {
-              setIncludeThoughts(parsedBody.google_settings.include_thoughts);
-            }
-            if (parsedBody.google_settings.thinking_budget !== undefined) {
-              setThinkingBudget(parsedBody.google_settings.thinking_budget);
-            }
-            if (parsedBody.google_settings.thinking_level) {
-              setThinkingLevel(parsedBody.google_settings.thinking_level);
-            }
-            if (parsedBody.google_settings.google_search_enabled !== undefined) {
-              setGoogleSearchEnabled(parsedBody.google_settings.google_search_enabled);
-            }
-            if (parsedBody.google_settings.cache_system_message !== undefined) {
-              setCacheSystemMessage(parsedBody.google_settings.cache_system_message);
-            }
-          } else {
-            // Set sensible defaults for Google settings if not present
-            setIncludeThoughts(false);
-            setThinkingBudget(0);
-            setThinkingLevel("THINKING_LEVEL_UNSPECIFIED");
-            setGoogleSearchEnabled(false);
-            setCacheSystemMessage(false);
-          }
-        } catch (err) {
-          console.error("Error parsing prompt body:", err);
-        }
+      try {
+        const parsedBody = JSON.parse(foundPrompt.body);
+        applyParsedBody(parsedBody);
+      } catch (err) {
+        console.error("Error parsing prompt body:", err);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load data");
@@ -267,55 +342,7 @@ export default function PromptDetail() {
       // Parse body to populate form fields
       try {
         const parsedBody = JSON.parse(versionData.body);
-        // Load proxy setting
-        if (parsedBody.proxy) {
-          setProxy(parsedBody.proxy);
-        } else {
-          setProxy("none");
-        }
-        if (parsedBody.messages && Array.isArray(parsedBody.messages)) {
-          const systemMsg = parsedBody.messages.find((m: { role: string }) => m.role === "system");
-          const userMsg = parsedBody.messages.find((m: { role: string }) => m.role === "user");
-          setSystemMessage(systemMsg?.content || "");
-          setUserMessage(userMsg?.content || "");
-        }
-
-        // Load response format
-        if (parsedBody.response_format) {
-          if (parsedBody.response_format.type === "json_schema") {
-            setResponseType("json");
-            if (parsedBody.response_format.json_schema) {
-              setJsonSchema(JSON.stringify(parsedBody.response_format.json_schema, null, 2));
-            }
-          } else {
-            setResponseType("text");
-          }
-        } else {
-          setResponseType("text");
-        }
-
-        // Load OpenAI-specific settings
-        if (parsedBody.openai_settings) {
-          setReasoningEffort(parsedBody.openai_settings.reasoning_effort || "medium");
-          setReasoningSummary(parsedBody.openai_settings.reasoning_summary || "auto");
-          setStoreEnabled(parsedBody.openai_settings.store ?? true);
-          setIncludeEncryptedReasoning(parsedBody.openai_settings.include_encrypted_reasoning ?? true);
-        }
-        // Load Google-specific settings
-        if (parsedBody.google_settings) {
-          setIncludeThoughts(parsedBody.google_settings.include_thoughts ?? false);
-          setThinkingBudget(parsedBody.google_settings.thinking_budget ?? 0);
-          setThinkingLevel(parsedBody.google_settings.thinking_level || "THINKING_LEVEL_UNSPECIFIED");
-          setGoogleSearchEnabled(parsedBody.google_settings.google_search_enabled ?? false);
-          setCacheSystemMessage(parsedBody.google_settings.cache_system_message ?? false);
-        } else {
-          // Set sensible defaults for Google settings if not present
-          setIncludeThoughts(false);
-          setThinkingBudget(0);
-          setThinkingLevel("THINKING_LEVEL_UNSPECIFIED");
-          setGoogleSearchEnabled(false);
-          setCacheSystemMessage(false);
-        }
+        applyParsedBody(parsedBody);
       } catch (err) {
         console.error("Error parsing version body:", err);
       }
@@ -354,62 +381,59 @@ export default function PromptDetail() {
   const handleSave = async () => {
     if (!prompt || !project) return;
 
-    // Validate required fields
-    if (!provider.trim()) {
-      setSaveError("Provider is required");
-      return;
-    }
-    if (!model.trim()) {
-      setSaveError("Model is required");
-      return;
-    }
-    if (!systemMessage.trim() && !userMessage.trim()) {
-      setSaveError("At least one message (system or user) is required");
-      return;
-    }
+    const getSaveValidationError = () => {
+      if (!provider.trim()) {
+        return "Provider is required";
+      }
+      if (!model.trim()) {
+        return "Model is required";
+      }
+      if (!systemMessage.trim() && !userMessage.trim()) {
+        return "At least one message (system or user) is required";
+      }
+      return null;
+    };
 
-    try {
-      setIsSaving(true);
-      setSaveError(null);
+    const buildPromptMessages = () => [
+      systemMessage.trim() && {
+        role: "system",
+        content: systemMessage.trim(),
+      },
+      userMessage.trim() && {
+        role: "user",
+        content: userMessage.trim(),
+      },
+    ].filter(Boolean);
 
-      // Construct body with all configuration
-      const promptBody: Record<string, unknown> = {
-        provider: provider.trim(),
-        model: model.trim(),
-        proxy: proxy,
-        messages: [
-          systemMessage.trim() && {
-            role: "system",
-            content: systemMessage.trim(),
-          },
-          userMessage.trim() && {
-            role: "user",
-            content: userMessage.trim(),
-          },
-        ].filter(Boolean),
-      };
-
-      // Add response format if JSON schema is selected
+    const buildResponseFormat = () => {
       if (responseType === "json" && jsonSchema.trim()) {
         try {
           const parsedSchema = JSON.parse(jsonSchema);
-          promptBody.response_format = {
-            type: "json_schema",
-            json_schema: parsedSchema,
-          };
-        } catch (err) {
-          setSaveError("Invalid JSON schema format");
-          return;
+          return { response_format: { type: "json_schema", json_schema: parsedSchema } };
+        } catch {
+          return { error: "Invalid JSON schema format" };
         }
-      } else {
-        promptBody.response_format = {
-          type: "text",
-        };
       }
 
-      // Add OpenAI-specific settings (only for openai provider)
+      return { response_format: { type: "text" } };
+    };
+
+    const buildPromptBody = () => {
+      const body: Record<string, unknown> = {
+        provider: provider.trim(),
+        model: model.trim(),
+        proxy,
+        messages: buildPromptMessages(),
+      };
+
+      const responseFormat = buildResponseFormat();
+      if ("error" in responseFormat) {
+        return { error: responseFormat.error };
+      }
+      body.response_format = responseFormat.response_format;
+
       if (provider === "openai") {
-        promptBody.openai_settings = {
+        body.openai_settings = {
           reasoning_effort: reasoningEffort,
           reasoning_summary: reasoningSummary,
           store: storeEnabled,
@@ -417,9 +441,8 @@ export default function PromptDetail() {
         };
       }
 
-      // Add Google-specific settings (only for google provider)
       if (provider === "google") {
-        promptBody.google_settings = {
+        body.google_settings = {
           include_thoughts: includeThoughts,
           thinking_budget: thinkingBudget,
           thinking_level: thinkingLevel,
@@ -427,6 +450,26 @@ export default function PromptDetail() {
           cache_system_message: cacheSystemMessage,
         };
       }
+
+      return { body };
+    };
+
+    const validationError = getSaveValidationError();
+    if (validationError) {
+      setSaveError(validationError);
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      setSaveError(null);
+
+      const promptBodyResult = buildPromptBody();
+      if ("error" in promptBodyResult) {
+        setSaveError(promptBodyResult.error ?? '');
+        return;
+      }
+      const promptBody = promptBodyResult.body;
 
       const response = await fetch(`/api/projects/${project.id}/prompts/${prompt.id}`, {
         method: "PUT",
@@ -442,7 +485,7 @@ export default function PromptDetail() {
 
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || `Failed to update prompt: ${response.statusText}`);
+        throw new Error(data.error ?? `Failed to update prompt: ${response.statusText}`);
       }
 
       const responseData = await response.json();
@@ -459,7 +502,7 @@ export default function PromptDetail() {
       const versionsResponse = await fetch(`/api/projects/${project.id}/prompts/${prompt.id}/versions`);
       if (versionsResponse.ok) {
         const versionsData = await versionsResponse.json();
-        setVersions(versionsData.versions || []);
+        setVersions(versionsData.versions ?? []);
       }
     } catch (err) {
       console.error("Error saving prompt:", err);
@@ -467,6 +510,18 @@ export default function PromptDetail() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleLoadVersion = (version: number) => {
+    void loadVersion(version);
+  };
+
+  const handleSetAsDefault = (version: number) => {
+    void setAsDefault(version);
+  };
+
+  const handlePromptSave = () => {
+    void handleSave();
   };
 
   if (loading) {
@@ -480,8 +535,8 @@ export default function PromptDetail() {
   if (error || !prompt || !project) {
     return (
       <div className="h-full flex flex-col items-center justify-center">
-        <div className="text-red-500 mb-4">{error || "Prompt not found"}</div>
-        <Button onClick={() => navigate("/projects")}>Back to Projects</Button>
+        <div className="text-red-500 mb-4">{error ?? "Prompt not found"}</div>
+        <Button onClick={() => { void navigate("/projects"); }}>Back to Projects</Button>
       </div>
     );
   }
@@ -494,8 +549,8 @@ export default function PromptDetail() {
         selectedVersion={selectedVersion}
         routerVersion={routerVersion}
         versions={versions}
-        loadVersion={loadVersion}
-        setAsDefault={setAsDefault}
+        loadVersion={handleLoadVersion}
+        setAsDefault={handleSetAsDefault}
         provider={provider}
         setProvider={setProvider}
         model={model}
@@ -504,8 +559,7 @@ export default function PromptDetail() {
         setProxy={setProxy}
         providers={providers}
         isSaving={isSaving}
-        handleSave={handleSave}
-        onBack={() => navigate(`/projects/${project.slug}/prompts`)}
+        handleSave={handlePromptSave}
       />
 
       {/* Content - Split Layout */}

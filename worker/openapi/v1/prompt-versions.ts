@@ -23,14 +23,14 @@ export class V1PromptVersions extends OpenAPIRoute {
           example: "my-prompt",
           description: "Prompt slug or numeric ID",
         }),
-      }) as any,
+      }),
     },
     responses: {
       "200": {
         description: "Prompt versions",
         content: {
           "application/json": {
-            schema: PromptVersionsResponse as any,
+            schema: PromptVersionsResponse,
           },
         },
       },
@@ -38,7 +38,7 @@ export class V1PromptVersions extends OpenAPIRoute {
         description: "Project or prompt not found",
         content: {
           "application/json": {
-            schema: ErrorResponse as any,
+            schema: ErrorResponse,
           },
         },
       },
@@ -46,20 +46,25 @@ export class V1PromptVersions extends OpenAPIRoute {
         description: "Internal server error",
         content: {
           "application/json": {
-            schema: ErrorResponse as any,
+            schema: ErrorResponse,
           },
         },
       },
     },
   };
 
-  async handle(c: Context) {
+  async handle(
+    c: Context,
+  ): Promise<Response | { version: number; createdAt: string }[]> {
     const db = drizzle(c.env.DB);
 
     try {
       const user = getUserFromContext(c);
       const data = await this.getValidatedData<typeof this.schema>();
-      const { projectSlugOrId, promptSlugOrId } = data.params as any;
+      const { projectSlugOrId, promptSlugOrId } = data.params as {
+        projectSlugOrId: string;
+        promptSlugOrId: string;
+      };
 
       const projectService = new ProjectService(db);
       const promptService = new PromptService(db);
@@ -86,6 +91,10 @@ export class V1PromptVersions extends OpenAPIRoute {
 
       if (!prompt) {
         return Response.json({ error: "Prompt not found" }, { status: 404 });
+      }
+
+      if (!prompt.isActive) {
+        return Response.json({ error: "Prompt is not active" }, { status: 400 });
       }
 
       const versions = await promptService.listPromptVersions(

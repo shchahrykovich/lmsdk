@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import type { HonoEnv } from "../routes/app";
 import type { AuthenticatedUser } from "./auth";
 import { user } from "../db/schema";
+import {type Auth} from "better-auth";
 
 /**
  * Middleware to require API key authentication
@@ -20,9 +21,10 @@ export const requireApiKey = createMiddleware<HonoEnv>(async (c, next) => {
     }
 
     // Get auth instance from context
-    const auth = c.get("auth");
+    const auth: Auth = c.get("auth");
 
     // Verify the API key
+		// @ts-expect-error no type
     const verifyResult = await auth.api.verifyApiKey({
       body: {
         key: apiKey,
