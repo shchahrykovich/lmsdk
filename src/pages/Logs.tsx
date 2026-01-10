@@ -7,27 +7,11 @@ import ProjectPageHeader from "@/components/ProjectPageHeader";
 import { DataTable } from "@/components/data-table/data-table";
 import { DataTableToolbar } from "@/components/data-table/data-table-toolbar";
 import { DataTableColumnHeader } from "@/components/data-table/data-table-column-header";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { AddLogsToDatasetDialog } from "@/components/AddLogsToDatasetDialog";
 import { useDataTable } from "@/hooks/use-data-table";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Clock, AlertCircle, CheckCircle2, Timer } from "lucide-react";
-import { Progress } from "@/components/ui/progress";
 import {
   applyDirectFilters,
   applySortParams,
@@ -68,11 +52,6 @@ interface LogsResponse {
   totalPages: number;
 }
 
-interface DataSet {
-  id: number;
-  name: string;
-}
-
 export default function Logs(): React.ReactNode {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
@@ -81,14 +60,9 @@ export default function Logs(): React.ReactNode {
   const [logsData, setLogsData] = useState<LogsResponse | null>(null);
   const [promptOptions, setPromptOptions] = useState<PromptOption[]>([]);
   const [variablePathOptions, setVariablePathOptions] = useState<string[]>([]);
-  const [datasets, setDatasets] = useState<DataSet[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [selectedDatasetId, setSelectedDatasetId] = useState("");
-  const [isAdding, setIsAdding] = useState(false);
-  const [addError, setAddError] = useState<string | null>(null);
-  const [addProgress, setAddProgress] = useState({ current: 0, total: 0 });
 
   useEffect(() => {
     void fetchProject();
@@ -99,7 +73,6 @@ export default function Logs(): React.ReactNode {
     if (project) {
       void fetchPromptOptions();
       void fetchVariablePathOptions();
-      void fetchDatasets();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project]);
@@ -165,22 +138,6 @@ export default function Logs(): React.ReactNode {
       setVariablePathOptions(data.variablePaths);
     } catch (err) {
       console.error("Error fetching variable path options:", err);
-    }
-  };
-
-  const fetchDatasets = async () => {
-    if (!project) return;
-
-    try {
-      const response = await fetch(`/api/projects/${project.id}/datasets`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch datasets: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      setDatasets(data.datasets ?? []);
-    } catch (err) {
-      console.error("Error fetching datasets:", err);
     }
   };
 
@@ -463,79 +420,7 @@ export default function Logs(): React.ReactNode {
   }, [table, promptOptions]);
 
   const selectedRowCount = table.getFilteredSelectedRowModel().rows.length;
-
-  const openAddDialog = () => {
-    setAddError(null);
-    if (!selectedDatasetId && datasets.length > 0) {
-      setSelectedDatasetId(String(datasets[0].id));
-    }
-    setIsAddDialogOpen(true);
-  };
-
-  const sendLogsToDataset = async (logIds: number[]): Promise<void> => {
-    if (!project || !selectedDatasetId) return;
-
-    const response = await fetch(
-      `/api/projects/${project.id}/datasets/${selectedDatasetId}/logs`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ logIds }),
-      },
-    );
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => null);
-      throw new Error(errorData?.error ?? "Failed to add logs to dataset");
-    }
-  };
-
-  const handleAddToDataset = async () => {
-    if (!project || !selectedDatasetId) return;
-
-    const logIds = table.getSelectedRowModel().rows.map((row) => row.original.id);
-    const BATCH_SIZE = 10;
-
-    try {
-      setIsAdding(true);
-      setAddError(null);
-      setAddProgress({ current: 0, total: logIds.length });
-
-      // If 10 or fewer logs, send in a single request
-      if (logIds.length <= BATCH_SIZE) {
-        await sendLogsToDataset(logIds);
-        setAddProgress({ current: logIds.length, total: logIds.length });
-      } else {
-        // Split into batches of 10 for larger selections
-        const batches = [];
-        for (let i = 0; i < logIds.length; i += BATCH_SIZE) {
-          batches.push(logIds.slice(i, i + BATCH_SIZE));
-        }
-
-        let processedCount = 0;
-        for (const batch of batches) {
-          await sendLogsToDataset(batch);
-          processedCount += batch.length;
-          setAddProgress({ current: processedCount, total: logIds.length });
-        }
-      }
-
-      table.resetRowSelection();
-      setIsAddDialogOpen(false);
-      setSelectedDatasetId("");
-      setAddProgress({ current: 0, total: 0 });
-    } catch (err) {
-      setAddError(err instanceof Error ? err.message : "Failed to add logs to dataset");
-    } finally {
-      setIsAdding(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!selectedDatasetId && datasets.length > 0) {
-      setSelectedDatasetId(String(datasets[0].id));
-    }
-  }, [datasets, selectedDatasetId]);
+  const selectedLogIds = table.getSelectedRowModel().rows.map((row) => row.original.id);
 
 
   if (loading && !logsData) {
@@ -602,7 +487,7 @@ export default function Logs(): React.ReactNode {
                       <span className="text-xs text-muted-foreground">
                         {selectedRowCount} selected
                       </span>
-                      <Button size="sm" onClick={openAddDialog}>
+                      <Button size="sm" onClick={() => setIsAddDialogOpen(true)}>
                         Add to dataset
                       </Button>
                     </div>
@@ -614,77 +499,15 @@ export default function Logs(): React.ReactNode {
         </div>
       </div>
 
-      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add logs to dataset</DialogTitle>
-            <DialogDescription>
-              Add {selectedRowCount} log{selectedRowCount === 1 ? "" : "s"} to a dataset.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="dataset-select">Dataset</Label>
-              <Select
-                value={selectedDatasetId}
-                onValueChange={setSelectedDatasetId}
-                disabled={datasets.length === 0 || isAdding}
-              >
-                <SelectTrigger id="dataset-select">
-                  <SelectValue
-                    placeholder={
-                      datasets.length === 0 ? "No datasets available" : "Select dataset"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {datasets.map((dataset) => (
-                    <SelectItem key={dataset.id} value={String(dataset.id)}>
-                      {dataset.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {isAdding && addProgress.total > 0 && (
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm text-muted-foreground">
-                  <span>Copying logs...</span>
-                  <span>{addProgress.current} / {addProgress.total}</span>
-                </div>
-                <Progress
-                  value={(addProgress.current / addProgress.total) * 100}
-                  className="w-full"
-                />
-              </div>
-            )}
-
-            {addError && <div className="text-sm text-red-500">{addError}</div>}
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setIsAddDialogOpen(false);
-                setAddError(null);
-                setAddProgress({ current: 0, total: 0 });
-              }}
-              disabled={isAdding}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={() => { void handleAddToDataset(); }}
-              disabled={!selectedDatasetId || isAdding}
-            >
-              {isAdding ? "Adding..." : "Add logs"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {project && (
+        <AddLogsToDatasetDialog
+          projectId={project.id}
+          logIds={selectedLogIds}
+          open={isAddDialogOpen}
+          onOpenChange={setIsAddDialogOpen}
+          onSuccess={() => table.resetRowSelection()}
+        />
+      )}
     </div>
   );
 }

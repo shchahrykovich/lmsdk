@@ -5,6 +5,7 @@ import { useParams } from "react-router-dom";
 import JsonView from "@uiw/react-json-view";
 import ProjectPageHeader from "@/components/ProjectPageHeader";
 import { Button } from "@/components/ui/button";
+import { ChevronsDownUp, ChevronsUpDown } from "lucide-react";
 
 interface Evaluation {
   id: number;
@@ -88,6 +89,8 @@ export default function EvaluationDetail(): React.ReactNode {
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [jsonCollapsed, setJsonCollapsed] = useState<boolean | number>(2);
+  const [isAllExpanded, setIsAllExpanded] = useState(false);
 
   useEffect(() => {
     void fetchData();
@@ -129,9 +132,31 @@ export default function EvaluationDetail(): React.ReactNode {
     }
   };
 
+  const sortObjectKeys = (obj: unknown): unknown => {
+    if (obj === null || obj === undefined) {
+      return obj;
+    }
+
+    if (Array.isArray(obj)) {
+      return obj.map(item => sortObjectKeys(item));
+    }
+
+    if (typeof obj === 'object') {
+      return Object.keys(obj)
+        .sort((a, b) => a.localeCompare(b))
+        .reduce((sorted, key) => {
+          sorted[key] = sortObjectKeys((obj as Record<string, unknown>)[key]);
+          return sorted;
+        }, {} as Record<string, unknown>);
+    }
+
+    return obj;
+  };
+
   const parseJSON = (jsonString: string) => {
     try {
-      return JSON.parse(jsonString);
+      const parsed = JSON.parse(jsonString);
+      return sortObjectKeys(parsed);
     } catch {
       return jsonString;
     }
@@ -146,9 +171,9 @@ export default function EvaluationDetail(): React.ReactNode {
       const parsed = JSON.parse(resultString);
       // If the result has a content field, extract it
       if (parsed && typeof parsed === "object" && "content" in parsed) {
-        return parsed.content;
+        return sortObjectKeys(parsed.content);
       }
-      return parsed;
+      return sortObjectKeys(parsed);
     } catch {
       return resultString;
     }
@@ -199,7 +224,31 @@ export default function EvaluationDetail(): React.ReactNode {
             </p>
           </div>
         ) : (
-          <div className="border border-border rounded-lg overflow-hidden">
+          <div className="space-y-4">
+            <div className="flex justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setIsAllExpanded(!isAllExpanded);
+                  setJsonCollapsed(isAllExpanded ? 1 : false);
+                }}
+                className="gap-2"
+              >
+                {isAllExpanded ? (
+                  <>
+                    <ChevronsUpDown className="h-4 w-4" />
+                    Collapse All
+                  </>
+                ) : (
+                  <>
+                    <ChevronsDownUp className="h-4 w-4" />
+                    Expand All
+                  </>
+                )}
+              </Button>
+            </div>
+            <div className="border border-border rounded-lg overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full table-fixed">
                 <thead className="bg-muted/50">
@@ -222,14 +271,14 @@ export default function EvaluationDetail(): React.ReactNode {
                 </thead>
                 <tbody className="bg-card divide-y divide-border">
                   {results.map((row) => {
-                    const variables = parseJSON(row.variables);
+                    const variables = parseJSON(row.variables) ?? {};
                     return (
                       <tr key={row.recordId} className="hover:bg-muted/30 transition-colors">
                         <td className="px-4 py-4 align-top">
                           <div className="overflow-hidden">
                             <JsonView
                               value={variables}
-                              collapsed={2}
+                              collapsed={jsonCollapsed}
                               style={{ fontSize: "0.75rem" }}
                               displayDataTypes={false}
                             />
@@ -264,8 +313,8 @@ export default function EvaluationDetail(): React.ReactNode {
                               <div className="overflow-hidden">
                                 {isJSON ? (
                                   <JsonView
-                                    value={typeof content === "string" ? parseJSON(content) : content}
-                                    collapsed={3}
+                                    value={(typeof content === "string" ? parseJSON(content) : content) ??  {}}
+                                    collapsed={jsonCollapsed}
                                     style={{ fontSize: "0.75rem" }}
                                     displayDataTypes={false}
                                   />
@@ -288,6 +337,7 @@ export default function EvaluationDetail(): React.ReactNode {
                   })}
                 </tbody>
               </table>
+            </div>
             </div>
           </div>
         )}

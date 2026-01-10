@@ -15,6 +15,7 @@ type DataSetSchema = {
 
 export interface CreateDataSetInput {
   name: string;
+  schema?: string;
 }
 
 export class DataSetService {
@@ -56,7 +57,7 @@ export class DataSetService {
       slug,
       isDeleted: false,
       countOfRecords: 0,
-      schema: "{}",
+      schema: input.schema ?? "{}",
     });
   }
 

@@ -175,4 +175,42 @@ evaluations.post("/:projectId/evaluations", async (c) => {
   }
 });
 
+/**
+ * DELETE /api/projects/:projectId/evaluations/:evaluationId
+ * Delete an evaluation
+ */
+evaluations.delete("/:projectId/evaluations/:evaluationId", async (c) => {
+  try {
+    const user = getUserFromContext(c);
+    const projectId = parseInt(c.req.param("projectId"));
+    const evaluationId = parseInt(c.req.param("evaluationId"));
+
+    if (isNaN(projectId)) {
+      return c.json({ error: "Invalid project ID" }, 400);
+    }
+
+    if (isNaN(evaluationId)) {
+      return c.json({ error: "Invalid evaluation ID" }, 400);
+    }
+
+    const evaluationService = new EvaluationService(c.env.DB);
+
+    await evaluationService.deleteEvaluation(
+      {
+        tenantId: user.tenantId,
+        projectId,
+      },
+      evaluationId
+    );
+
+    return c.json({ success: true }, 200);
+  } catch (error) {
+    if (error instanceof Error && error.message === "Evaluation not found") {
+      return c.json({ error: "Evaluation not found" }, 404);
+    }
+    console.error("Error deleting evaluation:", error);
+    return c.json({ error: "Failed to delete evaluation" }, 500);
+  }
+});
+
 export default evaluations;

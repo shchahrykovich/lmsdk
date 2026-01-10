@@ -230,6 +230,21 @@ export class EvaluationService {
     return evaluation;
   }
 
+  async deleteEvaluation(
+    context: TenantProjectContext,
+    evaluationId: number
+  ): Promise<void> {
+    const evaluation = await this.repository.delete({
+      tenantId: context.tenantId,
+      projectId: context.projectId,
+      evaluationId,
+    });
+
+    if (!evaluation) {
+      throw new Error("Evaluation not found");
+    }
+  }
+
   async getEvaluationDetails(
     context: TenantProjectContext,
     evaluationId: number

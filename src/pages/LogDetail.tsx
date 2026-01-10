@@ -5,6 +5,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import ProjectPageHeader from "@/components/ProjectPageHeader";
 import JsonSection from "@/components/JsonSection";
+import { AddLogsToDatasetDialog } from "@/components/AddLogsToDatasetDialog";
 
 interface Project {
   id: number;
@@ -44,6 +45,7 @@ export default function LogDetail(): React.ReactNode {
   const [files, setFiles] = useState<LogFiles | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
 
   useEffect(() => {
     void fetchData();
@@ -146,6 +148,14 @@ export default function LogDetail(): React.ReactNode {
             {log.isSuccess ? "Success" : "Error"}
           </span>
         }
+        actions={
+          <Button
+            size="sm"
+            onClick={() => setIsAddDialogOpen(true)}
+          >
+            Add to dataset
+          </Button>
+        }
       />
 
       <div className="flex-1 overflow-y-auto px-8 py-6">
@@ -173,6 +183,13 @@ export default function LogDetail(): React.ReactNode {
           <JsonSection title="Output" data={files?.output} collapsed={2} contextTitle={log.promptName ?? undefined} logId={log.id} />
         </div>
       </div>
+
+      <AddLogsToDatasetDialog
+        projectId={project.id}
+        logIds={[log.id]}
+        open={isAddDialogOpen}
+        onOpenChange={setIsAddDialogOpen}
+      />
     </div>
   );
 }

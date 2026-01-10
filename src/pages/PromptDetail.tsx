@@ -8,6 +8,7 @@ import { PromptHeader } from "@/pages/prompt-detail/PromptHeader";
 import { PromptConfigurationPanel } from "@/pages/prompt-detail/PromptConfigurationPanel";
 import { PromptTestingPanel } from "@/pages/prompt-detail/PromptTestingPanel";
 import { JsonSchemaDialog } from "@/pages/prompt-detail/JsonSchemaDialog";
+import CreateDatasetDialog from "@/components/CreateDatasetDialog";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -77,6 +78,9 @@ export default function PromptDetail(): React.ReactNode {
   const [versions, setVersions] = useState<PromptVersion[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
   const [routerVersion, setRouterVersion] = useState<number | null>(null);
+
+  // Dataset creation
+  const [isDatasetDialogOpen, setIsDatasetDialogOpen] = useState(false);
 
   useEffect(() => {
     void fetchData();
@@ -524,6 +528,26 @@ export default function PromptDetail(): React.ReactNode {
     void handleSave();
   };
 
+  const handleCreateDataset = () => {
+    setIsDatasetDialogOpen(true);
+  };
+
+  const handleDatasetCreated = (dataset: { id: number; name: string; slug: string }) => {
+    if (project && projectSlug) {
+      void navigate(`/projects/${projectSlug}/datasets/${dataset.slug}`);
+    }
+  };
+
+  // Get initial schema from prompt variables
+  const getInitialSchema = (): Record<string, { type: string }> => {
+    const allVars = getAllVariables();
+    const schema: Record<string, { type: string }> = {};
+    allVars.forEach((varName) => {
+      schema[varName] = { type: "string" };
+    });
+    return schema;
+  };
+
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -560,6 +584,7 @@ export default function PromptDetail(): React.ReactNode {
         providers={providers}
         isSaving={isSaving}
         handleSave={handlePromptSave}
+        onCreateDataset={handleCreateDataset}
       />
 
       {/* Content - Split Layout */}
@@ -634,6 +659,18 @@ export default function PromptDetail(): React.ReactNode {
         jsonSchema={jsonSchema}
         setJsonSchema={setJsonSchema}
       />
+
+      {/* Create Dataset Dialog */}
+      {project && prompt && (
+        <CreateDatasetDialog
+          open={isDatasetDialogOpen}
+          onOpenChange={setIsDatasetDialogOpen}
+          projectId={project.id}
+          onSuccess={handleDatasetCreated}
+          initialSchema={getInitialSchema()}
+          defaultName={`${prompt.name} v${selectedVersion ?? prompt.latestVersion} Dataset`}
+        />
+      )}
     </div>
   );
 }

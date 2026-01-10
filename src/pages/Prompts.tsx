@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Plus, Copy, Trash2, Pencil } from "lucide-react";
 import ProjectPageHeader from "@/components/ProjectPageHeader";
+import DeleteConfirmationDialog from "@/components/DeleteConfirmationDialog";
 
 interface Prompt {
   id: number;
@@ -53,7 +54,6 @@ export default function Prompts(): React.ReactNode {
   const [promptSlug, setPromptSlug] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [promptToDelete, setPromptToDelete] = useState<Prompt | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
@@ -215,7 +215,6 @@ export default function Prompts(): React.ReactNode {
   const openDeleteDialog = (prompt: Prompt, event: React.MouseEvent) => {
     event.stopPropagation();
     setPromptToDelete(prompt);
-    setIsDeleteDialogOpen(true);
   };
 
   const handleDeletePrompt = async () => {
@@ -234,7 +233,6 @@ export default function Prompts(): React.ReactNode {
         throw new Error(data.error ?? `Failed to delete prompt: ${response.statusText}`);
       }
 
-      setIsDeleteDialogOpen(false);
       setPromptToDelete(null);
 
       // Refresh the prompts list to remove the deleted prompt
@@ -524,44 +522,18 @@ export default function Prompts(): React.ReactNode {
       </Dialog>
 
       {/* Delete Prompt Confirmation Dialog */}
-      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete prompt</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete this prompt? This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          {promptToDelete && (
-            <div className="py-4">
-              <div className="rounded-md bg-muted p-3">
-                <p className="text-sm font-medium text-foreground">
-                  {promptToDelete.name}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {promptToDelete.provider} / {promptToDelete.model} • v{promptToDelete.latestVersion}
-                </p>
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsDeleteDialogOpen(false)}
-              disabled={isDeleting}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => { void handleDeletePrompt(); }}
-              disabled={isDeleting}
-            >
-              {isDeleting ? "Deleting..." : "Delete prompt"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteConfirmationDialog
+        open={!!promptToDelete}
+        onOpenChange={(open) => {
+          if (!open) setPromptToDelete(null);
+        }}
+        onConfirm={handleDeletePrompt}
+        title="Delete Prompt"
+        description="This action cannot be undone."
+        itemName={promptToDelete?.name}
+        isDeleting={isDeleting}
+        confirmLabel="Delete prompt"
+      />
 
       {/* Rename Prompt Dialog */}
       <Dialog open={isRenameDialogOpen} onOpenChange={setIsRenameDialogOpen}>

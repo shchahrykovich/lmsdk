@@ -241,6 +241,7 @@ export default function TraceDetail(): React.ReactNode {
         files={logFiles}
         loading={logLoading}
         projectSlug={slug}
+        projectId={project.id}
       />
     </div>
   );

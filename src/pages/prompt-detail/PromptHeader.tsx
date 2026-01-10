@@ -1,6 +1,6 @@
 /* eslint-disable sonarjs/function-return-type */
 import type * as React from "react";
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, MoreVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -35,6 +35,7 @@ type PromptHeaderProps = Readonly<{
   providers: Provider[];
   isSaving: boolean;
   handleSave: () => void;
+  onCreateDataset: () => void;
 }>;
 
 export function PromptHeader({
@@ -54,6 +55,7 @@ export function PromptHeader({
   providers,
   isSaving,
   handleSave,
+  onCreateDataset,
 }: PromptHeaderProps): React.ReactNode {
   return (
     <div className="border-b border-border bg-card shrink-0">
@@ -123,6 +125,19 @@ export function PromptHeader({
           </div>
 
           <div className="flex gap-3 shrink-0 items-end">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-9 w-9 p-0">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={onCreateDataset}>
+                  Create dataset
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             <div className="w-34">
               <Label htmlFor="provider" className="text-xs font-medium mb-1 block">
                 Provider <span className="text-red-500">*</span>

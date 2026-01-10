@@ -1,83 +1,17 @@
 /* eslint-disable sonarjs/function-return-type */
 import type * as React from "react";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { Clock, Timer, CheckCircle2, AlertCircle, ChevronRight, ChevronDown } from "lucide-react";
-
-interface LogEntry {
-  id: number;
-  tenantId: number;
-  projectId: number;
-  promptId: number;
-  version: number;
-  logPath: string | null;
-  isSuccess: boolean;
-  errorMessage: string | null;
-  durationMs: number | null;
-  createdAt: number | string;
-  traceId: string | null;
-  promptName: string | null;
-  promptSlug: string | null;
-}
-
-interface SpanData {
-  log: LogEntry;
-  startTime: number;
-  duration: number;
-  relativeStart: number;
-  relativeEnd: number;
-}
-
-interface GroupedSpans {
-  promptName: string;
-  promptId: number;
-  version: number;
-  spans: SpanData[];
-  totalDuration: number;
-  successCount: number;
-  errorCount: number;
-  minStartTime: number;
-  maxEndTime: number;
-  relativeStart: number;
-  relativeEnd: number;
-}
+import {formatDuration, formatTime, normalizeTimestamp, useTooltipPosition} from "./SpanWaterfall/tooltip-utils";
+import type {GroupedSpans, LogEntry, SpanData} from "@/components/SpanWaterfall/types.ts";
+import SingleSpanRow from "@/components/SpanWaterfall/SingleSpanRow.tsx";
+import TimelineMarkers from "@/components/SpanWaterfall/TimelineMarkers.tsx";
+import SpanRow from "@/components/SpanWaterfall/SpanRow.tsx";
 
 type SpanWaterfallProps = Readonly<{
   logs: LogEntry[];
   onSpanClick?: (log: LogEntry) => void;
 }>;
-
-const normalizeTimestamp = (value: string | number): number => {
-  if (typeof value === "number") {
-    return value < 1_000_000_000_000 ? value * 1000 : value;
-  }
-  return new Date(value).getTime();
-};
-
-const formatDuration = (ms: number) => {
-  if (ms < 1000) return `${ms.toFixed(0)}ms`;
-  return `${(ms / 1000).toFixed(2)}s`;
-};
-
-const formatTime = (timestamp: number) => {
-  return new Date(timestamp).toLocaleTimeString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    fractionalSecondDigits: 3,
-  });
-};
-
-function TimelineMarkers() {
-  return (
-    <>
-      <div className="absolute left-0 h-full border-l border-border/50" />
-      <div className="absolute h-full border-l border-border/30" style={{ left: "25%" }} />
-      <div className="absolute h-full border-l border-border/30" style={{ left: "50%" }} />
-      <div className="absolute h-full border-l border-border/30" style={{ left: "75%" }} />
-      <div className="absolute right-0 h-full border-r border-border/50" />
-    </>
-  );
-}
 
 type GroupHeaderRowProps = Readonly<{
   group: GroupedSpans;
@@ -110,9 +44,12 @@ function GroupCollapsedSummary({
   barClassName,
   isError,
 }: GroupCollapsedSummaryProps) {
+  const barRef = useRef<HTMLDivElement>(null);
+  const { tooltipPosition, handleMouseEnterWithTooltip } = useTooltipPosition();
+
   return (
     <div className="relative flex items-center gap-2">
-      <div className="relative h-8 bg-muted/30 rounded flex-1">
+      <div ref={barRef} className="relative h-8 bg-muted/30 rounded flex-1">
         <div className="absolute inset-0 flex items-center">
           <TimelineMarkers />
         </div>
@@ -130,7 +67,7 @@ function GroupCollapsedSummary({
               0.5
             )}%`,
           }}
-          onMouseEnter={() => onHoverGroup(groupKey)}
+          onMouseEnter={(e) => handleMouseEnterWithTooltip(e, () => onHoverGroup(groupKey), 180)}
           onMouseLeave={() => onHoverGroup(null)}
           onClick={(event) => {
             event.stopPropagation();
@@ -146,8 +83,10 @@ function GroupCollapsedSummary({
                 totalDuration > 0 ? (group.relativeStart / totalDuration) * 100 : 0,
                 70
               )}%`,
-              top: "100%",
-              marginTop: "8px",
+              ...(tooltipPosition === 'below'
+                ? { top: "100%", marginTop: "8px" }
+                : { bottom: "100%", marginBottom: "8px" }
+              ),
             }}
           >
             <div className="space-y-1.5">
@@ -273,239 +212,6 @@ function GroupHeaderRow({
       </div>
 
       {summary}
-    </div>
-  );
-}
-
-type SpanRowProps = Readonly<{
-  span: SpanData;
-  index: number;
-  spans: SpanData[];
-  totalDuration: number;
-  hoveredSpan: number | null;
-  onHoverSpan: (value: number | null) => void;
-  onSpanClick?: (log: LogEntry) => void;
-}>;
-
-function SpanRow({
-  span,
-  index,
-  spans,
-  totalDuration,
-  hoveredSpan,
-  onHoverSpan,
-  onSpanClick,
-}: SpanRowProps) {
-  const widthPercent = totalDuration > 0 ? (span.duration / totalDuration) * 100 : 0;
-  const leftPercent = totalDuration > 0 ? (span.relativeStart / totalDuration) * 100 : 0;
-  const spanGlobalIndex = spans.findIndex((s) => s.log.id === span.log.id);
-  const isHovered = hoveredSpan === spanGlobalIndex;
-  const isSuccess = span.log.isSuccess;
-  const StatusIcon = isSuccess ? CheckCircle2 : AlertCircle;
-  const statusClassName = isSuccess ? "text-emerald-600" : "text-red-600";
-  const barClassName = isSuccess
-    ? "bg-emerald-500 hover:bg-emerald-600"
-    : "bg-red-500 hover:bg-red-600";
-
-  return (
-    <div className="grid grid-cols-[250px_1fr] gap-4 items-center pl-6">
-      <div className="flex items-center gap-2 text-sm">
-        <div className="flex items-center gap-1.5 min-w-0 flex-1">
-          <StatusIcon className={`h-3.5 w-3.5 shrink-0 ${statusClassName}`} />
-          <span className="text-muted-foreground text-xs truncate">
-            Execution #{index + 1}
-          </span>
-        </div>
-      </div>
-
-      <div className="relative flex items-center gap-2">
-        <div className="relative h-6 bg-muted/30 rounded flex-1">
-          <div className="absolute inset-0 flex items-center">
-            <TimelineMarkers />
-          </div>
-
-          <div
-            className={`absolute h-full rounded transition-all cursor-pointer ${
-              barClassName
-            } ${isHovered ? "ring-2 ring-offset-1 ring-foreground" : ""}`}
-            style={{
-              left: `${leftPercent}%`,
-              width: `${Math.max(widthPercent, 0.5)}%`,
-            }}
-            onMouseEnter={() => onHoverSpan(spanGlobalIndex)}
-            onMouseLeave={() => onHoverSpan(null)}
-            onClick={(event) => {
-              event.stopPropagation();
-              onSpanClick?.(span.log);
-            }}
-          >
-            {widthPercent > 10 && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-xs font-medium text-white">
-                  {formatDuration(span.duration)}
-                </span>
-              </div>
-            )}
-          </div>
-
-          {isHovered && (
-            <div
-              className="absolute z-10 bg-popover border border-border rounded-lg shadow-lg p-3 text-sm whitespace-nowrap pointer-events-none"
-              style={{
-                left: `${Math.min(leftPercent, 70)}%`,
-                top: "100%",
-                marginTop: "8px",
-              }}
-            >
-              <div className="space-y-1.5">
-                <div className="font-semibold text-foreground">
-                  {span.log.promptName ?? `Prompt #${span.log.promptId}`}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  Version {span.log.version} · Log #{span.log.id}
-                </div>
-                <div className="flex items-center gap-2 text-muted-foreground mt-2">
-                  <Clock className="h-3.5 w-3.5" />
-                  <span>Start: {formatTime(span.startTime)}</span>
-                </div>
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Timer className="h-3.5 w-3.5" />
-                  <span>Duration: {formatDuration(span.duration)}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <StatusIcon className={`h-3.5 w-3.5 ${statusClassName}`} />
-                  <span className={statusClassName}>
-                    {isSuccess ? "Success" : "Error"}
-                  </span>
-                </div>
-                {!isSuccess && span.log.errorMessage && (
-                  <div className="mt-2 pt-2 border-t border-border">
-                    <div className="text-xs text-red-500 max-w-xs">
-                      {span.log.errorMessage}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-type SingleSpanRowProps = Readonly<{
-  span: SpanData;
-  spans: SpanData[];
-  totalDuration: number;
-  hoveredSpan: number | null;
-  onHoverSpan: (value: number | null) => void;
-  onSpanClick?: (log: LogEntry) => void;
-}>;
-
-function SingleSpanRow({
-  span,
-  spans,
-  totalDuration,
-  hoveredSpan,
-  onHoverSpan,
-  onSpanClick,
-}: SingleSpanRowProps) {
-  const widthPercent = totalDuration > 0 ? (span.duration / totalDuration) * 100 : 0;
-  const leftPercent = totalDuration > 0 ? (span.relativeStart / totalDuration) * 100 : 0;
-  const spanGlobalIndex = spans.findIndex((s) => s.log.id === span.log.id);
-  const isHovered = hoveredSpan === spanGlobalIndex;
-  const isSuccess = span.log.isSuccess;
-  const StatusIcon = isSuccess ? CheckCircle2 : AlertCircle;
-  const statusClassName = isSuccess ? "text-emerald-600" : "text-red-600";
-  const barClassName = isSuccess
-    ? "bg-emerald-500 hover:bg-emerald-600"
-    : "bg-red-500 hover:bg-red-600";
-
-  return (
-    <div className="grid grid-cols-[250px_1fr] gap-4 items-center">
-      <div className="flex items-center gap-2 text-sm">
-        <div className="flex items-center gap-1.5 min-w-0 flex-1">
-          <div className="w-4 shrink-0"></div>
-          <StatusIcon className={`h-4 w-4 shrink-0 ${statusClassName}`} />
-          <span className="font-medium text-foreground truncate">
-            {span.log.promptName ?? `Prompt #${span.log.promptId}`}
-          </span>
-          <span className="text-xs text-muted-foreground shrink-0">
-            v{span.log.version}
-          </span>
-        </div>
-      </div>
-
-      <div className="relative flex items-center gap-2">
-        <div className="relative h-8 bg-muted/30 rounded flex-1">
-          <div className="absolute inset-0 flex items-center">
-            <TimelineMarkers />
-          </div>
-
-          <div
-            className={`absolute h-full rounded transition-all cursor-pointer ${
-              barClassName
-            } ${isHovered ? "ring-2 ring-offset-1 ring-foreground" : ""}`}
-            style={{
-              left: `${leftPercent}%`,
-              width: `${Math.max(widthPercent, 0.5)}%`,
-            }}
-            onMouseEnter={() => onHoverSpan(spanGlobalIndex)}
-            onMouseLeave={() => onHoverSpan(null)}
-            onClick={() => onSpanClick?.(span.log)}
-          >
-            {widthPercent > 10 && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-xs font-medium text-white">
-                  {formatDuration(span.duration)}
-                </span>
-              </div>
-            )}
-          </div>
-
-          {isHovered && (
-            <div
-              className="absolute z-10 bg-popover border border-border rounded-lg shadow-lg p-3 text-sm whitespace-nowrap pointer-events-none"
-              style={{
-                left: `${Math.min(leftPercent, 70)}%`,
-                top: "100%",
-                marginTop: "8px",
-              }}
-            >
-              <div className="space-y-1.5">
-                <div className="font-semibold text-foreground">
-                  {span.log.promptName ?? `Prompt #${span.log.promptId}`}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  Version {span.log.version} · Log #{span.log.id}
-                </div>
-                <div className="flex items-center gap-2 text-muted-foreground mt-2">
-                  <Clock className="h-3.5 w-3.5" />
-                  <span>Start: {formatTime(span.startTime)}</span>
-                </div>
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Timer className="h-3.5 w-3.5" />
-                  <span>Duration: {formatDuration(span.duration)}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <StatusIcon className={`h-3.5 w-3.5 ${statusClassName}`} />
-                  <span className={statusClassName}>
-                    {isSuccess ? "Success" : "Error"}
-                  </span>
-                </div>
-                {!isSuccess && span.log.errorMessage && (
-                  <div className="mt-2 pt-2 border-t border-border">
-                    <div className="text-xs text-red-500 max-w-xs">
-                      {span.log.errorMessage}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
     </div>
   );
 }

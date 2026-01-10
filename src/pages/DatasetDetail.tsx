@@ -137,6 +137,7 @@ export default function DatasetDetail(): React.ReactNode {
   const [error, setError] = useState<string | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [recordToDelete, setRecordToDelete] = useState<DataSetRecord | null>(null);
 
   useEffect(() => {
     void fetchProject();
@@ -321,6 +322,28 @@ export default function DatasetDetail(): React.ReactNode {
         enableSorting: false,
         enableColumnFilter: false,
       })),
+      {
+        id: "actions",
+        header: () => <div className="text-right">Actions</div>,
+        cell: ({ row }) => (
+          <div className="flex items-center justify-end">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                setRecordToDelete(row.original);
+              }}
+              className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        ),
+        enableSorting: false,
+        enableHiding: false,
+        size: 80,
+      },
     ],
     [schemaColumns]
   );
@@ -394,6 +417,35 @@ export default function DatasetDetail(): React.ReactNode {
     }
   };
 
+  const handleDeleteSingleRecord = async () => {
+    if (!project || !dataset || !recordToDelete) return;
+
+    try {
+      setIsDeleting(true);
+
+      const response = await fetch(
+        `/api/projects/${project.id}/datasets/${dataset.id}/records`,
+        {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ recordIds: [recordToDelete.id] }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to delete record");
+      }
+
+      setRecordToDelete(null);
+      void fetchRecords(project.id, dataset.id);
+    } catch (err) {
+      console.error("Error deleting record:", err);
+      setError(err instanceof Error ? err.message : "Failed to delete record");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const selectedRowCount = table.getFilteredSelectedRowModel().rows.length;
 
   return (
@@ -451,6 +503,7 @@ export default function DatasetDetail(): React.ReactNode {
         </div>
       </div>
 
+      {/* Bulk delete dialog */}
       <ConfirmDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
@@ -458,6 +511,20 @@ export default function DatasetDetail(): React.ReactNode {
         description={`Are you sure you want to delete ${selectedRowCount} record${selectedRowCount === 1 ? "" : "s"}? This action cannot be undone.`}
         confirmText="Delete"
         onConfirm={() => { void handleDeleteRecords(); }}
+        loading={isDeleting}
+        variant="destructive"
+      />
+
+      {/* Single record delete dialog */}
+      <ConfirmDialog
+        open={!!recordToDelete}
+        onOpenChange={(open) => {
+          if (!open) setRecordToDelete(null);
+        }}
+        title="Delete record"
+        description="Are you sure you want to delete this record? This action cannot be undone."
+        confirmText="Delete"
+        onConfirm={() => { void handleDeleteSingleRecord(); }}
         loading={isDeleting}
         variant="destructive"
       />

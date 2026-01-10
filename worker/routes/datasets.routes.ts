@@ -50,7 +50,7 @@ datasets.post("/:projectId/datasets", async (c) => {
     }
 
     const body = await c.req.json();
-    const { name } = body;
+    const { name, schema } = body;
 
     if (!name || typeof name !== "string" || !name.trim()) {
       return c.json({ error: "Name is required" }, 400);
@@ -65,6 +65,7 @@ datasets.post("/:projectId/datasets", async (c) => {
       },
       {
         name: name.trim(),
+        schema: typeof schema === "string" ? schema : undefined,
       }
     );
 

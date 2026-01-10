@@ -3,18 +3,10 @@ import type * as React from "react";
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Plus } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import ProjectPageHeader from "@/components/ProjectPageHeader";
+import DeleteConfirmationDialog from "@/components/DeleteConfirmationDialog";
+import CreateDatasetDialog from "@/components/CreateDatasetDialog";
 
 interface DataSet {
   id: number;
@@ -47,9 +39,8 @@ export default function Datasets(): React.ReactNode {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [datasetName, setDatasetName] = useState("");
-  const [isCreating, setIsCreating] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
+  const [datasetToDelete, setDatasetToDelete] = useState<DataSet | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     void fetchData();
@@ -91,34 +82,8 @@ export default function Datasets(): React.ReactNode {
     }
   };
 
-  const handleCreateDataset = async () => {
-    if (!datasetName.trim() || !project) return;
-
-    try {
-      setIsCreating(true);
-      setCreateError(null);
-
-      const response = await fetch(`/api/projects/${project.id}/datasets`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: datasetName }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error ?? "Failed to create dataset");
-      }
-
-      const data = await response.json();
-      setDatasets([...datasets, data.dataset ?? {}]);
-      setIsDialogOpen(false);
-      setDatasetName("");
-    } catch (error) {
-      console.error("Error creating dataset:", error);
-      setCreateError(error instanceof Error ? error.message : "Failed to create dataset");
-    } finally {
-      setIsCreating(false);
-    }
+  const handleDatasetCreated = () => {
+    void fetchData(); // Refresh the list
   };
 
   const formatDate = (timestamp: string | number) => {
@@ -127,9 +92,33 @@ export default function Datasets(): React.ReactNode {
   };
 
   const openCreateDialog = () => {
-    setDatasetName("");
-    setCreateError(null);
     setIsDialogOpen(true);
+  };
+
+  const handleDeleteDataset = async () => {
+    if (!datasetToDelete || !project) return;
+
+    try {
+      setIsDeleting(true);
+
+      const response = await fetch(
+        `/api/projects/${project.id}/datasets/${datasetToDelete.id}`,
+        { method: "DELETE" }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error ?? "Failed to delete dataset");
+      }
+
+      setDatasets(datasets.filter((d) => d.id !== datasetToDelete.id));
+      setDatasetToDelete(null);
+    } catch (error) {
+      console.error("Error deleting dataset:", error);
+      setError(error instanceof Error ? error.message : "Failed to delete dataset");
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   if (loading) {
@@ -194,6 +183,9 @@ export default function Datasets(): React.ReactNode {
                   <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     Updated
                   </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-card divide-y divide-border">
@@ -230,6 +222,19 @@ export default function Datasets(): React.ReactNode {
                         {formatDate(dataset.updatedAt)}
                       </div>
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDatasetToDelete(dataset);
+                        }}
+                        className="text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 size={16} />
+                      </Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -239,56 +244,27 @@ export default function Datasets(): React.ReactNode {
       </div>
 
       {/* Create Dataset Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Create New Dataset</DialogTitle>
-            <DialogDescription>
-              Create an empty dataset for prompt evaluation. You can add records later.
-            </DialogDescription>
-          </DialogHeader>
+      {project && (
+        <CreateDatasetDialog
+          open={isDialogOpen}
+          onOpenChange={setIsDialogOpen}
+          projectId={project.id}
+          onSuccess={handleDatasetCreated}
+        />
+      )}
 
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="dataset-name">Dataset Name</Label>
-              <Input
-                id="dataset-name"
-                placeholder="Enter dataset name"
-                value={datasetName}
-                onChange={(e) => setDatasetName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    void handleCreateDataset();
-                  }
-                }}
-              />
-            </div>
-
-            {createError && (
-              <div className="text-sm text-red-500">{createError}</div>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setIsDialogOpen(false);
-                setDatasetName("");
-                setCreateError(null);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={() => { void handleCreateDataset(); }}
-              disabled={!datasetName.trim() || isCreating}
-            >
-              {isCreating ? "Creating..." : "Create Dataset"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Delete Confirmation Dialog */}
+      <DeleteConfirmationDialog
+        open={!!datasetToDelete}
+        onOpenChange={(open) => {
+          if (!open) setDatasetToDelete(null);
+        }}
+        onConfirm={handleDeleteDataset}
+        title="Delete Dataset"
+        description="This action cannot be undone and will remove all records in this dataset."
+        itemName={datasetToDelete?.name}
+        isDeleting={isDeleting}
+      />
     </div>
   );
 }

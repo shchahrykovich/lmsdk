@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import ProjectPageHeader from "@/components/ProjectPageHeader";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
+import DeleteConfirmationDialog from "@/components/DeleteConfirmationDialog";
 
 interface Evaluation {
   id: number;
@@ -40,6 +41,8 @@ export default function Evaluations(): React.ReactNode {
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [evaluationToDelete, setEvaluationToDelete] = useState<Evaluation | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     void fetchData();
@@ -78,6 +81,34 @@ export default function Evaluations(): React.ReactNode {
       setError(error instanceof Error ? error.message : "An error occurred");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteEvaluation = async () => {
+    if (!evaluationToDelete || !project) return;
+
+    try {
+      setIsDeleting(true);
+
+      const response = await fetch(
+        `/api/projects/${project.id}/evaluations/${evaluationToDelete.id}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error ?? "Failed to delete evaluation");
+      }
+
+      setEvaluations(evaluations.filter((e) => e.id !== evaluationToDelete.id));
+      setEvaluationToDelete(null);
+    } catch (error) {
+      console.error("Error deleting evaluation:", error);
+      setError(error instanceof Error ? error.message : "Failed to delete evaluation");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -164,6 +195,9 @@ export default function Evaluations(): React.ReactNode {
                   <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     Updated
                   </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-card divide-y divide-border">
@@ -209,6 +243,19 @@ export default function Evaluations(): React.ReactNode {
                         {formatDate(evaluation.updatedAt)}
                       </div>
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEvaluationToDelete(evaluation);
+                        }}
+                        className="text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 size={16} />
+                      </Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -216,6 +263,19 @@ export default function Evaluations(): React.ReactNode {
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <DeleteConfirmationDialog
+        open={!!evaluationToDelete}
+        onOpenChange={(open) => {
+          if (!open) setEvaluationToDelete(null);
+        }}
+        onConfirm={handleDeleteEvaluation}
+        title="Delete Evaluation"
+        description="This action cannot be undone."
+        itemName={evaluationToDelete?.name}
+        isDeleting={isDeleting}
+      />
     </div>
   );
 }

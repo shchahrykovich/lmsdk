@@ -181,4 +181,22 @@ export class EvaluationRepository {
       .returning();
     return evaluation;
   }
+
+  async delete(params: {
+    tenantId: number;
+    projectId: number;
+    evaluationId: number;
+  }): Promise<Evaluation | undefined> {
+    const [evaluation] = await this.db
+      .delete(evaluations)
+      .where(
+        and(
+          eq(evaluations.tenantId, params.tenantId),
+          eq(evaluations.projectId, params.projectId),
+          eq(evaluations.id, params.evaluationId)
+        )
+      )
+      .returning();
+    return evaluation;
+  }
 }
