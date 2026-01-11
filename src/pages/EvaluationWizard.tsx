@@ -359,11 +359,21 @@ export default function EvaluationWizard(): React.ReactNode {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-medium text-foreground">Prompts</h2>
-              <Button variant="outline" size="sm" onClick={handleOpenDialog}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleOpenDialog}
+                disabled={selections.length >= 3}
+              >
                 <Plus size={16} />
                 Add prompt
               </Button>
             </div>
+            {selections.length >= 3 && (
+              <div className="text-xs text-muted-foreground">
+                Maximum of 3 prompts reached
+              </div>
+            )}
 
             <div className="space-y-3">
               {selections.length === 0 && (

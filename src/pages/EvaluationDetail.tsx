@@ -1,11 +1,10 @@
-/* eslint-disable sonarjs/function-return-type */
-import type * as React from "react";
-import { useState, useEffect } from "react";
+import {useState, useEffect, type JSX} from "react";
 import { useParams } from "react-router-dom";
-import JsonView from "@uiw/react-json-view";
 import ProjectPageHeader from "@/components/ProjectPageHeader";
 import { Button } from "@/components/ui/button";
-import { ChevronsDownUp, ChevronsUpDown } from "lucide-react";
+import { ChevronsDownUp, ChevronsUpDown, Maximize2 } from "lucide-react";
+import EvaluationFullScreenDialog from "@/components/EvaluationFullScreenDialog";
+import EvaluationResultsTable from "@/components/EvaluationResultsTable";
 
 interface Evaluation {
   id: number;
@@ -59,31 +58,7 @@ interface Project {
   updatedAt: string;
 }
 
-function TextContent({ text }: { readonly text: string }) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const MAX_LENGTH = 200;
-  const needsTruncation = text.length > MAX_LENGTH;
-
-  return (
-    <div className="text-sm text-foreground">
-      <div className="whitespace-pre-wrap break-words">
-        {isExpanded || !needsTruncation ? text : `${text.slice(0, MAX_LENGTH)}...`}
-      </div>
-      {needsTruncation && (
-        <Button
-          variant="link"
-          size="sm"
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="mt-1 h-auto p-0 text-xs"
-        >
-          {isExpanded ? "Show less" : "Read more"}
-        </Button>
-      )}
-    </div>
-  );
-}
-
-export default function EvaluationDetail(): React.ReactNode {
+export default function EvaluationDetail(): JSX.Element {
   const { slug, evaluationId } = useParams<{ slug: string; evaluationId: string }>();
   const [details, setDetails] = useState<EvaluationDetails | null>(null);
   const [project, setProject] = useState<Project | null>(null);
@@ -91,6 +66,8 @@ export default function EvaluationDetail(): React.ReactNode {
   const [error, setError] = useState<string | null>(null);
   const [jsonCollapsed, setJsonCollapsed] = useState<boolean | number>(2);
   const [isAllExpanded, setIsAllExpanded] = useState(false);
+  const [isFullScreenOpen, setIsFullScreenOpen] = useState(false);
+  const [currentRecordIndex, setCurrentRecordIndex] = useState(0);
 
   useEffect(() => {
     void fetchData();
@@ -132,63 +109,6 @@ export default function EvaluationDetail(): React.ReactNode {
     }
   };
 
-  const sortObjectKeys = (obj: unknown): unknown => {
-    if (obj === null || obj === undefined) {
-      return obj;
-    }
-
-    if (Array.isArray(obj)) {
-      return obj.map(item => sortObjectKeys(item));
-    }
-
-    if (typeof obj === 'object') {
-      return Object.keys(obj)
-        .sort((a, b) => a.localeCompare(b))
-        .reduce((sorted, key) => {
-          sorted[key] = sortObjectKeys((obj as Record<string, unknown>)[key]);
-          return sorted;
-        }, {} as Record<string, unknown>);
-    }
-
-    return obj;
-  };
-
-  const parseJSON = (jsonString: string) => {
-    try {
-      const parsed = JSON.parse(jsonString);
-      return sortObjectKeys(parsed);
-    } catch {
-      return jsonString;
-    }
-  };
-
-  const getOutputForPrompt = (outputs: ResultOutput[], promptId: number, versionId: number) => {
-    return outputs.find((o) => o.promptId === promptId && o.versionId === versionId);
-  };
-
-  const extractContent = (resultString: string) => {
-    try {
-      const parsed = JSON.parse(resultString);
-      // If the result has a content field, extract it
-      if (parsed && typeof parsed === "object" && "content" in parsed) {
-        return sortObjectKeys(parsed.content);
-      }
-      return sortObjectKeys(parsed);
-    } catch {
-      return resultString;
-    }
-  };
-
-  const isJSONResponse = (responseFormat: string | null): boolean => {
-    if (!responseFormat) return false;
-    try {
-      const format = JSON.parse(responseFormat);
-      return format.type === "json" || format.type === "json_schema";
-    } catch {
-      return false;
-    }
-  };
-
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -225,7 +145,19 @@ export default function EvaluationDetail(): React.ReactNode {
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setCurrentRecordIndex(0);
+                  setIsFullScreenOpen(true);
+                }}
+                className="gap-2"
+              >
+                <Maximize2 className="h-4 w-4" />
+                Full Screen
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -248,100 +180,23 @@ export default function EvaluationDetail(): React.ReactNode {
                 )}
               </Button>
             </div>
-            <div className="border border-border rounded-lg overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full table-fixed">
-                <thead className="bg-muted/50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider w-64">
-                      Input
-                    </th>
-                    {prompts.map((prompt) => (
-                      <th
-                        key={`${prompt.promptId}-${prompt.versionId}`}
-                        className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider"
-                      >
-                        {prompt.promptName}
-                        <div className="text-xs font-normal normal-case text-muted-foreground/70 mt-1">
-                          v{prompt.version}
-                        </div>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="bg-card divide-y divide-border">
-                  {results.map((row) => {
-                    const variables = parseJSON(row.variables) ?? {};
-                    return (
-                      <tr key={row.recordId} className="hover:bg-muted/30 transition-colors">
-                        <td className="px-4 py-4 align-top">
-                          <div className="overflow-hidden">
-                            <JsonView
-                              value={variables}
-                              collapsed={jsonCollapsed}
-                              style={{ fontSize: "0.75rem" }}
-                              displayDataTypes={false}
-                            />
-                          </div>
-                        </td>
-                        {prompts.map((prompt) => {
-                          const output = getOutputForPrompt(
-                            row.outputs,
-                            prompt.promptId,
-                            prompt.versionId
-                          );
-                          if (!output) {
-                            return (
-                              <td
-                                key={`${prompt.promptId}-${prompt.versionId}`}
-                                className="px-4 py-4 align-top"
-                              >
-                                <div className="text-sm text-muted-foreground">—</div>
-                              </td>
-                            );
-                          }
-
-                          // Extract content from the result
-                          const content = extractContent(output.result);
-                          const isJSON = isJSONResponse(prompt.responseFormat);
-
-                          return (
-                            <td
-                              key={`${prompt.promptId}-${prompt.versionId}`}
-                              className="px-4 py-4 align-top"
-                            >
-                              <div className="overflow-hidden">
-                                {isJSON ? (
-                                  <JsonView
-                                    value={(typeof content === "string" ? parseJSON(content) : content) ??  {}}
-                                    collapsed={jsonCollapsed}
-                                    style={{ fontSize: "0.75rem" }}
-                                    displayDataTypes={false}
-                                  />
-                                ) : (
-                                  <TextContent text={String(content)} />
-                                )}
-                                {output.durationMs !== null && (
-                                  <div className="text-xs text-muted-foreground mt-2">
-                                    {output.durationMs < 1000
-                                      ? `${output.durationMs} ms`
-                                      : `${(output.durationMs / 1000).toFixed(2)} s`}
-                                  </div>
-                                )}
-                              </div>
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            </div>
+            <EvaluationResultsTable
+              prompts={prompts}
+              results={results}
+              jsonCollapsed={jsonCollapsed}
+            />
           </div>
         )}
       </div>
+
+      <EvaluationFullScreenDialog
+        isOpen={isFullScreenOpen}
+        onOpenChange={setIsFullScreenOpen}
+        currentRecordIndex={currentRecordIndex}
+        setCurrentRecordIndex={setCurrentRecordIndex}
+        results={results}
+        prompts={prompts}
+      />
     </div>
   );
 }

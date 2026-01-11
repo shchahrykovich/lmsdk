@@ -1,5 +1,5 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
-import { EvaluationService } from "../services/evaluation.service";
+import { EvaluationService } from "../evaluations/evaluation.service";
 import { EvaluationPromptRepository } from "../repositories/evaluation-prompt.repository";
 import { EvaluationResultRepository } from "../repositories/evaluation-result.repository";
 import { DataSetRecordRepository } from "../repositories/dataset-record.repository";
@@ -8,8 +8,11 @@ import { ProviderService } from "../services/provider.service";
 import { NullPromptExecutionLogger } from "../providers/logger/null-prompt-execution-logger";
 import type { AIMessage, ResponseFormat } from "../providers/base-provider";
 import {drizzle} from "drizzle-orm/d1";
+import {EntityId} from "../shared/entity-id";
+import {ProjectId} from "../shared/project-id";
 
 export interface EvaluationWorkflowParams {
+  userId: string;
   tenantId: number;
   projectId: number;
   evaluationId: number;
@@ -41,13 +44,9 @@ export async function runEvaluationWorkflow(
   await step.do("start-evaluation", async () => {
     console.log("[EvaluationWorkflow] Step: start-evaluation");
     const evaluationService = new EvaluationService(deps.db);
-    await evaluationService.startEvaluation(
-      {
-        tenantId: payload.tenantId,
-        projectId: payload.projectId,
-      },
-      payload.evaluationId
-    );
+		const projectId = new ProjectId(payload.projectId, payload.tenantId, payload.userId);
+		const entityId = new EntityId(payload.evaluationId, projectId);
+    await evaluationService.startEvaluation(entityId);
     console.log("[EvaluationWorkflow] Evaluation started successfully");
   });
 
@@ -65,13 +64,11 @@ export async function runEvaluationWorkflow(
   // Get evaluation to retrieve datasetId
   const evaluation = await step.do("get-evaluation", async () => {
     console.log("[EvaluationWorkflow] Step: get-evaluation");
-    const { EvaluationRepository } = await import("../repositories/evaluation.repository");
+    const { EvaluationRepository } = await import("../evaluations/evaluation.repository");
     const evalRepo = new EvaluationRepository(deps.db);
-    const result = await evalRepo.findById({
-      tenantId: payload.tenantId,
-      projectId: payload.projectId,
-      evaluationId: payload.evaluationId,
-    });
+
+		const projectId = new ProjectId(payload.projectId, payload.tenantId, payload.userId);
+    const result = await evalRepo.findById(new EntityId(payload.evaluationId, projectId));
     console.log("[EvaluationWorkflow] Retrieved evaluation", {
       found: !!result,
       datasetId: result?.datasetId,
@@ -236,12 +233,10 @@ export async function runEvaluationWorkflow(
               fieldCount: Object.keys(outputSchema.fields).length,
             });
 
+						const projectId = new ProjectId(payload.projectId, payload.tenantId, payload.userId);
+						const entityId = new EntityId(payload.evaluationId, projectId);
             await evaluationService.updateOutputSchema(
-              {
-                tenantId: payload.tenantId,
-                projectId: payload.projectId,
-              },
-              payload.evaluationId,
+							entityId,
               JSON.stringify(outputSchema)
             );
 
@@ -268,12 +263,10 @@ export async function runEvaluationWorkflow(
       durationSeconds: (durationMs / 1000).toFixed(2),
     });
 
+		const projectId = new ProjectId(payload.projectId, payload.tenantId, payload.userId);
+		const entityId = new EntityId(payload.evaluationId, projectId);
     await evaluationService.finishEvaluation(
-      {
-        tenantId: payload.tenantId,
-        projectId: payload.projectId,
-      },
-      payload.evaluationId,
+			entityId,
       durationMs
     );
 

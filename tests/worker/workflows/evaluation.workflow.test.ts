@@ -11,7 +11,7 @@ const getPromptVersionByIdMock = vi.fn();
 const executePromptMock = vi.fn();
 const findEvaluationByIdMock = vi.fn();
 
-vi.mock("../../../worker/services/evaluation.service", () => ({
+vi.mock("../../../worker/evaluations/evaluation.service", () => ({
   EvaluationService: class {
     startEvaluation = startEvaluationMock;
     finishEvaluation = finishEvaluationMock;
@@ -19,7 +19,7 @@ vi.mock("../../../worker/services/evaluation.service", () => ({
   },
 }));
 
-vi.mock("../../../worker/repositories/evaluation.repository", () => ({
+vi.mock("../../../worker/evaluations/evaluation.repository", () => ({
   EvaluationRepository: class {
     findById = findEvaluationByIdMock;
   },
@@ -121,12 +121,18 @@ describe("EvaluationWorkflow", () => {
 
     expect(stepCalls).toEqual(["start-evaluation", "get-evaluation", "finish-evaluation"]);
     expect(startEvaluationMock).toHaveBeenCalledWith(
-      { tenantId: 1, projectId: 2 },
-      3
+      expect.objectContaining({
+        id: 3,
+        projectId: 2,
+        tenantId: 1,
+      })
     );
     expect(finishEvaluationMock).toHaveBeenCalledWith(
-      { tenantId: 1, projectId: 2 },
-      3,
+      expect.objectContaining({
+        id: 3,
+        projectId: 2,
+        tenantId: 1,
+      }),
       500
     );
 

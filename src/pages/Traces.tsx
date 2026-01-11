@@ -8,6 +8,7 @@ import { DataTable } from "@/components/data-table/data-table";
 import { DataTableToolbar } from "@/components/data-table/data-table-toolbar";
 import { DataTableColumnHeader } from "@/components/data-table/data-table-column-header";
 import { useDataTable } from "@/hooks/use-data-table";
+import { usePaginationParams } from "@/hooks/use-pagination-params";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Clock, AlertCircle, CheckCircle2, Timer, Network as NetworkIcon } from "lucide-react";
@@ -46,6 +47,7 @@ export default function Traces(): React.ReactNode {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const { buildApiParams } = usePaginationParams();
   const [project, setProject] = useState<Project | null>(null);
   const [tracesData, setTracesData] = useState<TracesResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -111,19 +113,11 @@ export default function Traces(): React.ReactNode {
       setLoading(true);
       setError(null);
 
-      // Build query string from URL params
+      const apiParams = buildApiParams();
+
+      // Apply sorting from URL params
       const params = new URLSearchParams(window.location.search);
-
-      // Map data table params to API params
-      const page = params.get("page") ?? "1";
-      const perPage = params.get("perPage") ?? "10";
       const sort = params.get("sort");
-
-      const apiParams = new URLSearchParams({
-        page,
-        pageSize: perPage,
-      });
-
       const sortParams = getSortParams(sort);
       if (sortParams) {
         apiParams.set("sortField", sortParams.field);

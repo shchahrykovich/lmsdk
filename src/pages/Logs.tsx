@@ -9,6 +9,7 @@ import { DataTableToolbar } from "@/components/data-table/data-table-toolbar";
 import { DataTableColumnHeader } from "@/components/data-table/data-table-column-header";
 import { AddLogsToDatasetDialog } from "@/components/AddLogsToDatasetDialog";
 import { useDataTable } from "@/hooks/use-data-table";
+import { usePaginationParams } from "@/hooks/use-pagination-params";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Clock, AlertCircle, CheckCircle2, Timer } from "lucide-react";
@@ -56,6 +57,7 @@ export default function Logs(): React.ReactNode {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const { buildApiParams } = usePaginationParams();
   const [project, setProject] = useState<Project | null>(null);
   const [logsData, setLogsData] = useState<LogsResponse | null>(null);
   const [promptOptions, setPromptOptions] = useState<PromptOption[]>([]);
@@ -148,17 +150,10 @@ export default function Logs(): React.ReactNode {
       setLoading(true);
       setError(null);
 
-      // Build query string from URL params
+      const apiParams = buildApiParams();
+
+      // Apply additional filters and sorting from URL params
       const params = new URLSearchParams(window.location.search);
-
-      const page = params.get("page") ?? "1";
-      const perPage = params.get("perPage") ?? "10";
-
-      const apiParams = new URLSearchParams({
-        page,
-        pageSize: perPage,
-      });
-
       applyDirectFilters(params, apiParams);
       applySortParams(params, apiParams);
 

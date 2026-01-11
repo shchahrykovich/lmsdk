@@ -8,11 +8,12 @@ import providersRouter from "./providers.routes";
 import logsRouter from "./logs.routes";
 import tracesRouter from "./traces.routes";
 import datasetsRouter from "./datasets.routes";
-import evaluationsRouter from "./evaluations.routes";
+import evaluationsRouter from "../evaluations/evaluations.routers";
 import usersRouter from "./users.routes";
 import authRouter from "./auth.routes";
 import type {AuthenticatedUser} from "../middleware/auth";
 import {requireApiKey} from "../middleware/apikey.middleware";
+import {errorHandler} from "../middleware/error-handler.middleware";
 import {V1Whoami} from "../openapi/v1/whoami";
 import {V1ExecutePrompt} from "../openapi/v1/execute-prompt";
 import {V1PromptVersions} from "../openapi/v1/prompt-versions";
@@ -32,6 +33,9 @@ export interface HonoEnv {
 export function createHonoApp(): Hono<HonoEnv> {
 
 	const app = new Hono<HonoEnv>();
+
+	// Global error handler - converts exceptions to HTTP responses
+	app.onError(errorHandler);
 
 	app.use("*", async (c, next) => {
 		const auth = createAuth(c.env);

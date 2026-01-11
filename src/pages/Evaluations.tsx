@@ -1,11 +1,13 @@
 /* eslint-disable sonarjs/function-return-type */
 import type * as React from "react";
 import { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import ProjectPageHeader from "@/components/ProjectPageHeader";
 import { Button } from "@/components/ui/button";
 import { Plus, Trash2 } from "lucide-react";
 import DeleteConfirmationDialog from "@/components/DeleteConfirmationDialog";
+import { usePaginationParams } from "@/hooks/use-pagination-params";
+import { Pagination } from "@/components/Pagination";
 
 interface Evaluation {
   id: number;
@@ -34,10 +36,20 @@ interface Project {
   updatedAt: string;
 }
 
+interface EvaluationsResponse {
+  evaluations: Evaluation[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
 export default function Evaluations(): React.ReactNode {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
+  const location = useLocation();
+  const { buildApiParams } = usePaginationParams();
+  const [evaluationsData, setEvaluationsData] = useState<EvaluationsResponse | null>(null);
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +58,7 @@ export default function Evaluations(): React.ReactNode {
 
   useEffect(() => {
     void fetchData();
-  }, [slug]);
+  }, [slug, location.search]);
 
   const fetchData = async () => {
     try {
@@ -68,14 +80,16 @@ export default function Evaluations(): React.ReactNode {
 
       setProject(foundProject);
 
+      const apiParams = buildApiParams();
+
       const evaluationsResponse = await fetch(
-        `/api/projects/${foundProject.id}/evaluations`
+        `/api/projects/${foundProject.id}/evaluations?${apiParams.toString()}`
       );
       if (!evaluationsResponse.ok) {
         throw new Error(`Failed to fetch evaluations: ${evaluationsResponse.statusText}`);
       }
-      const evaluationsData = await evaluationsResponse.json();
-      setEvaluations(evaluationsData.evaluations ?? []);
+      const data = await evaluationsResponse.json();
+      setEvaluationsData(data);
     } catch (error) {
       console.error("Error fetching evaluations:", error);
       setError(error instanceof Error ? error.message : "An error occurred");
@@ -102,8 +116,8 @@ export default function Evaluations(): React.ReactNode {
         throw new Error(errorData.error ?? "Failed to delete evaluation");
       }
 
-      setEvaluations(evaluations.filter((e) => e.id !== evaluationToDelete.id));
       setEvaluationToDelete(null);
+      void fetchData();
     } catch (error) {
       console.error("Error deleting evaluation:", error);
       setError(error instanceof Error ? error.message : "Failed to delete evaluation");
@@ -165,7 +179,7 @@ export default function Evaluations(): React.ReactNode {
       />
 
       <div className="flex-1 overflow-y-auto px-8 py-6">
-        {evaluations.length === 0 ? (
+        {!evaluationsData || evaluationsData.evaluations.length === 0 ? (
           <div className="rounded-lg border border-border bg-card p-6">
             <h2 className="text-lg font-semibold text-foreground">No evaluations yet</h2>
             <p className="text-sm text-muted-foreground mt-2">
@@ -173,35 +187,36 @@ export default function Evaluations(): React.ReactNode {
             </p>
           </div>
         ) : (
-          <div className="border border-border rounded-lg overflow-hidden">
-            <table className="w-full">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Dataset
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Prompts
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    State
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Duration
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Updated
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-card divide-y divide-border">
-                {evaluations.map((evaluation) => (
+          <div className="space-y-4">
+            <div className="border border-border rounded-lg overflow-hidden">
+              <table className="w-full">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Name
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Dataset
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Prompts
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      State
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Duration
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Updated
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-card divide-y divide-border">
+                  {evaluationsData.evaluations.map((evaluation) => (
                   <tr
                     key={evaluation.id}
                     className="hover:bg-muted/30 transition-colors cursor-pointer"
@@ -257,9 +272,16 @@ export default function Evaluations(): React.ReactNode {
                       </Button>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <Pagination
+              currentPage={evaluationsData.page}
+              totalPages={evaluationsData.totalPages}
+              pageSize={evaluationsData.pageSize}
+            />
           </div>
         )}
       </div>

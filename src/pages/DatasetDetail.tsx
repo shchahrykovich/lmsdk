@@ -9,6 +9,7 @@ import { DataTable } from "@/components/data-table/data-table";
 import { DataTableToolbar } from "@/components/data-table/data-table-toolbar";
 import { DataTableColumnHeader } from "@/components/data-table/data-table-column-header";
 import { useDataTable } from "@/hooks/use-data-table";
+import { usePaginationParams } from "@/hooks/use-pagination-params";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Clock, Trash2 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -130,6 +131,7 @@ export default function DatasetDetail(): React.ReactNode {
   const { slug, datasetSlug } = useParams<{ slug: string; datasetSlug: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const { buildApiParams } = usePaginationParams();
   const [project, setProject] = useState<Project | null>(null);
   const [dataset, setDataset] = useState<DataSet | null>(null);
   const [recordsData, setRecordsData] = useState<RecordsResponse | null>(null);
@@ -213,15 +215,7 @@ export default function DatasetDetail(): React.ReactNode {
       setLoading(true);
       setError(null);
 
-      // Build query string from URL params
-      const params = new URLSearchParams(window.location.search);
-      const page = params.get("page") ?? "1";
-      const perPage = params.get("perPage") ?? "10";
-
-      const apiParams = new URLSearchParams({
-        page,
-        pageSize: perPage,
-      });
+      const apiParams = buildApiParams();
 
       const response = await fetch(
         `/api/projects/${projectId}/datasets/${datasetId}/records?${apiParams.toString()}`
