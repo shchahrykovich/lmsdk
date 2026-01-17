@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { env } from "cloudflare:test";
-import { EvaluationRepository } from "../../../../../worker/evaluations/evaluation.repository";
+import { EvaluationRepository } from "../../../../../worker/evaluations/repositories/evaluation.repository";
 import { applyMigrations } from "../../../helpers/db-setup";
 import { ProjectId } from "../../../../../worker/shared/project-id";
 

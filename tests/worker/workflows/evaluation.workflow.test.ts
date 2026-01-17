@@ -19,25 +19,25 @@ vi.mock("../../../worker/evaluations/evaluation.service", () => ({
   },
 }));
 
-vi.mock("../../../worker/evaluations/evaluation.repository", () => ({
+vi.mock("../../../worker/evaluations/repositories/evaluation.repository", () => ({
   EvaluationRepository: class {
     findById = findEvaluationByIdMock;
   },
 }));
 
-vi.mock("../../../worker/repositories/evaluation-prompt.repository", () => ({
+vi.mock("../../../worker/evaluations/repositories/evaluation-prompt.repository", () => ({
   EvaluationPromptRepository: class {
     listByEvaluation = listPromptsMock;
   },
 }));
 
-vi.mock("../../../worker/repositories/dataset-record.repository", () => ({
+vi.mock("../../../worker/datasets/dataset-record.repository", () => ({
   DataSetRecordRepository: class {
     listBatchByDataSet = listRecordsMock;
   },
 }));
 
-vi.mock("../../../worker/repositories/evaluation-result.repository", () => ({
+vi.mock("../../../worker/evaluations/repositories/evaluation-result.repository", () => ({
   EvaluationResultRepository: class {
     create = createResultMock;
   },
@@ -57,6 +57,10 @@ vi.mock("../../../worker/services/provider.service", () => ({
 
 vi.mock("../../../worker/providers/logger/null-prompt-execution-logger", () => ({
   NullPromptExecutionLogger: class {},
+}));
+
+vi.mock("drizzle-orm/d1", () => ({
+  drizzle: vi.fn(() => ({})),
 }));
 
 describe("EvaluationWorkflow", () => {
@@ -101,6 +105,7 @@ describe("EvaluationWorkflow", () => {
 
     await runEvaluationWorkflow(
       {
+        userId: "user-1",
         tenantId: 1,
         projectId: 2,
         evaluationId: 3,
@@ -251,6 +256,7 @@ describe("EvaluationWorkflow", () => {
 
     await runEvaluationWorkflow(
       {
+        userId: "user-1",
         tenantId: 1,
         projectId: 2,
         evaluationId: 3,

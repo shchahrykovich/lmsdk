@@ -58,9 +58,9 @@ describe("EvaluationService - getEvaluationsPaginated", () => {
         durationMs: null,
         inputSchema: "{}",
         outputSchema: "{}",
-        createdAt: 0,
-        updatedAt: 0,
-      });
+        createdAt: new Date(),
+        updatedAt: new Date(),
+			} as Evaluation);
     }
 
     const result = await evaluationService.getEvaluationsPaginated(
@@ -90,9 +90,9 @@ describe("EvaluationService - getEvaluationsPaginated", () => {
         durationMs: null,
         inputSchema: "{}",
         outputSchema: "{}",
-        createdAt: 0,
-        updatedAt: 0,
-      });
+        createdAt: new Date(),
+        updatedAt: new Date(),
+			} as Evaluation);
     }
 
     // First page
@@ -144,9 +144,9 @@ describe("EvaluationService - getEvaluationsPaginated", () => {
       inputSchema: "{}",
       outputSchema: "{}",
       datasetId: 1,
-      createdAt: 0,
-      updatedAt: 0,
-    });
+      createdAt: new Date(),
+      updatedAt: new Date(),
+		} as Evaluation);
 
     // Create evaluation without dataset
     await insertEvaluation({
@@ -160,9 +160,9 @@ describe("EvaluationService - getEvaluationsPaginated", () => {
       durationMs: null,
       inputSchema: "{}",
       outputSchema: "{}",
-      createdAt: 0,
-      updatedAt: 0,
-    });
+      createdAt: new Date(),
+      updatedAt: new Date(),
+		} as Evaluation);
 
     const result = await evaluationService.getEvaluationsPaginated(
       mockProjectId(1, 1),
@@ -195,9 +195,9 @@ describe("EvaluationService - getEvaluationsPaginated", () => {
         durationMs: null,
         inputSchema: "{}",
         outputSchema: "{}",
-        createdAt: 0,
-        updatedAt: 0,
-      });
+        createdAt: new Date(),
+        updatedAt: new Date(),
+			} as Evaluation);
     }
 
     // Create evaluations for tenant 2
@@ -213,9 +213,9 @@ describe("EvaluationService - getEvaluationsPaginated", () => {
         durationMs: null,
         inputSchema: "{}",
         outputSchema: "{}",
-        createdAt: 0,
-        updatedAt: 0,
-      });
+        createdAt: new Date(),
+        updatedAt: new Date(),
+			} as Evaluation);
     }
 
     const tenant1Result = await evaluationService.getEvaluationsPaginated(
@@ -253,9 +253,9 @@ describe("EvaluationService - getEvaluationsPaginated", () => {
         durationMs: null,
         inputSchema: "{}",
         outputSchema: "{}",
-        createdAt: 0,
-        updatedAt: 0,
-      });
+        createdAt: new Date(),
+        updatedAt: new Date(),
+			} as Evaluation);
     }
 
     // Test pageSize 3: 10 items / 3 = 4 pages
@@ -303,9 +303,9 @@ describe("EvaluationService - getEvaluationsPaginated", () => {
       durationMs: null,
       inputSchema: "{}",
       outputSchema: "{}",
-      createdAt: 0,
-      updatedAt: 0,
-    });
+      createdAt: new Date(),
+      updatedAt: new Date(),
+		} as Evaluation);
 
     const result = await evaluationService.getEvaluationsPaginated(
       mockProjectId(999, 999),
@@ -330,9 +330,9 @@ describe("EvaluationService - getEvaluationsPaginated", () => {
       durationMs: null,
       inputSchema: "{}",
       outputSchema: "{}",
-      createdAt: 0,
-      updatedAt: 0,
-    });
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as Evaluation);
 
     const result = await evaluationService.getEvaluationsPaginated(
       mockProjectId(1, 1),

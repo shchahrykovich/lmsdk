@@ -1,8 +1,8 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { EvaluationService } from "../evaluations/evaluation.service";
-import { EvaluationPromptRepository } from "../repositories/evaluation-prompt.repository";
-import { EvaluationResultRepository } from "../repositories/evaluation-result.repository";
-import { DataSetRecordRepository } from "../repositories/dataset-record.repository";
+import { EvaluationPromptRepository } from "../evaluations/repositories/evaluation-prompt.repository";
+import { EvaluationResultRepository } from "../evaluations/repositories/evaluation-result.repository";
+import { DataSetRecordRepository } from "../datasets/dataset-record.repository";
 import { PromptService } from "../services/prompt.service";
 import { ProviderService } from "../services/provider.service";
 import { NullPromptExecutionLogger } from "../providers/logger/null-prompt-execution-logger";
@@ -41,6 +41,9 @@ export async function runEvaluationWorkflow(
     startedAtMs: payload.startedAtMs,
   });
 
+	const projectId = new ProjectId(payload.projectId, payload.tenantId, payload.userId);
+	const evaluationId = new EntityId(payload.evaluationId, projectId);
+
   await step.do("start-evaluation", async () => {
     console.log("[EvaluationWorkflow] Step: start-evaluation");
     const evaluationService = new EvaluationService(deps.db);
@@ -64,7 +67,7 @@ export async function runEvaluationWorkflow(
   // Get evaluation to retrieve datasetId
   const evaluation = await step.do("get-evaluation", async () => {
     console.log("[EvaluationWorkflow] Step: get-evaluation");
-    const { EvaluationRepository } = await import("../evaluations/evaluation.repository");
+    const { EvaluationRepository } = await import("../evaluations/repositories/evaluation.repository");
     const evalRepo = new EvaluationRepository(deps.db);
 
 		const projectId = new ProjectId(payload.projectId, payload.tenantId, payload.userId);
@@ -86,11 +89,7 @@ export async function runEvaluationWorkflow(
     throw new Error("Evaluation does not have a dataset assigned");
   }
 
-  const evaluationPrompts = await promptRepository.listByEvaluation({
-    tenantId: payload.tenantId,
-    projectId: payload.projectId,
-    evaluationId: payload.evaluationId,
-  });
+  const evaluationPrompts = await promptRepository.listByEvaluation(evaluationId);
 
   console.log("[EvaluationWorkflow] Retrieved evaluation prompts", {
     count: evaluationPrompts.length,
@@ -102,14 +101,14 @@ export async function runEvaluationWorkflow(
   let totalRecordsProcessed = 0;
   let totalExecutions = 0;
 
+  const datasetEntityId = new EntityId(evaluation.datasetId, projectId);
+
   while (true) {
-    const records = await recordRepository.listBatchByDataSet({
-      tenantId: payload.tenantId,
-      projectId: payload.projectId,
-      dataSetId: evaluation.datasetId,
-      limit: 10,
-      afterId: lastRecordId,
-    });
+    const records = await recordRepository.listBatchByDataSet(
+      datasetEntityId,
+      10,
+      lastRecordId
+    );
 
     console.log("[EvaluationWorkflow] Retrieved dataset records batch", {
       count: records.length,

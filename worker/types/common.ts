@@ -3,14 +3,6 @@ export interface TenantProjectContext {
   projectId: number;
 }
 
-export interface DataSetContext extends TenantProjectContext {
-  dataSetId: number;
-}
-
-export interface DataSetIdentity extends TenantProjectContext {
-  dataSetId: number;
-}
-
 export interface Pagination {
   page: number;
   pageSize: number;

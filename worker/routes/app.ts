@@ -7,7 +7,7 @@ import promptsRouter from "./prompts.routes";
 import providersRouter from "./providers.routes";
 import logsRouter from "./logs.routes";
 import tracesRouter from "./traces.routes";
-import datasetsRouter from "./datasets.routes";
+import datasetsRouter from "../datasets/datasets.routes";
 import evaluationsRouter from "../evaluations/evaluations.routers";
 import usersRouter from "./users.routes";
 import authRouter from "./auth.routes";

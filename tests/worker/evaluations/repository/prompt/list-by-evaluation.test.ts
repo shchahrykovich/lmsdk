@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { env } from "cloudflare:test";
-import { EvaluationPromptRepository } from "../../../../../worker/repositories/evaluation-prompt.repository";
-import { EvaluationRepository } from "../../../../../worker/evaluations/evaluation.repository";
+import { EvaluationPromptRepository } from "../../../../../worker/evaluations/repositories/evaluation-prompt.repository";
+import { EvaluationRepository } from "../../../../../worker/evaluations/repositories/evaluation.repository";
 import { applyMigrations } from "../../../helpers/db-setup";
+import {EntityId} from "../../../../../worker/shared/entity-id";
+import {ProjectId} from "../../../../../worker/shared/project-id";
 
 describe("EvaluationPromptRepository - listByEvaluation", () => {
   let repository: EvaluationPromptRepository;
@@ -44,11 +46,9 @@ describe("EvaluationPromptRepository - listByEvaluation", () => {
       },
     ]);
 
-    const prompts = await repository.listByEvaluation({
-      tenantId: 1,
-      projectId: 1,
-      evaluationId: evaluation.id,
-    });
+		const projectId = new ProjectId(1, 1, 'userId')
+		const id = new EntityId(evaluation.id, projectId);
+    const prompts = await repository.listByEvaluation(id);
 
     expect(prompts).toHaveLength(2);
     expect(prompts[0]?.promptId).toBe(10);
@@ -96,11 +96,9 @@ describe("EvaluationPromptRepository - listByEvaluation", () => {
       },
     ]);
 
-    const prompts = await repository.listByEvaluation({
-      tenantId: 1,
-      projectId: 1,
-      evaluationId: evaluation.id,
-    });
+		const projectId = new ProjectId(1, 1, 'userId')
+		const id = new EntityId(evaluation.id, projectId);
+    const prompts = await repository.listByEvaluation(id);
 
     expect(prompts).toHaveLength(1);
     expect(prompts[0]?.promptId).toBe(12);

@@ -136,7 +136,7 @@ const formatDuration = (durationMs: number | null): string => {
               Record {currentRecordIndex + 1} of {results.length}.{" "}
               {prompts.map((p) => `${p.promptName} (v${p.version})`).join(" vs ")}
             </span>
-            <div className="flex gap-2">
+            <div className="flex gap-2 mr-20">
               <Button
                 variant="outline"
                 size="sm"

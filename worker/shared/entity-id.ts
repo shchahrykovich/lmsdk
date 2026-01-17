@@ -18,6 +18,10 @@ export class EntityId {
     this.userId = projectId.userId;
   }
 
+	public getProjectId(): ProjectId {
+		return new ProjectId(this.projectId, this.tenantId, this.userId);
+	}
+
   private static validate(id: number, paramName: string): void {
     if (isNaN(id) || !Number.isInteger(id) || id <= 0) {
       const entityName = paramName.replace(/Id$/i, "");

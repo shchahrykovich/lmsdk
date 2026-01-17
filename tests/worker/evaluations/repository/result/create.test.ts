@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { env } from "cloudflare:test";
-import { EvaluationResultRepository } from "../../../../../worker/repositories/evaluation-result.repository";
-import { EvaluationRepository } from "../../../../../worker/evaluations/evaluation.repository";
-import { DataSetRepository } from "../../../../../worker/repositories/dataset.repository";
-import { DataSetRecordRepository } from "../../../../../worker/repositories/dataset-record.repository";
+import { EvaluationResultRepository } from "../../../../../worker/evaluations/repositories/evaluation-result.repository";
+import { EvaluationRepository } from "../../../../../worker/evaluations/repositories/evaluation.repository";
+import { DataSetRepository } from "../../../../../worker/datasets/dataset.repository";
+import { DataSetRecordRepository } from "../../../../../worker/datasets/dataset-record.repository";
 import { PromptRepository } from "../../../../../worker/repositories/prompt.repository";
 import { applyMigrations } from "../../../helpers/db-setup";
 import { drizzle } from "drizzle-orm/d1";

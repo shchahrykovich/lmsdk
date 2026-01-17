@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { env } from "cloudflare:test";
-import { EvaluationPromptRepository } from "../../../../../worker/repositories/evaluation-prompt.repository";
-import { EvaluationRepository } from "../../../../../worker/evaluations/evaluation.repository";
+import { EvaluationPromptRepository } from "../../../../../worker/evaluations/repositories/evaluation-prompt.repository";
+import { EvaluationRepository } from "../../../../../worker/evaluations/repositories/evaluation.repository";
 import { applyMigrations } from "../../../helpers/db-setup";
 
 describe("EvaluationPromptRepository - createMany", () => {

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { env } from "cloudflare:test";
-import { EvaluationResultRepository } from "../../../../../worker/repositories/evaluation-result.repository";
+import { EvaluationResultRepository } from "../../../../../worker/evaluations/repositories/evaluation-result.repository";
 import { applyMigrations } from "../../../helpers/db-setup";
 
 describe("EvaluationResultRepository.findByEvaluation", () => {

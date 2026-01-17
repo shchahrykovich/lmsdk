@@ -52,7 +52,10 @@ export function generateDiffHtml(
     leftContent,
     rightContent,
     "",
-    ""
+    "",
+		{
+			context: Number.MAX_SAFE_INTEGER
+		}
   );
 
   return html(patch, {

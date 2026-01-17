@@ -18,6 +18,7 @@ import {
   Network,
   Database,
   FlaskConical,
+  Home,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -144,7 +145,9 @@ function SidebarSubItems({
     <div className="mt-1 space-y-1">
       {subItems.map((subItem) => {
         const SubIcon = subItem.icon;
-        const isSubActive = currentPath === subItem.path;
+        const isOverviewPage = subItem.name === "Overview";
+        const isSubActive = currentPath === subItem.path ||
+          (!isOverviewPage && currentPath.startsWith(subItem.path + '/'));
 
         return (
           <a
@@ -229,6 +232,11 @@ export default function AppLayout(): React.ReactNode {
 			// @ts-expect-error no type
       subItems: currentProjectSlug
         ? [
+            {
+              name: "Overview",
+              icon: Home,
+              path: `/projects/${currentProjectSlug}`,
+            },
             {
               name: "Prompts",
               icon: FileText,

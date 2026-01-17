@@ -1,12 +1,12 @@
 import { drizzle } from "drizzle-orm/d1";
 import type { Evaluation } from "../db/schema";
-import { EvaluationRepository } from "./evaluation.repository";
-import { EvaluationPromptRepository } from "../repositories/evaluation-prompt.repository";
-import { EvaluationResultRepository } from "../repositories/evaluation-result.repository";
-import { DataSetRecordRepository } from "../repositories/dataset-record.repository";
-import { DataSetRepository } from "../repositories/dataset.repository";
+import { EvaluationRepository } from "./repositories/evaluation.repository";
+import { EvaluationPromptRepository } from "./repositories/evaluation-prompt.repository";
+import { EvaluationResultRepository } from "./repositories/evaluation-result.repository";
+import { DataSetRecordRepository } from "../datasets/dataset-record.repository";
+import { DataSetRepository } from "../datasets/dataset.repository";
 import { PromptRepository } from "../repositories/prompt.repository";
-import type { EntityId } from "../shared/entity-id";
+import { EntityId } from "../shared/entity-id";
 import type { ProjectId } from "../shared/project-id";
 
 export interface CreateEvaluationPromptInput {
@@ -54,20 +54,14 @@ export class EvaluationService {
         // Fetch dataset name
         let datasetName: string | null = null;
         if (evaluation.datasetId) {
-          const dataset = await this.datasetRepository.findById({
-            tenantId: projectId.tenantId,
-            projectId: projectId.id,
-            dataSetId: evaluation.datasetId,
-          });
+					const dataSetEntityId = new EntityId(evaluation.datasetId, projectId);
+          const dataset = await this.datasetRepository.findById(dataSetEntityId);
           datasetName = dataset?.name ?? null;
         }
 
         // Fetch prompts
-        const evaluationPrompts = await this.promptRepository.listByEvaluation({
-          tenantId: projectId.tenantId,
-          projectId: projectId.id,
-          evaluationId: evaluation.id,
-        });
+				const evaluationId = new EntityId(evaluation.id, projectId);
+        const evaluationPrompts = await this.promptRepository.listByEvaluation(evaluationId);
 
         const prompts = await Promise.all(
           evaluationPrompts.map(async (ep) => {
@@ -126,20 +120,14 @@ export class EvaluationService {
         // Fetch dataset name
         let datasetName: string | null = null;
         if (evaluation.datasetId) {
-          const dataset = await this.datasetRepository.findById({
-            tenantId: projectId.tenantId,
-            projectId: projectId.id,
-            dataSetId: evaluation.datasetId,
-          });
+					const dataSetEntityId = new EntityId(evaluation.datasetId, projectId);
+          const dataset = await this.datasetRepository.findById(dataSetEntityId);
           datasetName = dataset?.name ?? null;
         }
 
         // Fetch prompts
-        const evaluationPrompts = await this.promptRepository.listByEvaluation({
-          tenantId: projectId.tenantId,
-          projectId: projectId.id,
-          evaluationId: evaluation.id,
-        });
+				const evaluationId = new EntityId(evaluation.id, projectId);
+        const evaluationPrompts = await this.promptRepository.listByEvaluation(evaluationId);
 
         const prompts = await Promise.all(
           evaluationPrompts.map(async (ep) => {
@@ -301,11 +289,7 @@ export class EvaluationService {
       return null;
     }
 
-    const evaluationPrompts = await this.promptRepository.listByEvaluation({
-      tenantId: entityId.tenantId,
-      projectId: entityId.projectId,
-      evaluationId: entityId.id,
-    });
+    const evaluationPrompts = await this.promptRepository.listByEvaluation(entityId);
 
     // Fetch prompt names and response formats for each evaluation prompt
     const prompts = await Promise.all(
@@ -376,11 +360,8 @@ export class EvaluationService {
     }[] = [];
 
     for (const recordId of recordIds) {
-      const record = await this.recordRepository.findById({
-        tenantId: entityId.tenantId,
-        projectId: entityId.projectId,
-        recordId,
-      });
+			const recordEntityId = new EntityId(recordId, entityId.getProjectId());
+      const record = await this.recordRepository.findById(recordEntityId);
 
       if (record) {
         recordsData.push({
