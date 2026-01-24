@@ -81,7 +81,7 @@ datasets.get("/:projectId/datasets/:datasetId/records", async (c) => {
 	const dataSetId = EntityId.parse(c, "datasetId");
 
 	// Parse pagination parameters
-	const pagination = Pagination.parse(c.req.query.bind(c.req));
+	const pagination = Pagination.parse(c);
 
 	const datasetService = new DataSetService(c.env.DB);
 

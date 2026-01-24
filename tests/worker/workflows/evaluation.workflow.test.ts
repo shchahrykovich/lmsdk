@@ -43,7 +43,7 @@ vi.mock("../../../worker/evaluations/repositories/evaluation-result.repository",
   },
 }));
 
-vi.mock("../../../worker/services/prompt.service", () => ({
+vi.mock("../../../worker/prompts/prompt.service", () => ({
   PromptService: class {
     getPromptVersionById = getPromptVersionByIdMock;
   },

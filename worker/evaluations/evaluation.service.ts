@@ -5,9 +5,9 @@ import { EvaluationPromptRepository } from "./repositories/evaluation-prompt.rep
 import { EvaluationResultRepository } from "./repositories/evaluation-result.repository";
 import { DataSetRecordRepository } from "../datasets/dataset-record.repository";
 import { DataSetRepository } from "../datasets/dataset.repository";
-import { PromptRepository } from "../repositories/prompt.repository";
+import { PromptRepository } from "../prompts/prompt.repository";
 import { EntityId } from "../shared/entity-id";
-import type { ProjectId } from "../shared/project-id";
+import { ProjectId } from "../shared/project-id";
 
 export interface CreateEvaluationPromptInput {
   promptId: number;
@@ -65,16 +65,9 @@ export class EvaluationService {
 
         const prompts = await Promise.all(
           evaluationPrompts.map(async (ep) => {
-            const prompt = await this.promptRepo.findPromptById(
-              projectId.tenantId,
-              projectId.id,
-              ep.promptId
-            );
-            const version = await this.promptRepo.findPromptVersionById(
-              projectId.tenantId,
-              projectId.id,
-              ep.versionId
-            );
+						const promptId = new EntityId(ep.promptId, projectId);
+            const prompt = await this.promptRepo.findPromptById(promptId);
+            const version = await this.promptRepo.findPromptVersionById(projectId, ep.versionId);
             return {
               promptId: ep.promptId,
               versionId: ep.versionId,
@@ -131,16 +124,9 @@ export class EvaluationService {
 
         const prompts = await Promise.all(
           evaluationPrompts.map(async (ep) => {
-            const prompt = await this.promptRepo.findPromptById(
-              projectId.tenantId,
-              projectId.id,
-              ep.promptId
-            );
-            const version = await this.promptRepo.findPromptVersionById(
-              projectId.tenantId,
-              projectId.id,
-              ep.versionId
-            );
+						const promptId = new EntityId(ep.promptId, projectId);
+            const prompt = await this.promptRepo.findPromptById(promptId);
+            const version = await this.promptRepo.findPromptVersionById(projectId, ep.versionId);
             return {
               promptId: ep.promptId,
               versionId: ep.versionId,
@@ -294,16 +280,10 @@ export class EvaluationService {
     // Fetch prompt names and response formats for each evaluation prompt
     const prompts = await Promise.all(
       evaluationPrompts.map(async (ep) => {
-        const prompt = await this.promptRepo.findPromptById(
-          entityId.tenantId,
-          entityId.projectId,
-          ep.promptId
-        );
-        const version = await this.promptRepo.findPromptVersionById(
-          entityId.tenantId,
-          entityId.projectId,
-          ep.versionId
-        );
+				const projectId = new ProjectId(entityId.projectId, entityId.tenantId, entityId.userId);
+				const promptId = new EntityId(ep.promptId, projectId);
+        const prompt = await this.promptRepo.findPromptById(promptId);
+        const version = await this.promptRepo.findPromptVersionById(projectId, ep.versionId);
 
         // Extract response_format from the version body
         let responseFormat: string | null = null;

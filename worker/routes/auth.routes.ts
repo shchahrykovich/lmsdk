@@ -1,6 +1,6 @@
 import {Hono} from "hono";
 import type {HonoEnv} from "./app";
-import {TenantService} from "../services/tenant.service";
+import {TenantService} from "../users/tenant.service";
 import {drizzle, DrizzleD1Database} from "drizzle-orm/d1";
 import * as schema from "../db/schema";
 

@@ -25,14 +25,9 @@ export class ProjectId {
     }
   }
 
-  /**
-   * Parse project ID from route parameter and extract user from context
-   * @param c - Hono context
-   * @throws {ClientInputValidationError} If parameter is invalid
-   */
-  static parse(c: Context<HonoEnv>): ProjectId {
+  static parse(c: Context<HonoEnv>, paramName = "projectId"): ProjectId {
     const user = getUserFromContext(c);
-    const idParam = c.req.param("projectId");
+    const idParam = c.req.param(paramName);
     const id = parseInt(idParam ?? "");
     this.validate(id);
     return new ProjectId(id, user.tenantId, user.id);

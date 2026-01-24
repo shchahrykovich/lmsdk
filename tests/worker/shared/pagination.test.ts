@@ -1,11 +1,17 @@
 import { describe, it, expect } from "vitest";
 import { Pagination } from "../../../worker/shared/pagination";
 import { ClientInputValidationError } from "../../../worker/shared/errors";
+import type {Context} from "hono";
+import type {HonoEnv} from "../../../worker/routes/app";
 
 describe("Pagination", () => {
   // Helper to create a mock query function
   const createQueryFn = (params: Record<string, string>) => {
-    return (key: string) => params[key];
+    return {
+			req: {
+				query: (key: string) => params[key]
+			}
+		} as Context<HonoEnv>;
   };
 
   describe("parse with default configuration", () => {
@@ -171,13 +177,18 @@ describe("Pagination", () => {
 
   describe("real-world scenarios", () => {
     it("works with Hono-style query function", () => {
-      // Simulate Hono's c.req.query behavior
-      const honoQuery = (key: string) => {
-        const params = new URLSearchParams("?page=5&pageSize=50");
-        return params.get(key) ?? undefined;
-      };
+			const createQueryFn = () => {
+				return {
+					req: {
+						query: (key: string) => {
+							const params = new URLSearchParams("?page=5&pageSize=50");
+							return params.get(key) ?? undefined;
+						}
+					}
+				} as Context<HonoEnv>;
+			};
 
-      const pagination = Pagination.parse(honoQuery);
+      const pagination = Pagination.parse(createQueryFn());
 
       expect(pagination.page).toBe(5);
       expect(pagination.size).toBe(50);

@@ -7,7 +7,7 @@ import { applyMigrations } from "../helpers/db-setup";
 const mockGetCountOfTenants = vi.fn();
 const mockCreateTenant = vi.fn();
 const mockRemoveTenant = vi.fn();
-vi.mock("../../../worker/services/tenant.service", () => ({
+vi.mock("../../../worker/users/tenant.service", () => ({
   TenantService: class {
     constructor() {}
     getCountOfTenants = mockGetCountOfTenants;

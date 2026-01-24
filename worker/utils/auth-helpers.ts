@@ -1,7 +1,7 @@
 import {createAuthMiddleware} from "better-auth/api";
 import type {DrizzleD1Database} from "drizzle-orm/d1";
-import {UserService} from "../services/user.service";
-import {TenantService} from "../services/tenant.service";
+import {UserService} from "../users/user.service";
+import {TenantService} from "../users/tenant.service";
 
 export function createPostSignUpHook(
     database: DrizzleD1Database,

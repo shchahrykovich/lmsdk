@@ -3,12 +3,14 @@ import { z } from "zod";
 import type { Context } from "hono";
 import { getUserFromContext } from "../../middleware/auth";
 import { drizzle } from "drizzle-orm/d1";
-import { ProjectService } from "../../services/project.service";
-import { PromptService } from "../../services/prompt.service";
+import { ProjectService } from "../../projects/project.service";
+import { PromptService } from "../../prompts/prompt.service";
 import { ProviderService } from "../../services/provider.service";
 import type { AIMessage, GoogleSettings, OpenAISettings, ResponseFormat } from "../../providers/base-provider";
 import { CFPromptExecutionLogger } from "../../providers/logger/c-f-prompt-execution-logger";
 import { ExecutePromptResponse, ErrorResponse } from "./schemas";
+import { ProjectId } from "../../shared/project-id";
+import { EntityId } from "../../shared/entity-id";
 
 type PromptBody = {
   messages?: AIMessage[];
@@ -65,43 +67,47 @@ const respondWithResult = async (
 const resolveProject = async (
   projectService: ProjectService,
   tenantId: number,
+  userId: string,
   projectSlugOrId: string
 ) => {
   const parsedProjectId = parseInt(projectSlugOrId);
   if (!Number.isNaN(parsedProjectId)) {
-    return projectService.getProjectById(tenantId, parsedProjectId);
+    const projectId = new ProjectId(parsedProjectId, tenantId, userId);
+    return projectService.getProjectById(projectId);
   }
   return projectService.getProjectBySlug(tenantId, projectSlugOrId);
 };
 
 const resolvePrompt = async (
   promptService: PromptService,
-  tenantId: number,
-  projectId: number,
+  projectId: ProjectId,
   promptSlugOrId: string
 ) => {
   const parsedPromptId = parseInt(promptSlugOrId);
   if (!Number.isNaN(parsedPromptId)) {
-    return promptService.getPromptById(tenantId, projectId, parsedPromptId);
+    const promptEntityId = new EntityId(parsedPromptId, projectId);
+    return promptService.getPromptById(promptEntityId);
   }
-  return promptService.getPromptBySlug(tenantId, projectId, promptSlugOrId);
+  return promptService.getPromptBySlug(projectId, promptSlugOrId);
 };
 
 const resolveExecutionContext = async (params: {
   projectService: ProjectService;
   promptService: PromptService;
   tenantId: number;
+  userId: string;
   projectSlugOrId: string;
   promptSlugOrId: string;
 }) => {
-  const { projectService, promptService, tenantId, projectSlugOrId, promptSlugOrId } = params;
-  const project = await resolveProject(projectService, tenantId, projectSlugOrId);
+  const { projectService, promptService, tenantId, userId, projectSlugOrId, promptSlugOrId } = params;
+  const project = await resolveProject(projectService, tenantId, userId, projectSlugOrId);
 
   if (!project) {
     return { error: Response.json({ error: "Project not found" }, { status: 404 }) };
   }
 
-  const prompt = await resolvePrompt(promptService, tenantId, project.id, promptSlugOrId);
+  const projectId = new ProjectId(project.id, tenantId, userId);
+  const prompt = await resolvePrompt(promptService, projectId, promptSlugOrId);
 
   if (!prompt) {
     return { error: Response.json({ error: "Prompt not found" }, { status: 404 }) };
@@ -111,11 +117,8 @@ const resolveExecutionContext = async (params: {
     return { error: Response.json({ error: "Prompt is not active" }, { status: 400 }) };
   }
 
-  const activeVersion = await promptService.getActivePromptVersion(
-    tenantId,
-    project.id,
-    prompt.id
-  );
+  const promptEntityId = new EntityId(prompt.id, projectId);
+  const activeVersion = await promptService.getActivePromptVersion(promptEntityId);
 
   if (!activeVersion) {
     return { error: Response.json({ error: "No active version found for prompt" }, { status: 404 }) };
@@ -214,6 +217,7 @@ export class V1ExecutePrompt extends OpenAPIRoute {
         projectService,
         promptService,
         tenantId: user.tenantId,
+        userId: user.id,
         projectSlugOrId,
         promptSlugOrId,
       });

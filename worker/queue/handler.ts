@@ -1,7 +1,7 @@
 import type { ExecutionLogQueueMessage } from "./messages";
 import { drizzle } from "drizzle-orm/d1";
 import { ExecutionLogProcessingService } from "../services/execution-log-processing.service";
-import { TraceExtractionService } from "../services/trace-extraction.service";
+import { TraceExtractionService } from "../traces/trace-extraction.service";
 import { eq, and } from "drizzle-orm";
 import { promptExecutionLogs } from "../db/schema";
 

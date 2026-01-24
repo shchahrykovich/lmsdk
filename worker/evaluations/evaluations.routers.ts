@@ -18,7 +18,7 @@ evaluations.use("/*", requireAuth);
  */
 evaluations.get("/:projectId/evaluations", async (c) => {
   const projectId = ProjectId.parse(c);
-	const pagination = Pagination.parse(c.req.query.bind(c.req));
+	const pagination = Pagination.parse(c);
 
   const evaluationService = new EvaluationService(c.env.DB);
   const result = await evaluationService.getEvaluationsPaginated(

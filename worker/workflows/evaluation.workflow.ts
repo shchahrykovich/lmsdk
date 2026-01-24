@@ -3,7 +3,7 @@ import { EvaluationService } from "../evaluations/evaluation.service";
 import { EvaluationPromptRepository } from "../evaluations/repositories/evaluation-prompt.repository";
 import { EvaluationResultRepository } from "../evaluations/repositories/evaluation-result.repository";
 import { DataSetRecordRepository } from "../datasets/dataset-record.repository";
-import { PromptService } from "../services/prompt.service";
+import { PromptService } from "../prompts/prompt.service";
 import { ProviderService } from "../services/provider.service";
 import { NullPromptExecutionLogger } from "../providers/logger/null-prompt-execution-logger";
 import type { AIMessage, ResponseFormat } from "../providers/base-provider";
@@ -148,8 +148,7 @@ export async function runEvaluationWorkflow(
             });
 
             const version = await promptService.getPromptVersionById(
-              payload.tenantId,
-              payload.projectId,
+							projectId,
               evaluationPrompt.versionId
             );
 
@@ -232,7 +231,6 @@ export async function runEvaluationWorkflow(
               fieldCount: Object.keys(outputSchema.fields).length,
             });
 
-						const projectId = new ProjectId(payload.projectId, payload.tenantId, payload.userId);
 						const entityId = new EntityId(payload.evaluationId, projectId);
             await evaluationService.updateOutputSchema(
 							entityId,

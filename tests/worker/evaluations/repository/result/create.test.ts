@@ -4,7 +4,7 @@ import { EvaluationResultRepository } from "../../../../../worker/evaluations/re
 import { EvaluationRepository } from "../../../../../worker/evaluations/repositories/evaluation.repository";
 import { DataSetRepository } from "../../../../../worker/datasets/dataset.repository";
 import { DataSetRecordRepository } from "../../../../../worker/datasets/dataset-record.repository";
-import { PromptRepository } from "../../../../../worker/repositories/prompt.repository";
+import { PromptRepository } from "../../../../../worker/prompts/prompt.repository";
 import { applyMigrations } from "../../../helpers/db-setup";
 import { drizzle } from "drizzle-orm/d1";
 

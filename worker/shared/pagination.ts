@@ -1,4 +1,6 @@
 import { ClientInputValidationError } from "./errors";
+import type {Context} from "hono";
+import type {HonoEnv} from "../routes/app";
 
 export interface PaginationConfig {
   defaultPage?: number;
@@ -31,14 +33,8 @@ export class Pagination {
     }
   }
 
-  /**
-   * Parse pagination from query parameters
-   * @param queryFn - Function to get query parameters (e.g., c.req.query)
-   * @param config - Optional configuration for defaults and limits
-   * @throws {ClientInputValidationError} If parameters are invalid
-   */
   static parse(
-    queryFn: (key: string) => string | undefined,
+		c: Context<HonoEnv>,
     config: PaginationConfig = {}
   ): Pagination {
     const defaultPage = config.defaultPage ?? 1;
@@ -46,10 +42,10 @@ export class Pagination {
     const maxPageSize = config.maxPageSize ?? 200;
     const minPageSize = config.minPageSize ?? 1;
 
-    const page = parseInt(queryFn("page") ?? String(defaultPage));
+    const page = parseInt(c.req.query("page") ?? String(defaultPage));
     this.validatePage(page);
 
-    const size = parseInt(queryFn("pageSize") ?? String(defaultPageSize));
+    const size = parseInt(c.req.query("pageSize") ?? String(defaultPageSize));
     this.validatePageSize(size, minPageSize, maxPageSize);
 
     return new Pagination(page, size);

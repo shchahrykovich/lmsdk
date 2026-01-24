@@ -3,9 +3,11 @@ import { z } from "zod";
 import type { Context } from "hono";
 import { getUserFromContext } from "../../middleware/auth";
 import { drizzle } from "drizzle-orm/d1";
-import { ProjectService } from "../../services/project.service";
-import { PromptService } from "../../services/prompt.service";
+import { ProjectService } from "../../projects/project.service";
+import { PromptService } from "../../prompts/prompt.service";
 import { ErrorResponse, PromptVersionsResponse } from "./schemas";
+import { ProjectId } from "../../shared/project-id";
+import { EntityId } from "../../shared/entity-id";
 
 export class V1PromptVersions extends OpenAPIRoute {
   schema = {
@@ -72,7 +74,8 @@ export class V1PromptVersions extends OpenAPIRoute {
       let project;
       const parsedProjectId = parseInt(projectSlugOrId);
       if (!isNaN(parsedProjectId)) {
-        project = await projectService.getProjectById(user.tenantId, parsedProjectId);
+        const projectIdObj = new ProjectId(parsedProjectId, user.tenantId, user.id);
+        project = await projectService.getProjectById(projectIdObj);
       } else {
         project = await projectService.getProjectBySlug(user.tenantId, projectSlugOrId);
       }
@@ -81,12 +84,15 @@ export class V1PromptVersions extends OpenAPIRoute {
         return Response.json({ error: "Project not found" }, { status: 404 });
       }
 
+      const projectId = new ProjectId(project.id, user.tenantId, user.id);
+
       let prompt;
       const parsedPromptId = parseInt(promptSlugOrId);
       if (!isNaN(parsedPromptId)) {
-        prompt = await promptService.getPromptById(user.tenantId, project.id, parsedPromptId);
+        const promptEntityId = new EntityId(parsedPromptId, projectId);
+        prompt = await promptService.getPromptById(promptEntityId);
       } else {
-        prompt = await promptService.getPromptBySlug(user.tenantId, project.id, promptSlugOrId);
+        prompt = await promptService.getPromptBySlug(projectId, promptSlugOrId);
       }
 
       if (!prompt) {
@@ -97,11 +103,8 @@ export class V1PromptVersions extends OpenAPIRoute {
         return Response.json({ error: "Prompt is not active" }, { status: 400 });
       }
 
-      const versions = await promptService.listPromptVersions(
-        user.tenantId,
-        project.id,
-        prompt.id
-      );
+      const promptEntityId = new EntityId(prompt.id, projectId);
+      const versions = await promptService.listPromptVersions(promptEntityId);
 
       return versions.map((version) => ({
         version: version.version,
