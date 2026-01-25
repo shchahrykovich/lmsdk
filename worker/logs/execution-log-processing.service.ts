@@ -1,8 +1,8 @@
 import { DrizzleD1Database } from "drizzle-orm/d1";
 import { eq, and } from "drizzle-orm";
-import { promptExecutionLogs } from "../db/schema";
-import { SearchRepository } from "../repositories/search.repository";
-import { ObjectToPathsService } from "./object-to-paths.service";
+import { promptExecutionLogs } from "../db/schema.ts";
+import { SearchRepository } from "../repositories/search.repository.ts";
+import { ObjectToPathsService } from "../services/object-to-paths.service.ts";
 
 /**
  * Service for processing execution logs in the background

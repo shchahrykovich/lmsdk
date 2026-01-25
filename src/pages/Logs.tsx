@@ -16,6 +16,7 @@ import { Clock, AlertCircle, CheckCircle2, Timer } from "lucide-react";
 import {
   applyDirectFilters,
   applySortParams,
+  buildDateRangeFilter,
   buildPromptFilter,
   buildStatusFilter,
   buildVariablesFilter,
@@ -366,8 +367,13 @@ export default function Logs(): React.ReactNode {
             {formatLogDate(row.original.createdAt)}
           </div>
         ),
-        enableColumnFilter: false,
+        meta: {
+          label: "Date Range",
+          variant: "dateRange",
+        },
+        enableColumnFilter: true,
         enableSorting: true,
+        filterFn: () => true, // Filtering handled server-side
       },
     ],
     [promptOptions, variablePathOptions]
@@ -405,6 +411,8 @@ export default function Logs(): React.ReactNode {
         nextFilter = buildPromptFilter(filter.value, label, onRemove, promptOptions);
       } else if (filter.id === "variables") {
         nextFilter = buildVariablesFilter(filter.value, label, onRemove);
+      } else if (filter.id === "createdAt") {
+        nextFilter = buildDateRangeFilter(filter.value, label, onRemove);
       }
 
       if (nextFilter) {

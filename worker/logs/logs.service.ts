@@ -1,8 +1,8 @@
 import { DrizzleD1Database } from "drizzle-orm/d1";
-import { and, asc, count, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import type { AnyColumn } from "drizzle-orm";
-import { promptExecutionLogs, prompts } from "../db/schema";
-import { SearchRepository } from "../repositories/search.repository";
+import { promptExecutionLogs, prompts } from "../db/schema.ts";
+import { SearchRepository } from "../repositories/search.repository.ts";
 
 export interface ProjectLogEntry {
   id: number;
@@ -28,6 +28,8 @@ export interface LogFilters {
   variablePath?: string;
   variableValue?: string;
   variableOperator?: "contains" | "notEmpty";
+  dateFrom?: number;
+  dateTo?: number;
 }
 
 export interface LogSort {
@@ -187,6 +189,17 @@ export class LogService {
 
     if (filters?.version !== undefined) {
       whereConditions.push(eq(promptExecutionLogs.version, filters.version));
+    }
+
+    if (filters?.dateFrom !== undefined) {
+      const fromDate = new Date(filters.dateFrom);
+      whereConditions.push(gte(promptExecutionLogs.createdAt, fromDate));
+    }
+
+    if (filters?.dateTo !== undefined) {
+      const toDate = new Date(filters.dateTo);
+      toDate.setHours(23, 59, 59, 999);
+      whereConditions.push(lte(promptExecutionLogs.createdAt, toDate));
     }
 
     return whereConditions;

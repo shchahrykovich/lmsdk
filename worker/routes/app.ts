@@ -5,7 +5,7 @@ import {createAuth} from "../../auth";
 import projectsRouter from "../projects/projects.routes";
 import promptsRouter from "../prompts/prompts.routes";
 import providersRouter from "./providers.routes";
-import logsRouter from "./logs.routes";
+import logsRouter from "../logs/logs.routes";
 import tracesRouter from "../traces/traces.routes";
 import datasetsRouter from "../datasets/datasets.routes";
 import evaluationsRouter from "../evaluations/evaluations.routers";

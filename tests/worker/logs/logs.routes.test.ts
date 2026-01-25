@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import app from "../../../worker/index";
+import app from "../../../worker";
 
 const mockGetSession = vi.fn();
 const listProjectLogsMock = vi.fn();
@@ -15,7 +15,7 @@ vi.mock("../../../auth", () => ({
   })),
 }));
 
-vi.mock("../../../worker/services/logs.service", () => ({
+vi.mock("../../../worker/logs/logs.service", () => ({
   LogService: class {
     listProjectLogs = listProjectLogsMock;
     getProjectLogDetails = getProjectLogDetailsMock;
@@ -597,6 +597,153 @@ describe("Logs Routes", () => {
       expect(response.status).toBe(500);
       const data = await response.json();
       expect(data).toEqual({ error: "Failed to get log" });
+    });
+  });
+
+  describe("Date Range Filtering", () => {
+    it("returns logs filtered by dateFrom", async () => {
+      setAuthenticatedUser(1);
+      const projectId = 42;
+      listProjectLogsMock.mockResolvedValue({
+        logs: [],
+        total: 0,
+        page: 1,
+        pageSize: 10,
+        totalPages: 0,
+      });
+
+      const dateFrom = Date.now() - 86400000; // 1 day ago
+      const response = await app.request(
+        `/api/projects/${projectId}/logs?dateFrom=${dateFrom}`,
+        {},
+        { DB: {} as any, PRIVATE_FILES: {} as any }
+      );
+
+      expect(response.status).toBe(200);
+      expect(listProjectLogsMock).toHaveBeenCalledWith({
+        tenantId: 1,
+        projectId: projectId,
+        page: 1,
+        pageSize: 10,
+        filters: { dateFrom },
+        sort: undefined,
+      });
+    });
+
+    it("returns logs filtered by dateTo", async () => {
+      setAuthenticatedUser(1);
+      const projectId = 42;
+      listProjectLogsMock.mockResolvedValue({
+        logs: [],
+        total: 0,
+        page: 1,
+        pageSize: 10,
+        totalPages: 0,
+      });
+
+      const dateTo = Date.now();
+      const response = await app.request(
+        `/api/projects/${projectId}/logs?dateTo=${dateTo}`,
+        {},
+        { DB: {} as any, PRIVATE_FILES: {} as any }
+      );
+
+      expect(response.status).toBe(200);
+      expect(listProjectLogsMock).toHaveBeenCalledWith({
+        tenantId: 1,
+        projectId: projectId,
+        page: 1,
+        pageSize: 10,
+        filters: { dateTo },
+        sort: undefined,
+      });
+    });
+
+    it("returns logs filtered by date range (dateFrom and dateTo)", async () => {
+      setAuthenticatedUser(1);
+      const projectId = 42;
+      listProjectLogsMock.mockResolvedValue({
+        logs: [],
+        total: 0,
+        page: 1,
+        pageSize: 10,
+        totalPages: 0,
+      });
+
+      const dateFrom = Date.now() - 86400000; // 1 day ago
+      const dateTo = Date.now();
+      const response = await app.request(
+        `/api/projects/${projectId}/logs?dateFrom=${dateFrom}&dateTo=${dateTo}`,
+        {},
+        { DB: {} as any, PRIVATE_FILES: {} as any }
+      );
+
+      expect(response.status).toBe(200);
+      expect(listProjectLogsMock).toHaveBeenCalledWith({
+        tenantId: 1,
+        projectId: projectId,
+        page: 1,
+        pageSize: 10,
+        filters: { dateFrom, dateTo },
+        sort: undefined,
+      });
+    });
+
+    it("returns logs with combined filters (status + date range)", async () => {
+      setAuthenticatedUser(1);
+      const projectId = 42;
+      listProjectLogsMock.mockResolvedValue({
+        logs: [],
+        total: 0,
+        page: 1,
+        pageSize: 10,
+        totalPages: 0,
+      });
+
+      const dateFrom = Date.now() - 86400000;
+      const response = await app.request(
+        `/api/projects/${projectId}/logs?isSuccess=true&dateFrom=${dateFrom}`,
+        {},
+        { DB: {} as any, PRIVATE_FILES: {} as any }
+      );
+
+      expect(response.status).toBe(200);
+      expect(listProjectLogsMock).toHaveBeenCalledWith({
+        tenantId: 1,
+        projectId: projectId,
+        page: 1,
+        pageSize: 10,
+        filters: { isSuccess: true, dateFrom },
+        sort: undefined,
+      });
+    });
+
+    it("ignores invalid date values", async () => {
+      setAuthenticatedUser(1);
+      const projectId = 42;
+      listProjectLogsMock.mockResolvedValue({
+        logs: [],
+        total: 0,
+        page: 1,
+        pageSize: 10,
+        totalPages: 0,
+      });
+
+      const response = await app.request(
+        `/api/projects/${projectId}/logs?dateFrom=invalid&dateTo=notanumber`,
+        {},
+        { DB: {} as any, PRIVATE_FILES: {} as any }
+      );
+
+      expect(response.status).toBe(200);
+      expect(listProjectLogsMock).toHaveBeenCalledWith({
+        tenantId: 1,
+        projectId: projectId,
+        page: 1,
+        pageSize: 10,
+        filters: undefined,
+        sort: undefined,
+      });
     });
   });
 

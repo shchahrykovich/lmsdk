@@ -1,11 +1,11 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { drizzle } from "drizzle-orm/d1";
-import { requireAuth } from "../middleware/auth.middleware";
-import { getUserFromContext } from "../middleware/auth";
-import { LogService } from "../services/logs.service";
-import type { LogFilters, LogSort } from "../services/logs.service";
-import type { HonoEnv } from "./app";
+import { requireAuth } from "../middleware/auth.middleware.ts";
+import { getUserFromContext } from "../middleware/auth.ts";
+import { LogService } from "./logs.service.ts";
+import type { LogFilters, LogSort } from "./logs.service.ts";
+import type { HonoEnv } from "../routes/app.ts";
 
 const logs = new Hono<HonoEnv>();
 
@@ -85,6 +85,22 @@ const parseFilters = (c: Context): LogFilters | undefined => {
   const variableOperator = c.req.query("variableOperator") as "contains" | "notEmpty" | undefined;
   if (variableOperator) {
     filters.variableOperator = variableOperator;
+  }
+
+  const dateFrom = c.req.query("dateFrom");
+  if (dateFrom) {
+    const parsed = parseInt(dateFrom, 10);
+    if (!Number.isNaN(parsed)) {
+      filters.dateFrom = parsed;
+    }
+  }
+
+  const dateTo = c.req.query("dateTo");
+  if (dateTo) {
+    const parsed = parseInt(dateTo, 10);
+    if (!Number.isNaN(parsed)) {
+      filters.dateTo = parsed;
+    }
   }
 
   return Object.keys(filters).length > 0 ? filters : undefined;

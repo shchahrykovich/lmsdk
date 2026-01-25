@@ -283,7 +283,14 @@ describe("EvaluationWorkflow", () => {
     expect(stepCalls).toContain("execute-202-12-102");
     expect(stepCalls[stepCalls.length - 1]).toBe("finish-evaluation");
 
-    expect(getPromptVersionByIdMock).toHaveBeenCalledWith(1, 2, 101);
+    expect(getPromptVersionByIdMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 2,
+        tenantId: 1,
+        userId: "user-1",
+      }),
+      101
+    );
     expect(executePromptMock).toHaveBeenCalledTimes(4);
     expect(createResultMock).toHaveBeenCalledTimes(4);
     expect(updateOutputSchemaMock).toHaveBeenCalled();

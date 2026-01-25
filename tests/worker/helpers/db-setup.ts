@@ -1,26 +1,16 @@
 import { env } from 'cloudflare:test';
 
-// Use Vite's import.meta.glob to load migration files at build time
-// This works in the Workers environment where fs is not available
-// @ts-expect-error Vite's import.meta.glob typing isn't available in this context.
-const migrations = import.meta.glob('../../../drizzle/*.sql', {
-    query: '?raw',
-    import: 'default',
-    eager: true,
-}) as Record<string, string>;
+declare const __DB_MIGRATIONS__: Record<string, string>;
+const migrations = __DB_MIGRATIONS__;
 
 /**
  * Apply database migrations to the test D1 database
  * This reads SQL migration files and executes them in order
  */
 export async function applyMigrations() {
-    // Get migration files sorted by name (which includes the number prefix)
     const migrationEntries = Object.entries(migrations).sort(([a], [b]) => a.localeCompare(b));
 
-    // console.log(`Applying ${migrationEntries.length} migrations to test database...`);
-
-    for (const [filepath, sql] of migrationEntries) {
-        const filename = filepath.split('/').pop() || filepath;
+    for (const [filename, sql] of migrationEntries) {
         const sqlContent = sql.trim();
 
         // Skip empty migration files

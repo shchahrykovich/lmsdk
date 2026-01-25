@@ -3,7 +3,7 @@ import type { DataSet, DataSetRecord } from "../db/schema.ts";
 import { DataSetRepository } from "./dataset.repository.ts";
 import { DataSetRecordRepository } from "./dataset-record.repository.ts";
 import type { TenantProjectContext, Pagination, PaginatedResult } from "../types/common.ts";
-import { LogService } from "../services/logs.service.ts";
+import { LogService } from "../logs/logs.service.ts";
 import type {ProjectId} from "../shared/project-id";
 import type {EntityId} from "../shared/entity-id";
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { env } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
-import { LogService } from "../../../../worker/services/logs.service";
+import { LogService } from "../../../../worker/logs/logs.service";
 import { applyMigrations } from "../../helpers/db-setup";
 import { promptExecutionLogs, prompts, projects } from "../../../../worker/db/schema";
 

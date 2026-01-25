@@ -22,6 +22,8 @@ interface LogEntry {
   errorMessage: string | null;
   durationMs: number | null;
   createdAt: number | string;
+  traceId: string;
+  rawTraceId: string;
   promptName: string | null;
   promptSlug: string | null;
   provider: string | null;
@@ -163,12 +165,19 @@ export default function LogDetail(): React.ReactNode {
           <div className="rounded-lg border border-border bg-card p-6">
             <div className="flex flex-wrap items-center gap-3">
               <span className="text-sm text-muted-foreground">
-                {typeof log.durationMs === "number" ? `${log.durationMs} ms` : "Duration unavailable"}
-              </span>
-              <span className="text-sm text-muted-foreground">
-                {formatDateTime(log.createdAt)}
+                Duration: {typeof log.durationMs === "number" ? `${log.durationMs} ms` : "Duration unavailable"}
               </span>
             </div>
+						<div className="flex flex-wrap items-center gap-3">
+              <span className="text-sm text-muted-foreground">
+                Date: {formatDateTime(log.createdAt)}
+              </span>
+						</div>
+						<div className="flex flex-wrap items-center gap-3">
+							<span className="text-sm text-muted-foreground">
+                TraceId: {log.traceId}
+              </span>
+						</div>
             {log.errorMessage && (
                 <div className="text-sm text-red-500 mt-4 whitespace-pre-wrap">
                   {log.errorMessage}

@@ -74,6 +74,41 @@ export const buildVariablesFilter = (
   };
 };
 
+export const buildDateRangeFilter = (
+  value: unknown,
+  label: string,
+  onRemove: () => void,
+): ActiveFilter | null => {
+  if (!Array.isArray(value) || value.length === 0) return null;
+
+  const [from, to] = value;
+  const formatDate = (timestamp: number | undefined) => {
+    if (!timestamp) return null;
+    return new Date(timestamp).toLocaleDateString();
+  };
+
+  const fromStr = formatDate(from);
+  const toStr = formatDate(to);
+
+  let displayValue: string;
+  if (fromStr && toStr) {
+    displayValue = `${fromStr} - ${toStr}`;
+  } else if (fromStr) {
+    displayValue = `From ${fromStr}`;
+  } else if (toStr) {
+    displayValue = `Until ${toStr}`;
+  } else {
+    return null;
+  }
+
+  return {
+    id: "dateRange",
+    label,
+    value: displayValue,
+    onRemove,
+  };
+};
+
 export const applyDirectFilters = (
   params: URLSearchParams,
   apiParams: URLSearchParams,
@@ -112,6 +147,18 @@ export const applyDirectFilters = (
   const variableOperator = params.get("variableOperator");
   if (variableOperator) {
     apiParams.set("variableOperator", variableOperator);
+  }
+
+  // dateFrom filter
+  const dateFrom = params.get("dateFrom");
+  if (dateFrom) {
+    apiParams.set("dateFrom", dateFrom);
+  }
+
+  // dateTo filter
+  const dateTo = params.get("dateTo");
+  if (dateTo) {
+    apiParams.set("dateTo", dateTo);
   }
 };
 

@@ -62,6 +62,10 @@ const isVariablesDialogFilter = (
   column: { meta?: { variant?: string; filterComponent?: string } } | undefined,
 ) => column?.meta?.variant === "custom" && column?.meta?.filterComponent === "variablesDialog";
 
+const isDateRangeFilter = (
+  column: { meta?: { variant?: string } } | undefined,
+) => column?.meta?.variant === "dateRange";
+
 interface UseDataTableProps<TData>
   extends Omit<
       TableOptions<TData>,
@@ -248,6 +252,13 @@ export function useDataTable<TData>(
         return acc;
       }
 
+      // Handle date range filter
+      if (isDateRangeFilter(column)) {
+        acc.dateFrom = parseAsString.withOptions(queryStateOptions);
+        acc.dateTo = parseAsString.withOptions(queryStateOptions);
+        return acc;
+      }
+
       // For promptName, we need both promptId and version params
       if (columnId === "promptName") {
         acc.promptId = parseAsString.withOptions(queryStateOptions);
@@ -315,6 +326,18 @@ export function useDataTable<TData>(
       });
     }
 
+    if (filterValues.dateFrom || filterValues.dateTo) {
+      const dateFrom = toSingleValue(filterValues.dateFrom);
+      const dateTo = toSingleValue(filterValues.dateTo);
+      filters.push({
+        id: "createdAt",
+        value: [
+          dateFrom ? parseInt(dateFrom, 10) : undefined,
+          dateTo ? parseInt(dateTo, 10) : undefined,
+        ],
+      });
+    }
+
     return filters;
   }, [filterValues, enableAdvancedFilter]);
 
@@ -345,6 +368,13 @@ export function useDataTable<TData>(
     updates.variableOperator = varsFilter.operator ?? null;
   };
 
+  const handleDateRangeFilter = (value: unknown, updates: Record<string, string | null>) => {
+    if (!Array.isArray(value)) return;
+    const [from, to] = value;
+    updates.dateFrom = from !== undefined && from !== null ? String(from) : null;
+    updates.dateTo = to !== undefined && to !== null ? String(to) : null;
+  };
+
   const buildFilterUpdates = React.useCallback((filters: ColumnFiltersState) => {
     const updates: Record<string, string | null> = {
       isSuccess: null,
@@ -353,6 +383,8 @@ export function useDataTable<TData>(
       variablePath: null,
       variableValue: null,
       variableOperator: null,
+      dateFrom: null,
+      dateTo: null,
     };
 
     for (const filter of filters) {
@@ -362,6 +394,8 @@ export function useDataTable<TData>(
         handlePromptNameFilter(filter.value, updates);
       } else if (filter.id === "variables") {
         handleVariablesFilter(filter.value, updates);
+      } else if (filter.id === "createdAt") {
+        handleDateRangeFilter(filter.value, updates);
       }
     }
 
