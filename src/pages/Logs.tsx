@@ -362,7 +362,23 @@ export default function Logs(): React.ReactNode {
         enableColumnFilter: false,
         enableSorting: false,
       },
-      {
+			{
+				id: "variables",
+				accessorFn: () => "", // Dummy accessor for filter-only column
+				header: "Variables",
+				cell: () => null,
+				meta: {
+					label: "Variables",
+					variant: "custom",
+					filterComponent: "variablesDialog",
+					variablePaths: variablePathOptions,
+				},
+				enableColumnFilter: true,
+				enableSorting: false,
+				enableHiding: true,
+				filterFn: () => true, // Filtering handled server-side
+			},
+			{
         id: "durationMs",
         accessorKey: "durationMs",
         header: ({ column }) => (
