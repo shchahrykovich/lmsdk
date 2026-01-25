@@ -12,7 +12,7 @@ import { useDataTable } from "@/hooks/use-data-table";
 import { usePaginationParams } from "@/hooks/use-pagination-params";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
-import { Clock, AlertCircle, CheckCircle2, Timer } from "lucide-react";
+import { AlertCircle, CheckCircle2 } from "lucide-react";
 import {
   applyDirectFilters,
   applySortParams,
@@ -44,6 +44,7 @@ interface LogEntry {
   promptSlug: string | null;
   provider: string | null;
   model: string | null;
+  traceId: string | null;
 }
 
 interface LogsResponse {
@@ -307,23 +308,10 @@ export default function Logs(): React.ReactNode {
         },
       },
       {
-        id: "variables",
-        accessorFn: () => "", // Dummy accessor for filter-only column
-        header: "Variables",
-        cell: () => null,
-        meta: {
-          label: "Variables",
-          variant: "custom",
-          filterComponent: "variablesDialog",
-          variablePaths: variablePathOptions,
-        },
-        enableColumnFilter: true,
-        enableSorting: false,
-        enableHiding: true,
-        filterFn: () => true, // Filtering handled server-side
-      },
-      {
         id: "provider",
+				meta: {
+					label: "Provider",
+				},
         accessorFn: (row) =>
           row.provider && row.model ? `${row.provider}/${row.model}` : "Unknown",
         header: ({ column }) => (
@@ -339,14 +327,52 @@ export default function Logs(): React.ReactNode {
         enableColumnFilter: false,
       },
       {
+        id: "traceId",
+        accessorKey: "traceId",
+        meta: {
+          label: "Trace",
+        },
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} label="Trace" />
+        ),
+        cell: ({ row }) => {
+          const traceId = row.original.traceId;
+          if (!traceId) {
+            return <div className="text-muted-foreground">—</div>;
+          }
+          const truncatedId = traceId.length > 8 ? `${traceId.slice(0, 5)}…${traceId.slice(traceId.length - 5)}` : traceId;
+          return (
+            <a
+              href={`/projects/${slug}/traces/${traceId}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (e.metaKey || e.ctrlKey) {
+                  return;
+                }
+                e.preventDefault();
+                void navigate(`/projects/${slug}/traces/${traceId}`);
+              }}
+              className="flex items-center gap-1.5 text-blue-600 hover:text-blue-800 hover:underline"
+              title={traceId}
+            >
+              {truncatedId}
+            </a>
+          );
+        },
+        enableColumnFilter: false,
+        enableSorting: false,
+      },
+      {
         id: "durationMs",
         accessorKey: "durationMs",
         header: ({ column }) => (
           <DataTableColumnHeader column={column} label="Duration" />
         ),
+				meta: {
+					label: "Duration",
+				},
         cell: ({ row }) => (
           <div className="flex items-center gap-1.5 text-muted-foreground">
-            <Timer className="h-3.5 w-3.5" />
             {typeof row.original.durationMs === "number"
               ? `${row.original.durationMs} ms`
               : "—"}
@@ -358,25 +384,24 @@ export default function Logs(): React.ReactNode {
       {
         id: "createdAt",
         accessorKey: "createdAt",
+				meta: {
+					label: "Time",
+					variant: "dateRange",
+				},
         header: ({ column }) => (
           <DataTableColumnHeader column={column} label="Time" />
         ),
         cell: ({ row }) => (
           <div className="flex items-center gap-1.5 text-muted-foreground">
-            <Clock className="h-3.5 w-3.5" />
             {formatLogDate(row.original.createdAt)}
           </div>
         ),
-        meta: {
-          label: "Date Range",
-          variant: "dateRange",
-        },
         enableColumnFilter: true,
         enableSorting: true,
         filterFn: () => true, // Filtering handled server-side
       },
     ],
-    [promptOptions, variablePathOptions]
+    [promptOptions, variablePathOptions, slug, navigate]
   );
 
   const { table } = useDataTable({
