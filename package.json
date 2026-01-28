@@ -1,7 +1,7 @@
 {
   "name": "lmsdk",
   "private": true,
-  "version": "0.1.13",
+  "version": "0.1.14",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -94,7 +94,7 @@
     "diff": "8.0.3"
   },
   "engines": {
-    "node": "=22",
-    "npm": ">=11"
+    "node": "=24",
+    "npm": "=11"
   }
 }
