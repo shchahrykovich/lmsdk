@@ -42,4 +42,5 @@ export const PromptVersionResponse = z.object({
 
 export const ErrorResponse = z.object({
   error: Str({ description: "Error message" }),
+  code: z.enum(["provider_timeout"]).optional().describe("Stable error code for errors that clients handle in a special way"),
 });

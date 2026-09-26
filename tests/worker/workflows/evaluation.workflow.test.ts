@@ -16,6 +16,10 @@ vi.mock("../../../worker/evaluations/evaluation.service", () => ({
     startEvaluation = startEvaluationMock;
     finishEvaluation = finishEvaluationMock;
     updateOutputSchema = updateOutputSchemaMock;
+    countCalls = vi.fn().mockResolvedValue(0);
+    recordEvent = vi.fn().mockResolvedValue(undefined);
+    nextCallAttempt = vi.fn().mockResolvedValue(1);
+    failEvaluation = vi.fn().mockResolvedValue(undefined);
   },
 }));
 
@@ -55,8 +59,11 @@ vi.mock("../../../worker/services/provider.service", () => ({
   },
 }));
 
-vi.mock("../../../worker/providers/logger/null-prompt-execution-logger", () => ({
-  NullPromptExecutionLogger: class {},
+vi.mock("../../../worker/providers/logger/c-f-prompt-execution-logger", () => ({
+  CFPromptExecutionLogger: class {
+    setContext = vi.fn();
+    finish = vi.fn().mockResolvedValue(undefined);
+  },
 }));
 
 vi.mock("drizzle-orm/d1", () => ({
@@ -115,6 +122,8 @@ describe("EvaluationWorkflow", () => {
       {
         db: {} as any,
         cache: {} as any,
+        logFiles: {} as any,
+        logQueue: {} as any,
         providerConfig: {
           openAIKey: "test",
           geminiKey: "test",
@@ -267,6 +276,8 @@ describe("EvaluationWorkflow", () => {
       {
         db: {} as any,
         cache: {} as any,
+        logFiles: {} as any,
+        logQueue: {} as any,
         providerConfig: {
           openAIKey: "test",
           geminiKey: "test",

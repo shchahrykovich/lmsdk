@@ -3,6 +3,8 @@ import type { Evaluation } from "../db/schema";
 import { EvaluationRepository, WORKFLOW_START_PENDING } from "./repositories/evaluation.repository";
 import { EvaluationPromptRepository } from "./repositories/evaluation-prompt.repository";
 import { EvaluationResultRepository } from "./repositories/evaluation-result.repository";
+import { EvaluationEventRepository } from "./repositories/evaluation-event.repository";
+import type { EvaluationEvent, NewEvaluationEvent } from "./evaluation-event";
 import { DataSetRecordRepository } from "../datasets/dataset-record.repository";
 import { DataSetRepository } from "../datasets/dataset.repository";
 import { PromptRepository } from "../prompts/prompt.repository";
@@ -25,10 +27,26 @@ export interface CreateEvaluationInput {
   prompts: CreateEvaluationPromptInput[];
 }
 
+export interface EvaluationProgress {
+  totalCalls: number;
+  succeededCalls: number;
+  sentAttempts: number;
+  failedAttempts: number;
+  lastEventAt: Date | null;
+}
+
+export interface EvaluationActivity {
+  events: EvaluationEvent[];
+  progress: EvaluationProgress;
+}
+
+const ACTIVITY_EVENT_LIMIT = 100;
+
 export class EvaluationService {
   private repository: EvaluationRepository;
   private promptRepository: EvaluationPromptRepository;
   private resultRepository: EvaluationResultRepository;
+  private eventRepository: EvaluationEventRepository;
   private recordRepository: DataSetRecordRepository;
   private datasetRepository: DataSetRepository;
   private promptRepo: PromptRepository;
@@ -37,6 +55,7 @@ export class EvaluationService {
     this.repository = new EvaluationRepository(db);
     this.promptRepository = new EvaluationPromptRepository(db);
     this.resultRepository = new EvaluationResultRepository(db);
+    this.eventRepository = new EvaluationEventRepository(db);
     this.recordRepository = new DataSetRecordRepository(db);
     this.datasetRepository = new DataSetRepository(db);
     this.promptRepo = new PromptRepository(drizzle(db));
@@ -342,6 +361,57 @@ export class EvaluationService {
     }
 
     return evaluation;
+  }
+
+  async failEvaluation(entityId: EntityId, durationMs: number, error: string): Promise<void> {
+    const evaluation = await this.repository.markFailed(entityId, durationMs);
+    if (!evaluation) {
+      throw new Error("Evaluation not found");
+    }
+    await this.eventRepository.create(entityId, { type: "failed", details: { error, durationMs } });
+  }
+
+  async recordEvent(entityId: EntityId, event: NewEvaluationEvent): Promise<void> {
+    await this.eventRepository.create(entityId, event);
+  }
+
+  async nextCallAttempt(entityId: EntityId, call: { recordId: number; versionId: number }): Promise<number> {
+    return (await this.eventRepository.countCallStarts(entityId, call)) + 1;
+  }
+
+  async countCalls(entityId: EntityId, evaluation: Evaluation): Promise<number> {
+    if (!evaluation.datasetId) {
+      return 0;
+    }
+    const [records, prompts] = await Promise.all([
+      this.recordRepository.countByDataSet(new EntityId(evaluation.datasetId, entityId.getProjectId())),
+      this.promptRepository.listByEvaluation(entityId),
+    ]);
+    return records * prompts.length;
+  }
+
+  async getEvaluationActivity(entityId: EntityId): Promise<EvaluationActivity | undefined> {
+    const evaluation = await this.repository.findById(entityId);
+    if (!evaluation) {
+      return undefined;
+    }
+
+    const [events, counts, totalCalls] = await Promise.all([
+      this.eventRepository.listLatest(entityId, ACTIVITY_EVENT_LIMIT),
+      this.eventRepository.countByType(entityId),
+      this.countCalls(entityId, evaluation),
+    ]);
+
+    return {
+      events,
+      progress: {
+        totalCalls,
+        succeededCalls: counts.call_succeeded ?? 0,
+        sentAttempts: counts.call_started ?? 0,
+        failedAttempts: counts.call_failed ?? 0,
+        lastEventAt: events[0]?.createdAt ?? null,
+      },
+    };
   }
 
   async finishEvaluation(

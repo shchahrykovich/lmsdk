@@ -9,6 +9,7 @@ import { ProviderService } from "../../services/provider.service";
 import { providerConfigFromEnv } from "../../providers/provider-factory";
 import type { AIMessage, GoogleSettings, OpenAISettings, OpenRouterSettings, ResponseFormat } from "../../providers/base-provider";
 import { CFPromptExecutionLogger } from "../../providers/logger/c-f-prompt-execution-logger";
+import { ProviderTimeoutError } from "../../providers/provider-timeout-error";
 import { ExecutePromptResponse, ErrorResponse } from "./schemas";
 import { ProjectId } from "../../shared/project-id";
 import { EntityId } from "../../shared/entity-id";
@@ -218,6 +219,14 @@ export class V1ExecutePrompt extends OpenAPIRoute {
           },
         },
       },
+      "504": {
+        description: "The AI provider did not answer within the time limit (240 s for OpenRouter). The body has code \"provider_timeout\". The provider may still bill the call, so do not retry it automatically.",
+        content: {
+          "application/json": {
+            schema: ErrorResponse,
+          },
+        },
+      },
       "500": {
         description: "Internal server error",
         content: {
@@ -316,6 +325,10 @@ export class V1ExecutePrompt extends OpenAPIRoute {
       await finalizeLogger(c, logger);
 
       // Note: Error logging is now handled inside the provider's execute method
+
+      if (error instanceof ProviderTimeoutError) {
+        return Response.json({ error: error.message, code: error.code }, { status: 504 });
+      }
 
       return Response.json(
         { error: error instanceof Error ? error.message : "Internal server error" },

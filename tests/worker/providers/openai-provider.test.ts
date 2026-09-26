@@ -183,7 +183,6 @@ describe("OpenAIProvider", () => {
         expect.objectContaining({
           reasoning: {
             effort: "low",
-            summary: "disabled",
           },
           store: false,
           include: [], // Empty because include_encrypted_reasoning is false
@@ -225,12 +224,31 @@ describe("OpenAIProvider", () => {
         expect.objectContaining({
           reasoning: {
             effort: "high",
-            summary: "enabled",
+            summary: "auto",
           },
           store: true,
           include: ["reasoning.encrypted_content"],
         })
       );
+    });
+
+    it("sends a reasoning summary value that OpenAI accepts", async () => {
+      mockCreate.mockResolvedValue({ model: "gpt-6-luna", output: [], usage: { input_tokens: 1, output_tokens: 1 } });
+      const summaryFor = async (reasoning_summary: string) => {
+        mockCreate.mockClear();
+        await provider.execute({
+          model: "gpt-6-luna",
+          messages: [{ role: "user", content: "Hi" }],
+          openai_settings: { reasoning_summary } as ExecuteRequest["openai_settings"],
+        });
+        return mockCreate.mock.calls[0][0].reasoning;
+      };
+
+      expect(await summaryFor("auto")).toEqual({ effort: "medium", summary: "auto" });
+      expect(await summaryFor("concise")).toEqual({ effort: "medium", summary: "concise" });
+      expect(await summaryFor("detailed")).toEqual({ effort: "medium", summary: "detailed" });
+      expect(await summaryFor("enabled")).toEqual({ effort: "medium", summary: "auto" });
+      expect(await summaryFor("disabled")).toEqual({ effort: "medium" });
     });
 
     it("should handle JSON schema response format", async () => {

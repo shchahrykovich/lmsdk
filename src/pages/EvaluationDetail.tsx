@@ -5,6 +5,10 @@ import { Button } from "@/components/ui/button";
 import { ChevronsDownUp, ChevronsUpDown, Maximize2 } from "lucide-react";
 import EvaluationFullScreenDialog from "@/components/EvaluationFullScreenDialog";
 import EvaluationResultsTable from "@/components/EvaluationResultsTable";
+import EvaluationActivityPanel from "@/components/EvaluationActivityPanel";
+import { isActiveEvaluationState, type EvaluationActivity, type VersionLabels } from "@/lib/evaluation-activity";
+
+const ACTIVITY_REFRESH_MS = 5000;
 
 interface Evaluation {
   id: number;
@@ -68,10 +72,38 @@ export default function EvaluationDetail(): JSX.Element {
   const [isAllExpanded, setIsAllExpanded] = useState(false);
   const [isFullScreenOpen, setIsFullScreenOpen] = useState(false);
   const [currentRecordIndex, setCurrentRecordIndex] = useState(0);
+  const [activity, setActivity] = useState<EvaluationActivity | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
     void fetchData();
   }, [slug, evaluationId]);
+
+  const isActive = details ? isActiveEvaluationState(details.evaluation.state) : false;
+
+  useEffect(() => {
+    if (!project || !isActive) return;
+    const timer = setInterval(() => {
+      setNowMs(Date.now());
+      void loadEvaluation(project.id).catch((refreshError: unknown) => {
+        console.error("Error refreshing evaluation:", refreshError);
+      });
+    }, ACTIVITY_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [project, isActive, evaluationId]);
+
+  const loadEvaluation = async (projectId: number) => {
+    const [detailsResponse, activityResponse] = await Promise.all([
+      fetch(`/api/projects/${projectId}/evaluations/${evaluationId}`),
+      fetch(`/api/projects/${projectId}/evaluations/${evaluationId}/activity`),
+    ]);
+    if (!detailsResponse.ok) {
+      throw new Error(`Failed to fetch evaluation details: ${detailsResponse.statusText}`);
+    }
+    setDetails((await detailsResponse.json()) as EvaluationDetails);
+    setActivity(activityResponse.ok ? ((await activityResponse.json()) as EvaluationActivity) : null);
+    setNowMs(Date.now());
+  };
 
   const fetchData = async () => {
     try {
@@ -92,15 +124,7 @@ export default function EvaluationDetail(): JSX.Element {
       }
 
       setProject(foundProject);
-
-      const detailsResponse = await fetch(
-        `/api/projects/${foundProject.id}/evaluations/${evaluationId}`
-      );
-      if (!detailsResponse.ok) {
-        throw new Error(`Failed to fetch evaluation details: ${detailsResponse.statusText}`);
-      }
-      const detailsData = await detailsResponse.json();
-      setDetails(detailsData);
+      await loadEvaluation(foundProject.id);
     } catch (error) {
       console.error("Error fetching evaluation details:", error);
       setError(error instanceof Error ? error.message : "An error occurred");
@@ -126,6 +150,9 @@ export default function EvaluationDetail(): JSX.Element {
   }
 
   const { evaluation, prompts, results } = details;
+  const versionLabels: VersionLabels = Object.fromEntries(
+    prompts.map((prompt) => [prompt.versionId, `${prompt.promptName} v${prompt.version}`])
+  );
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -135,12 +162,20 @@ export default function EvaluationDetail(): JSX.Element {
         description={`State: ${evaluation.state} | Type: ${evaluation.type}`}
       />
 
-      <div className="flex-1 overflow-y-auto px-8 py-6">
+      <div className="flex-1 overflow-y-auto px-8 py-6 space-y-4">
+        {activity && (
+          <EvaluationActivityPanel
+            state={evaluation.state}
+            activity={activity}
+            versionLabels={versionLabels}
+            nowMs={nowMs}
+          />
+        )}
         {results.length === 0 ? (
           <div className="rounded-lg border border-border bg-card p-6">
             <h3 className="text-lg font-semibold text-foreground">No results yet</h3>
             <p className="text-sm text-muted-foreground mt-2">
-              Results will appear here once the evaluation completes.
+              Results appear here as each call finishes.
             </p>
           </div>
         ) : (

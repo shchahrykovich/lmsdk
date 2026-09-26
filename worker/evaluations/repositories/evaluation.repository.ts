@@ -197,6 +197,22 @@ export class EvaluationRepository {
     return evaluation;
   }
 
+  async markFailed(
+    entityId: EntityId,
+    durationMs: number
+  ): Promise<Evaluation | undefined> {
+    const [evaluation] = await this.db
+      .update(evaluations)
+      .set({
+        state: "failed",
+        durationMs: durationMs,
+        updatedAt: new Date(),
+      })
+			.where(entityId.toWhereClause(evaluations))
+      .returning();
+    return evaluation;
+  }
+
   async updateOutputSchema(
     entityId: EntityId,
     outputSchema: string

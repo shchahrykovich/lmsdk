@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { APIConnectionTimeoutError } from "openai/core/error";
 import type {
   ChatCompletion,
   ChatCompletionCreateParamsNonStreaming,
@@ -9,6 +10,7 @@ import {
   type ExecuteResult,
 } from "./base-provider";
 import type { IPromptExecutionLogger } from "./logger/execution-logger";
+import { ProviderTimeoutError } from "./provider-timeout-error";
 
 export const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 export const OPENROUTER_TIMEOUT_MS = 240_000;
@@ -88,11 +90,19 @@ export class OpenRouterProvider extends AIProvider {
 
       return result;
     } catch (error) {
+      const failure = this.toProviderFailure(error);
       const durationMs = Date.now() - startTime;
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage = failure instanceof Error ? failure.message : String(failure);
       await this.logger.logError({ durationMs, errorMessage });
-      throw error;
+      throw failure;
     }
+  }
+
+  private toProviderFailure(error: unknown): unknown {
+    if (error instanceof APIConnectionTimeoutError) {
+      return new ProviderTimeoutError("OpenRouter", OPENROUTER_TIMEOUT_MS);
+    }
+    return error;
   }
 
   private buildResult(

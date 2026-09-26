@@ -5,12 +5,21 @@ import { EvaluationResultRepository } from "../evaluations/repositories/evaluati
 import { DataSetRecordRepository } from "../datasets/dataset-record.repository";
 import { PromptService } from "../prompts/prompt.service";
 import { ProviderService } from "../services/provider.service";
-import { NullPromptExecutionLogger } from "../providers/logger/null-prompt-execution-logger";
+import { CFPromptExecutionLogger } from "../providers/logger/c-f-prompt-execution-logger";
+import type { PromptExecutionContext } from "../providers/logger/execution-logger";
 import { providerConfigFromEnv, type ProviderConfig } from "../providers/provider-factory";
-import type { AIMessage, OpenRouterSettings, ResponseFormat } from "../providers/base-provider";
+import type { AIMessage, ExecuteRequest, ExecuteResult, OpenRouterSettings, ResponseFormat } from "../providers/base-provider";
 import {drizzle} from "drizzle-orm/d1";
 import {EntityId} from "../shared/entity-id";
 import {ProjectId} from "../shared/project-id";
+
+export interface EvaluationWorkflowDeps {
+  db: D1Database;
+  cache: KVNamespace;
+  logFiles: R2Bucket;
+  logQueue: Queue;
+  providerConfig: ProviderConfig;
+}
 
 export interface EvaluationWorkflowParams {
   userId: string;
@@ -20,15 +29,41 @@ export interface EvaluationWorkflowParams {
   startedAtMs: number;
 }
 
-// eslint-disable-next-line max-lines-per-function
 export async function runEvaluationWorkflow(
   payload: EvaluationWorkflowParams,
   step: WorkflowStep,
-  deps: {
-    db: D1Database;
-    cache: KVNamespace;
-    providerConfig: ProviderConfig;
+  deps: EvaluationWorkflowDeps
+): Promise<void> {
+  try {
+    await runEvaluationSteps(payload, step, deps);
+  } catch (error) {
+    await markEvaluationFailed(payload, step, deps, error);
+    throw error;
   }
+}
+
+async function markEvaluationFailed(
+  payload: EvaluationWorkflowParams,
+  step: WorkflowStep,
+  deps: EvaluationWorkflowDeps,
+  failure: unknown
+): Promise<void> {
+  try {
+    await step.do("fail-evaluation", async () => {
+      const entityId = new EntityId(payload.evaluationId, new ProjectId(payload.projectId, payload.tenantId, payload.userId));
+      const durationMs = Math.max(0, Date.now() - payload.startedAtMs);
+      await new EvaluationService(deps.db).failEvaluation(entityId, durationMs, errorMessageOf(failure));
+    });
+  } catch (error) {
+    console.error("[EvaluationWorkflow] Failed to mark the evaluation failed", { evaluationId: payload.evaluationId, error });
+  }
+}
+
+// eslint-disable-next-line max-lines-per-function
+async function runEvaluationSteps(
+  payload: EvaluationWorkflowParams,
+  step: WorkflowStep,
+  deps: EvaluationWorkflowDeps
 ): Promise<void> {
   console.log("[EvaluationWorkflow] Starting evaluation workflow", {
     tenantId: payload.tenantId,
@@ -45,7 +80,11 @@ export async function runEvaluationWorkflow(
     const evaluationService = new EvaluationService(deps.db);
 		const projectId = new ProjectId(payload.projectId, payload.tenantId, payload.userId);
 		const entityId = new EntityId(payload.evaluationId, projectId);
-    await evaluationService.startEvaluation(entityId);
+    const started = await evaluationService.startEvaluation(entityId);
+    await recordEventSafely(async () => {
+      const totalCalls = await evaluationService.countCalls(entityId, started);
+      await evaluationService.recordEvent(entityId, { type: "started", details: { totalCalls } });
+    });
     console.log("[EvaluationWorkflow] Evaluation started successfully");
   });
 
@@ -54,11 +93,6 @@ export async function runEvaluationWorkflow(
   const promptRepository = new EvaluationPromptRepository(deps.db);
   const resultRepository = new EvaluationResultRepository(deps.db);
   const recordRepository = new DataSetRecordRepository(deps.db);
-  const providerService = new ProviderService(
-    deps.providerConfig,
-    new NullPromptExecutionLogger(),
-    deps.cache
-  );
 
   // Get evaluation to retrieve datasetId
   const evaluation = await step.do("get-evaluation", async () => {
@@ -179,18 +213,38 @@ export async function runEvaluationWorkflow(
               model: version.model,
             });
 
-            const result = await providerService.executePrompt(version.provider, {
-              model: version.model,
-              messages: promptBody.messages,
-              variables,
-              response_format: promptBody.response_format,
-              openai_settings: promptBody.openai_settings,
-              google_settings: promptBody.google_settings,
-              openrouter_settings: promptBody.openrouter_settings,
-              proxy: promptBody.proxy,
-              projectId: version.projectId,
-              promptSlug: version.slug,
-            });
+            const call = {
+              recordId: record.id,
+              promptId: evaluationPrompt.promptId,
+              versionId: evaluationPrompt.versionId,
+            };
+            const attempt = await nextAttemptSafely(evaluationService, evaluationId, call);
+            await recordEventSafely(() => evaluationService.recordEvent(evaluationId, {
+              type: "call_started",
+              ...call,
+              details: { attempt, provider: version.provider, model: version.model },
+            }));
+
+            const logContext = {
+              tenantId: payload.tenantId,
+              projectId: payload.projectId,
+              promptId: evaluationPrompt.promptId,
+              version: version.version,
+            };
+            const result = await runCallWithEvents({ evaluationService, evaluationId, call, attempt }, () =>
+              executePromptWithLog(deps, logContext, version.provider, {
+                model: version.model,
+                messages: promptBody.messages,
+                variables,
+                response_format: promptBody.response_format,
+                openai_settings: promptBody.openai_settings,
+                google_settings: promptBody.google_settings,
+                openrouter_settings: promptBody.openrouter_settings,
+                proxy: promptBody.proxy,
+                projectId: version.projectId,
+                promptSlug: version.slug,
+              })
+            );
 
             console.log("[EvaluationWorkflow] Prompt execution completed", {
               model: result.model,
@@ -263,6 +317,7 @@ export async function runEvaluationWorkflow(
 			entityId,
       durationMs
     );
+    await recordEventSafely(() => evaluationService.recordEvent(entityId, { type: "finished", details: { durationMs } }));
 
     console.log("[EvaluationWorkflow] Evaluation finished successfully");
   });
@@ -282,7 +337,88 @@ export class EvaluationWorkflow extends WorkflowEntrypoint<Env, EvaluationWorkfl
     await runEvaluationWorkflow(event.payload, step, {
       db: this.env.DB,
       cache: this.env.CACHE,
+      logFiles: this.env.PRIVATE_FILES,
+      logQueue: this.env.NEW_LOGS,
       providerConfig: providerConfigFromEnv(this.env),
+    });
+  }
+}
+
+interface EvaluationCall {
+  recordId: number;
+  promptId: number;
+  versionId: number;
+}
+
+interface TrackedCall {
+  evaluationService: EvaluationService;
+  evaluationId: EntityId;
+  call: EvaluationCall;
+  attempt: number | undefined;
+}
+
+async function runCallWithEvents(
+  { evaluationService, evaluationId, call, attempt }: TrackedCall,
+  execute: () => Promise<ExecuteResult>
+): Promise<ExecuteResult> {
+  let result: ExecuteResult;
+  try {
+    result = await execute();
+  } catch (error) {
+    await recordEventSafely(() => evaluationService.recordEvent(evaluationId, {
+      type: "call_failed",
+      ...call,
+      details: { attempt, error: errorMessageOf(error) },
+    }));
+    throw error;
+  }
+
+  await recordEventSafely(() => evaluationService.recordEvent(evaluationId, {
+    type: "call_succeeded",
+    ...call,
+    details: { attempt, durationMs: result.duration_ms },
+  }));
+  return result;
+}
+
+async function recordEventSafely(write: () => Promise<void>): Promise<void> {
+  try {
+    await write();
+  } catch (error) {
+    console.error("[EvaluationWorkflow] Failed to save an activity event", { error });
+  }
+}
+
+async function nextAttemptSafely(
+  evaluationService: EvaluationService,
+  evaluationId: EntityId,
+  call: EvaluationCall
+): Promise<number | undefined> {
+  try {
+    return await evaluationService.nextCallAttempt(evaluationId, call);
+  } catch (error) {
+    console.error("[EvaluationWorkflow] Failed to count earlier attempts", { error });
+    return undefined;
+  }
+}
+
+const errorMessageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+async function executePromptWithLog(
+  deps: EvaluationWorkflowDeps,
+  logContext: PromptExecutionContext,
+  provider: string,
+  request: ExecuteRequest
+): Promise<ExecuteResult> {
+  const logger = new CFPromptExecutionLogger(drizzle(deps.db), deps.logFiles, deps.logQueue);
+  logger.setContext(logContext);
+  const providerService = new ProviderService(deps.providerConfig, logger, deps.cache);
+
+  try {
+    return await providerService.executePrompt(provider, request);
+  } finally {
+    await logger.finish().catch((error: unknown) => {
+      console.error("[EvaluationWorkflow] Failed to save the execution log", { ...logContext, error });
     });
   }
 }

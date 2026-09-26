@@ -16,6 +16,16 @@ import type { IPromptExecutionLogger } from "./logger/execution-logger";
  * OpenAI provider implementation
  * Uses OpenAI Responses API for executing prompts
  */
+type OpenAIReasoningSummary = NonNullable<Reasoning["summary"]>;
+
+const toOpenAIReasoningSummary = (
+  saved: NonNullable<ExecuteRequest["openai_settings"]>["reasoning_summary"]
+): OpenAIReasoningSummary | undefined => {
+  if (saved === "disabled") return undefined;
+  if (saved === "concise" || saved === "detailed") return saved;
+  return "auto";
+};
+
 export class OpenAIProvider extends AIProvider {
   private client: OpenAI;
   protected logger: IPromptExecutionLogger;
@@ -155,11 +165,9 @@ export class OpenAIProvider extends AIProvider {
   }
 
   private buildReasoningConfig(openaiSettings: ExecuteRequest["openai_settings"]): Reasoning | null {
-		return {
-      effort: openaiSettings?.reasoning_effort ?? "medium",
-			// @ts-expect-error no type
-      summary: openaiSettings?.reasoning_summary ?? "auto",
-    };
+    const effort = openaiSettings?.reasoning_effort ?? "medium";
+    const summary = toOpenAIReasoningSummary(openaiSettings?.reasoning_summary);
+    return summary ? { effort, summary } : { effort };
   }
 
   private buildIncludeArray(openaiSettings: ExecuteRequest["openai_settings"]) {

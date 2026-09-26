@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { APIConnectionTimeoutError } from "openai/core/error";
 import { OpenRouterProvider } from "../../../worker/providers/openrouter-provider";
+import { ProviderTimeoutError } from "../../../worker/providers/provider-timeout-error";
 import type { ExecuteRequest } from "../../../worker/providers/base-provider";
 import { CapturingLogger } from "../helpers/capturing-logger";
 
@@ -300,6 +302,27 @@ describe("OpenRouterProvider", () => {
   });
 
   describe("Errors", () => {
+    it("throws a ProviderTimeoutError and logs it when the client times out", async () => {
+      mockChatCreate.mockRejectedValue(new APIConnectionTimeoutError());
+
+      const failure = await provider.execute(baseRequest()).catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(ProviderTimeoutError);
+      expect(failure).toMatchObject({ code: "provider_timeout", timeoutMs: 240_000 });
+      expect(logger.errors).toHaveLength(1);
+      expect(logger.errors[0].errorMessage).toBe("OpenRouter did not answer within 240 s");
+      expect(logger.successes).toHaveLength(0);
+    });
+
+    it("throws other client errors unchanged", async () => {
+      const outage = new Error("Connection error.");
+      mockChatCreate.mockRejectedValue(outage);
+
+      await expect(provider.execute(baseRequest())).rejects.toBe(outage);
+
+      expect(logger.errors[0].errorMessage).toBe("Connection error.");
+    });
+
     it("throws when an HTTP 200 body holds only an error object", async () => {
       const errorBody = { error: { code: 502, message: "upstream failed" } };
       mockChatCreate.mockResolvedValue(errorBody);

@@ -5,6 +5,7 @@ import { handler } from "../../../../worker/queue/handler";
 import type { ExecutionLogQueueMessage } from "../../../../worker/queue/messages";
 import { manage, setupFixtures, type Fixtures } from "./manage/helpers";
 import { openRouterCompletion } from "../../helpers/openrouter-fixtures";
+import { APIConnectionTimeoutError } from "openai/core/error";
 
 const mockChatCreate = vi.fn();
 
@@ -172,5 +173,59 @@ describe("E2E - API run of an OpenRouter prompt", () => {
     expect(payload.provider).toEqual({ require_parameters: true, sort: "throughput" });
     expect(payload.temperature).toBe(0);
     expect(payload.max_tokens).toBe(1200);
+  });
+  describe("when the OpenRouter call fails", () => {
+    const createAndRun = async () => {
+      const created = await manage("/projects/support/prompts", f.keys.write, {
+        method: "POST",
+        body: {
+          name: "Slow scorer",
+          slug: "slow-scorer",
+          provider: "openrouter",
+          model: "deepseek/deepseek-v4.1-flash",
+          body: { messages: [{ role: "user", content: "Score: {{product}}" }] },
+        },
+      });
+      expect(created.status).toBe(201);
+
+      const ctx = createExecutionContext();
+      const res = await app.request(
+        "/api/v1/projects/support/prompts/slow-scorer/execute",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-api-key": f.keys.write },
+          body: JSON.stringify({ variables: { product: "Vitamin D3 2000 IU" } }),
+        },
+        { ...env, OPENROUTER_API_KEY: TEST_OPENROUTER_KEY },
+        ctx
+      );
+      await waitOnExecutionContext(ctx);
+      return res;
+    };
+
+    it("returns 504 with code provider_timeout and logs the failure when the call times out", async () => {
+      mockChatCreate.mockReset();
+      mockChatCreate.mockRejectedValue(new APIConnectionTimeoutError());
+
+      const res = await createAndRun();
+
+      expect(res.status).toBe(504);
+      expect(await res.json()).toEqual({
+        error: "OpenRouter did not answer within 240 s",
+        code: "provider_timeout",
+      });
+      const logged = await readLog();
+      expect(logged).toMatchObject({ isSuccess: 0 });
+    });
+
+    it("keeps returning 500 without a code for other failures", async () => {
+      mockChatCreate.mockReset();
+      mockChatCreate.mockRejectedValue(new Error("Connection error."));
+
+      const res = await createAndRun();
+
+      expect(res.status).toBe(500);
+      expect(await res.json()).toEqual({ error: "Connection error." });
+    });
   });
 });

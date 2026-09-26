@@ -24,7 +24,7 @@ export interface ResponseFormat {
  */
 export interface OpenAISettings {
   reasoning_effort?: "low" | "medium" | "high";
-  reasoning_summary?: "auto" | "enabled" | "concise";
+  reasoning_summary?: "auto" | "concise" | "detailed" | "enabled" | "disabled";
   store?: boolean;
   include_encrypted_reasoning?: boolean;
 }

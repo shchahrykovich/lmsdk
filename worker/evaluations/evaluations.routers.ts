@@ -48,6 +48,19 @@ evaluations.get("/:projectId/evaluations/:evaluationId", async (c) => {
   return c.json(details);
 });
 
+evaluations.get("/:projectId/evaluations/:evaluationId/activity", async (c) => {
+  const evaluationId = EntityId.parse(c, "evaluationId");
+
+  const evaluationService = new EvaluationService(c.env.DB);
+  const activity = await evaluationService.getEvaluationActivity(evaluationId);
+
+  if (!activity) {
+    throw new NotFoundError("Evaluation not found");
+  }
+
+  return c.json(activity);
+});
+
 const validateCreateEvaluationRequest = (body: {
   name?: unknown;
   type?: unknown;

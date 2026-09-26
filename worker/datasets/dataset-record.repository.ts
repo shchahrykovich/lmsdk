@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, inArray } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { dataSetRecords, type DataSetRecord } from "../db/schema.ts";
 import type { Pagination } from "../types/common.ts";
@@ -101,6 +101,21 @@ export class DataSetRecordRepository {
       .where(and(...whereConditions))
       .orderBy(asc(dataSetRecords.id))
       .limit(limit);
+  }
+
+  async countByDataSet(dataSetId: EntityId): Promise<number> {
+    const [row] = await this.db
+      .select({ total: count() })
+      .from(dataSetRecords)
+      .where(
+        and(
+          eq(dataSetRecords.tenantId, dataSetId.tenantId),
+          eq(dataSetRecords.projectId, dataSetId.projectId),
+          eq(dataSetRecords.dataSetId, dataSetId.id),
+          eq(dataSetRecords.isDeleted, false)
+        )
+      );
+    return row?.total ?? 0;
   }
 
   async listBatchByDataSet(

@@ -303,6 +303,21 @@ export const evaluationResults = sqliteTable("EvaluationResults", {
   projectIdTenantIdIdx: index("EvaluationResults_projectId_tenantId_idx").on(table.projectId, table.tenantId),
 }));
 
+export const evaluationEvents = sqliteTable("EvaluationEvents", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  tenantId: integer("tenantId").notNull(),
+  projectId: integer("projectId").notNull(),
+  evaluationId: integer("evaluationId").notNull(),
+  type: text("type").notNull(),
+  recordId: integer("recordId"),
+  promptId: integer("promptId"),
+  versionId: integer("versionId"),
+  details: text("details").notNull().default("{}"),
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+}, (table) => ({
+  evaluationIdx: index("EvaluationEvents_tenantId_projectId_evaluationId_idx").on(table.tenantId, table.projectId, table.evaluationId),
+}));
+
 
 // Type exports for use in application code
 export type Tenant = typeof tenants.$inferSelect;
@@ -339,3 +354,5 @@ export type EvaluationPrompt = typeof evaluationPrompts.$inferSelect;
 export type NewEvaluationPrompt = typeof evaluationPrompts.$inferInsert;
 export type EvaluationResult = typeof evaluationResults.$inferSelect;
 export type NewEvaluationResult = typeof evaluationResults.$inferInsert;
+export type EvaluationEventRow = typeof evaluationEvents.$inferSelect;
+export type NewEvaluationEventRow = typeof evaluationEvents.$inferInsert;

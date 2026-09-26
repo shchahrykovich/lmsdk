@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.1.16",
+    "date": "2026-09-26",
+    "changes": [
+      "Evaluation page shows live activity: progress, each sent call, errors, and a warning when a run may be stuck",
+      "A failed evaluation is marked failed instead of staying running",
+      "OpenAI prompts with reasoning summary Enabled or Disabled no longer fail with 400 Invalid value",
+      "Evaluation calls now appear on the Logs page, including failed attempts",
+      "Add logs to a new dataset: choose New dataset in the Add to dataset dialog",
+      "API execute returns 504 with code provider_timeout when OpenRouter does not answer within 240 s, so clients can skip the retry"
+    ]
+  },
+  {
     "version": "0.1.15",
     "date": "2026-09-26",
     "changes": [
