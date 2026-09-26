@@ -13,6 +13,8 @@ import usersRouter from "../users/users.routes";
 import authRouter from "./auth.routes";
 import type {AuthenticatedUser} from "../middleware/auth";
 import {requireApiKey} from "../middleware/apikey.middleware";
+import {requireManagePermission} from "../middleware/require-permission.middleware";
+import {MANAGE_BASE_PATH, registerManageRoutes} from "../openapi/manage";
 import {errorHandler} from "../middleware/error-handler.middleware";
 import {V1Whoami} from "../openapi/v1/whoami";
 import {V1ExecutePrompt} from "../openapi/v1/execute-prompt";
@@ -27,6 +29,7 @@ export interface HonoEnv {
 	Variables: {
 		auth: Auth;
 		user?: AuthenticatedUser;
+		apiKeyPermissions?: Record<string, string[]> | null;
 	};
 }
 
@@ -65,6 +68,7 @@ export function createHonoApp(): Hono<HonoEnv> {
 
 	// Apply API key middleware to all v1 routes
 	app.use("/api/v1/*", requireApiKey);
+	app.use(`${MANAGE_BASE_PATH}/*`, requireManagePermission);
 
 	// Register OpenAPI v1 endpoints
 	openapi.get("/api/v1/whoami", V1Whoami);
@@ -73,6 +77,7 @@ export function createHonoApp(): Hono<HonoEnv> {
 	openapi.get("/api/v1/projects/:projectSlugOrId/prompts/:promptSlugOrId/versions/latest", V1PromptVersionLatest);
 	openapi.get("/api/v1/projects/:projectSlugOrId/prompts/:promptSlugOrId/versions/active", V1PromptVersionActive);
 	openapi.get("/api/v1/projects/:projectSlugOrId/prompts/:promptSlugOrId/versions/:versionId", V1PromptVersion);
+	registerManageRoutes(openapi);
 
 	// Mount regular routes (non-OpenAPI)
 	app.route("/api/auth", authRouter);

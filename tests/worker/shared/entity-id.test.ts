@@ -139,6 +139,36 @@ describe("EntityId", () => {
     });
   });
 
+  describe("parseAsString", () => {
+    it("parses string entity ID", () => {
+      const ctx = createMockContext("10", "trace-abc", "traceId");
+      const entityId = EntityId.parseAsString(ctx, "traceId");
+
+      expect(entityId.id).toBe("trace-abc");
+      expect(entityId.projectId).toBe(10);
+      expect(entityId.tenantId).toBe(1);
+    });
+
+    it("throws error for undefined param", () => {
+      const ctx = {
+        req: {
+          param: (key: string) => (key === "projectId" ? "10" : undefined),
+        },
+        get: (key: string) => (key === "user" ? { id: "user-123", tenantId: 1 } : undefined),
+      } as unknown as Context<HonoEnv>;
+
+      expect(() => EntityId.parseAsString(ctx, "traceId")).toThrow(ClientInputValidationError);
+      expect(() => EntityId.parseAsString(ctx, "traceId")).toThrow("Invalid trace ID");
+    });
+
+    it("throws error for empty string", () => {
+      const ctx = createMockContext("10", "", "traceId");
+
+      expect(() => EntityId.parseAsString(ctx, "traceId")).toThrow(ClientInputValidationError);
+      expect(() => EntityId.parseAsString(ctx, "traceId")).toThrow("Invalid trace ID");
+    });
+  });
+
   describe("validation errors for project ID", () => {
     it("throws error when project ID is invalid", () => {
       const ctx = createMockContext("invalid", "42", "evaluationId");

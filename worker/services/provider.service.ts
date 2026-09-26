@@ -1,6 +1,7 @@
 import { ProviderFactory, type ProviderConfig } from "../providers/provider-factory";
 import type { ExecuteRequest, ExecuteResult, AIMessage } from "../providers/base-provider";
 import { getOpenAIModels } from "../utils/openai-models";
+import { getOpenRouterModels } from "../utils/openrouter-models";
 import type { IPromptExecutionLogger } from "../providers/logger/execution-logger";
 import {replaceAllVariables} from "../utils/variable-replacer";
 
@@ -50,25 +51,35 @@ export class ProviderService {
       {
         id: "openai",
         name: "OpenAI",
-        description: "GPT models including GPT-5, GPT-4o, O-series, and more",
+        description: "GPT models including GPT-6, GPT-5, GPT-4o, O-series, and more",
         models: getOpenAIModels(),
       },
       {
         id: "google",
         name: "Google",
-        description: "Gemini Flash, Gemini Pro, and other Google models",
+        description: "Gemini 3.x Flash, Gemini Pro, and other Google models",
         models: [
           { id: "gemini-flash-lite-latest", name: "Gemini Flash Lite (Latest)" },
           { id: "gemini-flash-latest", name: "Gemini Flash (Latest)" },
-          { id: "gemini-3-pro-preview", name: "Gemini 3.0 Pro (Preview)" },
+          { id: "gemini-pro-latest", name: "Gemini Pro (Latest)" },
+          { id: "gemini-3.8-flash", name: "Gemini 3.8 Flash" },
+          { id: "gemini-3.7-flash", name: "Gemini 3.7 Flash" },
+          { id: "gemini-3.6-flash", name: "Gemini 3.6 Flash" },
+          { id: "gemini-3.5-flash", name: "Gemini 3.5 Flash" },
+          { id: "gemini-3.5-flash-lite", name: "Gemini 3.5 Flash Lite" },
+          { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro (Preview)" },
+          { id: "gemini-3.1-flash-lite", name: "Gemini 3.1 Flash Lite" },
           { id: "gemini-3-flash-preview", name: "Gemini 3.0 Flash (Preview)" },
-          { id: "gemini-2.0-flash-exp", name: "Gemini 2.0 Flash (Experimental)" },
-          { id: "gemini-exp-1206", name: "Gemini Experimental 1206" },
-          { id: "gemini-2.0-flash-thinking-exp-1219", name: "Gemini 2.0 Flash Thinking" },
-          { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro" },
-          { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash" },
-          { id: "gemini-1.5-flash-8b", name: "Gemini 1.5 Flash 8B" },
+          { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro" },
+          { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash" },
+          { id: "gemini-2.5-flash-lite", name: "Gemini 2.5 Flash Lite" },
         ],
+      },
+      {
+        id: "openrouter",
+        name: "OpenRouter",
+        description: "Claude, Grok, DeepSeek, Qwen, Kimi, Mistral, GLM and Llama through one API",
+        models: getOpenRouterModels(),
       },
     ];
   }

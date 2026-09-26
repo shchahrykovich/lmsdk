@@ -35,7 +35,7 @@ export function Pagination({
   onPageSizeChange,
   className,
   ...props
-}: PaginationProps): JSX.Element {
+}: Readonly<PaginationProps>): JSX.Element {
   const navigate = useNavigate();
   const location = useLocation();
 

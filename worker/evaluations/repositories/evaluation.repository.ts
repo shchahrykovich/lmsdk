@@ -1,9 +1,12 @@
 import { drizzle } from "drizzle-orm/d1";
-import { and, eq, desc, count } from "drizzle-orm";
-import { evaluations, type Evaluation, type NewEvaluation } from "../../db/schema.ts";
+import { and, eq, desc, count, sql, isNull } from "drizzle-orm";
+import type { BatchItem } from "drizzle-orm/batch";
+import { evaluations, evaluationPrompts, type Evaluation, type NewEvaluation } from "../../db/schema.ts";
 import type { EntityId } from "../../shared/entity-id.ts";
 import type { ProjectId } from "../../shared/project-id.ts";
 import type { Pagination } from "../../types/common.ts";
+
+export const WORKFLOW_START_PENDING = "pending";
 
 export class EvaluationRepository {
   private db;
@@ -97,6 +100,56 @@ export class EvaluationRepository {
       .values(newEvaluation)
       .returning();
     return evaluation;
+  }
+
+  async createWithPrompts(
+    newEvaluation: NewEvaluation,
+    prompts: { promptId: number; versionId: number }[]
+  ): Promise<Evaluation> {
+    const evaluationBySlug = and(
+      eq(evaluations.tenantId, newEvaluation.tenantId),
+      eq(evaluations.projectId, newEvaluation.projectId),
+      eq(evaluations.slug, newEvaluation.slug)
+    );
+
+    const promptStatements: BatchItem<"sqlite">[] = prompts.map((prompt) =>
+      this.db.insert(evaluationPrompts).select(
+        this.db
+          .select({
+            id: sql<number>`NULL`.as("id"),
+            tenantId: evaluations.tenantId,
+            projectId: evaluations.projectId,
+            evaluationId: evaluations.id,
+            promptId: sql<number>`${prompt.promptId}`.as("promptId"),
+            versionId: sql<number>`${prompt.versionId}`.as("versionId"),
+            createdAt: sql<Date>`(unixepoch())`.as("createdAt"),
+          })
+          .from(evaluations)
+          .where(evaluationBySlug)
+      )
+    );
+
+    const [created] = await this.db.batch([
+      this.db.insert(evaluations).values(newEvaluation).returning(),
+      ...promptStatements,
+    ]);
+    return created[0];
+  }
+
+  async claimWorkflowStart(entityId: EntityId): Promise<boolean> {
+    const claimed = await this.db
+      .update(evaluations)
+      .set({ workflowId: WORKFLOW_START_PENDING, updatedAt: new Date() })
+      .where(and(entityId.toWhereClause(evaluations), isNull(evaluations.workflowId)))
+      .returning({ id: evaluations.id });
+    return claimed.length > 0;
+  }
+
+  async releaseWorkflowStart(entityId: EntityId): Promise<void> {
+    await this.db
+      .update(evaluations)
+      .set({ workflowId: null, updatedAt: new Date() })
+      .where(and(entityId.toWhereClause(evaluations), eq(evaluations.workflowId, WORKFLOW_START_PENDING)));
   }
 
   async updateWorkflowId(

@@ -1,6 +1,7 @@
 import { AIProvider } from "./base-provider";
 import { OpenAIProvider } from "./openai-provider";
 import { GoogleProvider } from "./google-provider";
+import { OpenRouterProvider } from "./openrouter-provider";
 import type { IPromptExecutionLogger } from "./logger/execution-logger";
 
 /**
@@ -9,8 +10,21 @@ import type { IPromptExecutionLogger } from "./logger/execution-logger";
 export interface ProviderConfig {
   openAIKey?: string;
   geminiKey?: string;
+  openRouterKey?: string;
   cloudflareAiGatewayToken?: string;
   cloudflareAiGatewayBaseUrl?: string;
+}
+
+export const SUPPORTED_PROVIDERS = ["openai", "google", "openrouter"] as const;
+
+export function providerConfigFromEnv(env: Env): ProviderConfig {
+  return {
+    openAIKey: env.OPEN_AI_API_KEY,
+    geminiKey: env.GEMINI_API_KEY,
+    openRouterKey: env.OPENROUTER_API_KEY,
+    cloudflareAiGatewayToken: env.CLOUDFLARE_AI_GATEWAY_TOKEN,
+    cloudflareAiGatewayBaseUrl: env.CLOUDFLARE_AI_GATEWAY_BASE_URL,
+  };
 }
 
 /**
@@ -54,9 +68,18 @@ export class ProviderFactory {
           baseUrl: this.config.cloudflareAiGatewayBaseUrl,
         });
 
+      case "openrouter":
+        if (!this.config.openRouterKey) {
+          throw new Error("OpenRouter API key not configured. Please set OPENROUTER_API_KEY secret.");
+        }
+        return new OpenRouterProvider(this.config.openRouterKey, this.logger, {
+          token: this.config.cloudflareAiGatewayToken,
+          baseUrl: this.config.cloudflareAiGatewayBaseUrl,
+        });
+
       default:
         throw new Error(
-          `Provider '${providerName}' is not supported. Supported providers: openai, google`
+          `Provider '${providerName}' is not supported. Supported providers: ${SUPPORTED_PROVIDERS.join(", ")}`
         );
     }
   }
@@ -67,8 +90,7 @@ export class ProviderFactory {
    * @returns True if provider is supported
    */
   isProviderSupported(providerName: string): boolean {
-    const supported = ["openai", "google"];
-    return supported.includes(providerName.toLowerCase());
+    return (SUPPORTED_PROVIDERS as readonly string[]).includes(providerName.toLowerCase());
   }
 
   /**
@@ -76,6 +98,6 @@ export class ProviderFactory {
    * @returns Array of supported provider names
    */
   getSupportedProviders(): string[] {
-    return ["openai", "google"];
+    return [...SUPPORTED_PROVIDERS];
   }
 }

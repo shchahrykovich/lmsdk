@@ -374,6 +374,14 @@ export class TraceExtractionService {
         tool_use_prompt_tokens: 0,
         total_tokens: 0,
       };
+    } else if (provider === 'openrouter') {
+      return {
+        prompt_tokens: 0,
+        cached_tokens: 0,
+        completion_tokens: 0,
+        reasoning_tokens: 0,
+        total_tokens: 0,
+      };
     }
     return {};
   }
@@ -391,6 +399,10 @@ export class TraceExtractionService {
     }
     if (provider === "google") {
       this.aggregateGoogleUsage(accumulated, usage);
+      return;
+    }
+    if (provider === "openrouter") {
+      this.aggregateOpenRouterUsage(accumulated, usage);
     }
   }
 
@@ -414,6 +426,14 @@ export class TraceExtractionService {
     accumulated.response_tokens += this.numberOrZero(usage.response_tokens);
     accumulated.thoughts_tokens += this.numberOrZero(usage.thoughts_tokens);
     accumulated.tool_use_prompt_tokens += this.numberOrZero(usage.tool_use_prompt_tokens);
+    accumulated.total_tokens += this.numberOrZero(usage.total_tokens);
+  }
+
+  private aggregateOpenRouterUsage(accumulated: UsageStats, usage: Record<string, unknown>): void {
+    accumulated.prompt_tokens += this.numberOrZero(usage.prompt_tokens);
+    accumulated.cached_tokens += this.numberOrZero(usage.cached_tokens);
+    accumulated.completion_tokens += this.numberOrZero(usage.completion_tokens);
+    accumulated.reasoning_tokens += this.numberOrZero(usage.reasoning_tokens);
     accumulated.total_tokens += this.numberOrZero(usage.total_tokens);
   }
 

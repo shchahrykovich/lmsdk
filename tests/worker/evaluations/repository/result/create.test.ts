@@ -6,6 +6,7 @@ import { DataSetRepository } from "../../../../../worker/datasets/dataset.reposi
 import { DataSetRecordRepository } from "../../../../../worker/datasets/dataset-record.repository";
 import { PromptRepository } from "../../../../../worker/prompts/prompt.repository";
 import { applyMigrations } from "../../../helpers/db-setup";
+import { insertDataSetRecords } from "../../../helpers/seed";
 import { drizzle } from "drizzle-orm/d1";
 
 describe("EvaluationResultRepository - create", () => {
@@ -48,7 +49,7 @@ describe("EvaluationResultRepository - create", () => {
       schema: "{}",
     });
 
-    const [record] = await dataSetRecordRepository.createMany([
+    const [record] = await insertDataSetRecords([
       {
         tenantId: 1,
         projectId: 1,

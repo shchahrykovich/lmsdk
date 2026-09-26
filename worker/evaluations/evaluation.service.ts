@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/d1";
 import type { Evaluation } from "../db/schema";
-import { EvaluationRepository } from "./repositories/evaluation.repository";
+import { EvaluationRepository, WORKFLOW_START_PENDING } from "./repositories/evaluation.repository";
 import { EvaluationPromptRepository } from "./repositories/evaluation-prompt.repository";
 import { EvaluationResultRepository } from "./repositories/evaluation-result.repository";
 import { DataSetRecordRepository } from "../datasets/dataset-record.repository";
@@ -8,6 +8,10 @@ import { DataSetRepository } from "../datasets/dataset.repository";
 import { PromptRepository } from "../prompts/prompt.repository";
 import { EntityId } from "../shared/entity-id";
 import { ProjectId } from "../shared/project-id";
+import { ClientInputValidationError, ConflictError, conflictOnDuplicate } from "../shared/errors";
+import type { EvaluationWorkflowParams } from "../workflows/evaluation.workflow";
+
+export type EvaluationWorkflowBinding = Workflow<EvaluationWorkflowParams>;
 
 export interface CreateEvaluationPromptInput {
   promptId: number;
@@ -155,6 +159,18 @@ export class EvaluationService {
     };
   }
 
+  async listEvaluationRows(
+    projectId: ProjectId,
+    page: number,
+    pageSize: number
+  ): Promise<{ evaluations: Evaluation[]; total: number; page: number; pageSize: number; totalPages: number }> {
+    const [evaluations, total] = await Promise.all([
+      this.repository.findByTenantAndProjectPaginated(projectId, { page, pageSize }),
+      this.repository.countByTenantAndProject(projectId),
+    ]);
+    return { evaluations, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
+  }
+
   async createEvaluation(
     projectId: ProjectId,
     input: CreateEvaluationInput
@@ -162,8 +178,10 @@ export class EvaluationService {
     const existingByName = await this.repository.findByName(projectId, input.name);
 
     if (existingByName) {
-      throw new Error("Evaluation name already exists");
+      throw new ConflictError("Evaluation name already exists");
     }
+
+    await this.ensureInputsBelongToProject(projectId, input);
 
     const baseSlug = this.generateSlug(input.name);
     let slug = baseSlug;
@@ -174,31 +192,133 @@ export class EvaluationService {
       slug = `${baseSlug}-${attempt}`;
     }
 
-    const evaluation = await this.repository.create({
-      tenantId: projectId.tenantId,
-      projectId: projectId.id,
-      datasetId: input.datasetId,
-      name: input.name,
-      slug,
-      type: input.type,
-      state: "created",
-      workflowId: null,
-      durationMs: null,
-      inputSchema: "{}",
-      outputSchema: "{}",
-    });
-
-    await this.promptRepository.createMany(
-      input.prompts.map((prompt) => ({
-        tenantId: projectId.tenantId,
-        projectId: projectId.id,
-        evaluationId: evaluation.id,
-        promptId: prompt.promptId,
-        versionId: prompt.versionId,
-      }))
+    return await conflictOnDuplicate(
+      () =>
+        this.repository.createWithPrompts(
+          {
+            tenantId: projectId.tenantId,
+            projectId: projectId.id,
+            datasetId: input.datasetId,
+            name: input.name,
+            slug,
+            type: input.type,
+            state: "created",
+            workflowId: null,
+            durationMs: null,
+            inputSchema: "{}",
+            outputSchema: "{}",
+          },
+          input.prompts
+        ),
+      "Evaluation name already exists"
     );
+  }
 
-    return evaluation;
+  private async ensureInputsBelongToProject(
+    projectId: ProjectId,
+    input: CreateEvaluationInput
+  ): Promise<void> {
+    const dataset = await this.datasetRepository.findById(new EntityId(input.datasetId, projectId));
+    if (!dataset) {
+      throw new ClientInputValidationError("Dataset not found in this project");
+    }
+
+    for (const prompt of input.prompts) {
+      const version = await this.promptRepo.findPromptVersionById(projectId, prompt.versionId);
+      if (version?.promptId !== prompt.promptId) {
+        throw new ClientInputValidationError(
+          `Version ${prompt.versionId} of prompt ${prompt.promptId} not found in this project`
+        );
+      }
+    }
+  }
+
+  async createAndStartEvaluation(
+    projectId: ProjectId,
+    input: CreateEvaluationInput,
+    workflow: EvaluationWorkflowBinding
+  ): Promise<Evaluation> {
+    const existing = await this.repository.findByName(projectId, input.name);
+    const evaluation = existing
+      ? await this.reuseUnstartedEvaluation(projectId, existing, input)
+      : await this.createEvaluation(projectId, input);
+
+    return await this.startWorkflow(new EntityId(evaluation.id, projectId), workflow);
+  }
+
+  private async reuseUnstartedEvaluation(
+    projectId: ProjectId,
+    existing: Evaluation,
+    input: CreateEvaluationInput
+  ): Promise<Evaluation> {
+    const unstarted = existing.workflowId === null && existing.state === "created";
+    if (!unstarted || !(await this.hasSameDefinition(new EntityId(existing.id, projectId), existing, input))) {
+      throw new ConflictError("Evaluation name already exists");
+    }
+    return existing;
+  }
+
+  private async hasSameDefinition(
+    entityId: EntityId,
+    existing: Evaluation,
+    input: CreateEvaluationInput
+  ): Promise<boolean> {
+    const toKey = (prompts: { promptId: number; versionId: number }[]) =>
+      prompts.map((prompt) => `${prompt.promptId}:${prompt.versionId}`).sort((a, b) => a.localeCompare(b)).join(",");
+    const stored = await this.promptRepository.listByEvaluation(entityId);
+    return existing.datasetId === input.datasetId && existing.type === input.type && toKey(stored) === toKey(input.prompts);
+  }
+
+  private async startWorkflow(entityId: EntityId, workflow: EvaluationWorkflowBinding): Promise<Evaluation> {
+    if (!(await this.repository.claimWorkflowStart(entityId))) {
+      throw new ConflictError("Evaluation is already being started");
+    }
+
+    let instance: WorkflowInstance;
+    try {
+      instance = await workflow.create({
+        params: {
+          tenantId: entityId.tenantId,
+          projectId: entityId.projectId,
+          evaluationId: entityId.id,
+          startedAtMs: Date.now(),
+          userId: entityId.userId,
+        },
+      });
+    } catch (error) {
+      await this.repository.releaseWorkflowStart(entityId);
+      throw error;
+    }
+
+    return await this.setWorkflowId(entityId, instance.id);
+  }
+
+  async getWorkflowStatus(
+    evaluation: Evaluation,
+    workflow: EvaluationWorkflowBinding
+  ): Promise<string | null> {
+    if (!evaluation.workflowId) {
+      return null;
+    }
+
+    if (evaluation.workflowId === WORKFLOW_START_PENDING) {
+      return "starting";
+    }
+
+    try {
+      const instance = await workflow.get(evaluation.workflowId);
+      return (await instance.status()).status;
+    } catch {
+      return "unknown";
+    }
+  }
+
+  async getEvaluation(entityId: EntityId): Promise<Evaluation | undefined> {
+    return await this.repository.findById(entityId);
+  }
+
+  async getEvaluationBySlug(projectId: ProjectId, slug: string): Promise<Evaluation | undefined> {
+    return await this.repository.findBySlug(projectId, slug);
   }
 
   async setWorkflowId(

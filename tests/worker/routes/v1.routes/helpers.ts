@@ -54,7 +54,21 @@ export const requestJsonWithApiKey = (
   );
 };
 
-export const setupApiKeyUser = async (tenantId = 1) => {
+export type ApiKeyPermissions = Record<string, string[]>;
+
+export const createApiKeyForUser = async (userId: string, permissions?: ApiKeyPermissions) => {
+  const auth = createAuth(env);
+  const created = await auth.api.createApiKey({
+    body: {
+      userId,
+      name: "Test API Key",
+      ...(permissions ? { permissions } : {}),
+    },
+  });
+  return created.key;
+};
+
+export const setupApiKeyUser = async (tenantId = 1, permissions?: ApiKeyPermissions) => {
   await applyMigrations();
 
   const db = drizzle(env.DB);
@@ -71,20 +85,12 @@ export const setupApiKeyUser = async (tenantId = 1) => {
     tenantId,
   });
 
-  const auth = createAuth(env);
-  const createKeyResponse = await auth.api.createApiKey({
-    body: {
-      userId: userId,
-      name: "Test API Key",
-    },
-  });
-
   return {
     testUser: {
       id: userId,
       email: userEmail,
       name: "Test User",
     },
-    testApiKey: createKeyResponse.key,
+    testApiKey: await createApiKeyForUser(userId, permissions),
   };
 };

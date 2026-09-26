@@ -3,8 +3,7 @@ import app from "../../../../worker";
 import { ConflictError } from "../../../../worker/shared/errors";
 
 const mockGetSession = vi.fn();
-const createEvaluationMock = vi.fn();
-const setWorkflowIdMock = vi.fn();
+const createAndStartMock = vi.fn();
 const workflowCreateMock = vi.fn();
 
 vi.mock("../../../../auth", () => ({
@@ -17,8 +16,7 @@ vi.mock("../../../../auth", () => ({
 
 vi.mock("../../../../worker/evaluations/evaluation.service", () => ({
   EvaluationService: class {
-    createEvaluation = createEvaluationMock;
-    setWorkflowId = setWorkflowIdMock;
+    createAndStartEvaluation = createAndStartMock;
   },
 }));
 
@@ -26,8 +24,7 @@ describe("Evaluations Routes - POST /api/projects/:projectId/evaluations", () =>
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetSession.mockReset();
-    createEvaluationMock.mockReset();
-    setWorkflowIdMock.mockReset();
+    createAndStartMock.mockReset();
     workflowCreateMock.mockReset();
   });
 
@@ -47,25 +44,10 @@ describe("Evaluations Routes - POST /api/projects/:projectId/evaluations", () =>
     });
   };
 
-  it("should create an evaluation for authenticated user", async () => {
+  it("should create and start an evaluation for authenticated user", async () => {
     setAuthenticatedUser(1);
-    createEvaluationMock.mockResolvedValue({
-      id: 10,
-      tenantId: 1,
-      projectId: 1,
-      datasetId: 5,
-      name: "Eval A",
-      slug: "eval-a",
-      type: "comparison",
-      state: "created",
-      durationMs: null,
-      inputSchema: "{}",
-      outputSchema: "{}",
-      createdAt: 1000,
-      updatedAt: 1000,
-    });
-    workflowCreateMock.mockResolvedValue({ id: "workflow-123" });
-    setWorkflowIdMock.mockResolvedValue({
+    const workflow = { create: workflowCreateMock };
+    createAndStartMock.mockResolvedValue({
       id: 10,
       tenantId: 1,
       projectId: 1,
@@ -97,16 +79,15 @@ describe("Evaluations Routes - POST /api/projects/:projectId/evaluations", () =>
       {
         DB: {} as any,
         PRIVATE_FILES: {} as any,
-        EVALUATION_WORKFLOW: { create: workflowCreateMock } as any,
+        EVALUATION_WORKFLOW: workflow as any,
       }
     );
 
     expect(response.status).toBe(201);
     const data = await response.json();
     expect(data.evaluation.name).toBe("Eval A");
-    expect(data.evaluation.datasetId).toBe(5);
     expect(data.evaluation.workflowId).toBe("workflow-123");
-    expect(createEvaluationMock).toHaveBeenCalledWith(
+    expect(createAndStartMock).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 1,
         tenantId: 1,
@@ -117,25 +98,8 @@ describe("Evaluations Routes - POST /api/projects/:projectId/evaluations", () =>
         type: "comparison",
         datasetId: 5,
         prompts: [{ promptId: 1, versionId: 2 }],
-      }
-    );
-    expect(workflowCreateMock).toHaveBeenCalledWith({
-      params: {
-        tenantId: 1,
-        projectId: 1,
-        evaluationId: 10,
-        startedAtMs: expect.any(Number),
-        userId: "user-123",
       },
-    });
-    expect(setWorkflowIdMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: 10,
-        projectId: 1,
-        tenantId: 1,
-        userId: "user-123",
-      }),
-      "workflow-123"
+      workflow
     );
   });
 
@@ -212,7 +176,7 @@ describe("Evaluations Routes - POST /api/projects/:projectId/evaluations", () =>
 
   it("should return 409 when evaluation name already exists", async () => {
     setAuthenticatedUser(1);
-    createEvaluationMock.mockRejectedValue(new ConflictError("Evaluation name already exists"));
+    createAndStartMock.mockRejectedValue(new ConflictError("Evaluation name already exists"));
 
     const response = await app.request(
       "/api/projects/1/evaluations",
@@ -235,65 +199,9 @@ describe("Evaluations Routes - POST /api/projects/:projectId/evaluations", () =>
     expect(response.status).toBe(409);
   });
 
-  it("should return 500 when workflow creation fails", async () => {
+  it("should return 500 when starting the evaluation fails", async () => {
     setAuthenticatedUser(1);
-    createEvaluationMock.mockResolvedValue({
-      id: 10,
-      tenantId: 1,
-      projectId: 1,
-      datasetId: 5,
-      name: "Eval A",
-      slug: "eval-a",
-      type: "comparison",
-      state: "created",
-      durationMs: null,
-      inputSchema: "{}",
-      outputSchema: "{}",
-      createdAt: 1000,
-      updatedAt: 1000,
-    });
-    workflowCreateMock.mockRejectedValue(new Error("Workflow unavailable"));
-
-    const response = await app.request(
-      "/api/projects/1/evaluations",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: "Eval A",
-          datasetId: 5,
-          prompts: [{ promptId: 1, versionId: 1 }],
-        }),
-      },
-      {
-        DB: {} as any,
-        PRIVATE_FILES: {} as any,
-        EVALUATION_WORKFLOW: { create: workflowCreateMock } as any,
-      }
-    );
-
-    expect(response.status).toBe(500);
-  });
-
-  it("should return 500 when updating workflow id fails", async () => {
-    setAuthenticatedUser(1);
-    createEvaluationMock.mockResolvedValue({
-      id: 10,
-      tenantId: 1,
-      projectId: 1,
-      datasetId: 5,
-      name: "Eval A",
-      slug: "eval-a",
-      type: "comparison",
-      state: "created",
-      durationMs: null,
-      inputSchema: "{}",
-      outputSchema: "{}",
-      createdAt: 1000,
-      updatedAt: 1000,
-    });
-    workflowCreateMock.mockResolvedValue({ id: "workflow-123" });
-    setWorkflowIdMock.mockRejectedValue(new Error("Evaluation not found"));
+    createAndStartMock.mockRejectedValue(new Error("Workflow unavailable"));
 
     const response = await app.request(
       "/api/projects/1/evaluations",

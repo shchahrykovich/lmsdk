@@ -6,6 +6,7 @@ import { DataSetRecordRepository } from "../datasets/dataset-record.repository";
 import { PromptService } from "../prompts/prompt.service";
 import { ProviderService } from "../services/provider.service";
 import { NullPromptExecutionLogger } from "../providers/logger/null-prompt-execution-logger";
+import { providerConfigFromEnv, type ProviderConfig } from "../providers/provider-factory";
 import type { AIMessage, ResponseFormat } from "../providers/base-provider";
 import {drizzle} from "drizzle-orm/d1";
 import {EntityId} from "../shared/entity-id";
@@ -26,12 +27,7 @@ export async function runEvaluationWorkflow(
   deps: {
     db: D1Database;
     cache: KVNamespace;
-    providerConfig: {
-      openAIKey: string;
-      geminiKey: string;
-      cloudflareAiGatewayToken: string;
-      cloudflareAiGatewayBaseUrl: string;
-    };
+    providerConfig: ProviderConfig;
   }
 ): Promise<void> {
   console.log("[EvaluationWorkflow] Starting evaluation workflow", {
@@ -285,12 +281,7 @@ export class EvaluationWorkflow extends WorkflowEntrypoint<Env, EvaluationWorkfl
     await runEvaluationWorkflow(event.payload, step, {
       db: this.env.DB,
       cache: this.env.CACHE,
-      providerConfig: {
-        openAIKey: this.env.OPEN_AI_API_KEY,
-        geminiKey: this.env.GEMINI_API_KEY,
-        cloudflareAiGatewayToken: this.env.CLOUDFLARE_AI_GATEWAY_TOKEN,
-        cloudflareAiGatewayBaseUrl: this.env.CLOUDFLARE_AI_GATEWAY_BASE_URL,
-      },
+      providerConfig: providerConfigFromEnv(this.env),
     });
   }
 }

@@ -8,6 +8,11 @@ import {cloudflare} from "@cloudflare/vite-plugin";
 // https://vite.dev/config/
 export default defineConfig({
 	plugins: [react(), cloudflare()],
+	server: {
+		watch: {
+			ignored: ["**/.dev.vars", "**/.env"],
+		},
+	},
 	resolve: {
 		alias: {
 			"@": path.resolve(__dirname, "./src"),

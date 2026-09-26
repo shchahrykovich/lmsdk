@@ -115,25 +115,13 @@ evaluations.post("/:projectId/evaluations", async (c) => {
   }
 
   const evaluationService = new EvaluationService(c.env.DB);
-
-  const evaluation = await evaluationService.createEvaluation(projectId, validation);
-
-  const workflowInstance = await c.env.EVALUATION_WORKFLOW.create({
-    params: {
-      tenantId: projectId.tenantId,
-      projectId: projectId.id,
-      evaluationId: evaluation.id,
-      startedAtMs: Date.now(),
-			userId: projectId.userId,
-    },
-  });
-
-  const updatedEvaluation = await evaluationService.setWorkflowId(
-    new EntityId(evaluation.id, projectId),
-    workflowInstance.id
+  const evaluation = await evaluationService.createAndStartEvaluation(
+    projectId,
+    validation,
+    c.env.EVALUATION_WORKFLOW
   );
 
-  return c.json({ evaluation: updatedEvaluation }, 201);
+  return c.json({ evaluation }, 201);
 });
 
 /**

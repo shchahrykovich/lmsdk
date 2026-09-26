@@ -6,6 +6,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { ProjectService } from "../../projects/project.service";
 import { PromptService } from "../../prompts/prompt.service";
 import { ProviderService } from "../../services/provider.service";
+import { providerConfigFromEnv } from "../../providers/provider-factory";
 import type { AIMessage, GoogleSettings, OpenAISettings, ResponseFormat } from "../../providers/base-provider";
 import { CFPromptExecutionLogger } from "../../providers/logger/c-f-prompt-execution-logger";
 import { ExecutePromptResponse, ErrorResponse } from "./schemas";
@@ -253,12 +254,7 @@ export class V1ExecutePrompt extends OpenAPIRoute {
       }
 
       // Initialize provider service with logger
-      const providerService = new ProviderService({
-        openAIKey: c.env.OPEN_AI_API_KEY,
-        geminiKey: c.env.GEMINI_API_KEY,
-        cloudflareAiGatewayToken: c.env.CLOUDFLARE_AI_GATEWAY_TOKEN,
-        cloudflareAiGatewayBaseUrl: c.env.CLOUDFLARE_AI_GATEWAY_BASE_URL,
-      }, logger, c.env.CACHE);
+      const providerService = new ProviderService(providerConfigFromEnv(c.env), logger, c.env.CACHE);
 
       // Execute the prompt with variables (provider service handles variable substitution)
       // Note: Logging is now handled inside the provider's execute method

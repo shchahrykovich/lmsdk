@@ -11,6 +11,32 @@ import type { ResponsesModel } from "openai/resources/shared";
 // Extract models from the ResponsesModel type by parsing the type definition
 // This is done at build time, so changes to the OpenAI SDK will be reflected
 const OPENAI_MODELS = [
+  // GPT-6 Series
+  "gpt-6-astra",
+  "gpt-6-sol",
+  "gpt-6-luna",
+
+  // GPT-5.6 Series
+  "gpt-5.6-sol",
+  "gpt-5.6-terra",
+  "gpt-5.6-luna",
+
+  // GPT-5.5 Series
+  "gpt-5.5",
+  "gpt-5.5-2026-04-23",
+  "gpt-5.5-pro",
+  "gpt-5.5-pro-2026-04-23",
+
+  // GPT-5.4 Series
+  "gpt-5.4",
+  "gpt-5.4-mini",
+  "gpt-5.4-nano",
+  "gpt-5.4-mini-2026-03-17",
+  "gpt-5.4-nano-2026-03-17",
+
+  // GPT-5.3 Series
+  "gpt-5.3-chat-latest",
+
   // GPT-5.2 Series
   "gpt-5.2",
   "gpt-5.2-2025-12-11",
@@ -154,6 +180,12 @@ function formatModelName(modelId: string): string {
  */
 export function getPopularOpenAIModels(): { id: ResponsesModel; name: string }[] {
   const popular = [
+    "gpt-6-sol",
+    "gpt-5.6-sol",
+    "gpt-5.5",
+    "gpt-5.5-pro",
+    "gpt-5.4",
+    "gpt-5.4-mini",
     "gpt-5.2",
     "gpt-5.2-pro",
     "gpt-5.1",

@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gt, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import { dataSetRecords, type DataSetRecord, type NewDataSetRecord } from "../db/schema.ts";
+import { dataSetRecords, type DataSetRecord } from "../db/schema.ts";
 import type { Pagination } from "../types/common.ts";
 import type { ProjectId } from "../shared/project-id";
 import type { EntityId } from "../shared/entity-id";
@@ -10,11 +10,6 @@ export class DataSetRecordRepository {
 
   constructor(database: D1Database) {
     this.db = drizzle(database);
-  }
-
-  async createMany(records: NewDataSetRecord[]): Promise<DataSetRecord[]> {
-    if (records.length === 0) return [];
-    return await this.db.insert(dataSetRecords).values(records).returning();
   }
 
   async findById(recordId: EntityId): Promise<DataSetRecord | undefined> {

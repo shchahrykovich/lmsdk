@@ -2,6 +2,7 @@ import { DrizzleD1Database } from "drizzle-orm/d1";
 import { eq, and, desc } from "drizzle-orm";
 import { projects, type Project } from "../db/schema.ts";
 import { ProjectId } from "../shared/project-id";
+import { conflictOnDuplicate } from "../shared/errors";
 
 export interface CreateProjectInput {
   name: string;
@@ -21,15 +22,19 @@ export class ProjectService {
 	}
 
   async createProject(input: CreateProjectInput): Promise<Project> {
-    const [project] = await this.db
-      .insert(projects)
-      .values({
-        name: input.name,
-        slug: input.slug,
-        tenantId: input.tenantId,
-        isActive: true,
-      })
-      .returning();
+    const [project] = await conflictOnDuplicate(
+      () =>
+        this.db
+          .insert(projects)
+          .values({
+            name: input.name,
+            slug: input.slug,
+            tenantId: input.tenantId,
+            isActive: true,
+          })
+          .returning(),
+      "A project with this name or slug already exists"
+    );
 
     return project;
   }

@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { ProviderFactory } from "../../../worker/providers/provider-factory";
 import { OpenAIProvider } from "../../../worker/providers/openai-provider";
 import { GoogleProvider } from "../../../worker/providers/google-provider";
+import { OpenRouterProvider } from "../../../worker/providers/openrouter-provider";
+import { ProviderService } from "../../../worker/services/provider.service";
 
 import {NullPromptExecutionLogger} from "../../../worker/providers/logger/null-prompt-execution-logger";
 
@@ -115,7 +117,7 @@ describe("ProviderFactory", () => {
       }, logger);
 
       expect(() => factory.createProvider("anthropic")).toThrow(
-        "Provider 'anthropic' is not supported. Supported providers: openai, google"
+        "Provider 'anthropic' is not supported. Supported providers: openai, google, openrouter"
       );
     });
 
@@ -192,6 +194,59 @@ describe("ProviderFactory", () => {
     });
   });
 
+  describe("OpenRouter", () => {
+    it("should create OpenRouter provider with valid API key", () => {
+      const factory = new ProviderFactory({ openRouterKey: "test-openrouter-key" }, logger);
+
+      const provider = factory.createProvider("openrouter");
+
+      expect(provider).toBeInstanceOf(OpenRouterProvider);
+      expect(provider.getProviderName()).toBe("openrouter");
+    });
+
+    it("should create OpenRouter provider with case-insensitive name", () => {
+      const factory = new ProviderFactory({ openRouterKey: "test-openrouter-key" }, logger);
+
+      expect(factory.createProvider("OpenRouter")).toBeInstanceOf(OpenRouterProvider);
+      expect(factory.createProvider("OPENROUTER")).toBeInstanceOf(OpenRouterProvider);
+    });
+
+    it("should throw a clear error when the OpenRouter key is missing", () => {
+      const factory = new ProviderFactory({ openAIKey: "test-openai-key", geminiKey: "test-gemini-key" }, logger);
+
+      expect(() => factory.createProvider("openrouter")).toThrow(
+        "OpenRouter API key not configured. Please set OPENROUTER_API_KEY secret."
+      );
+    });
+
+    it("should report OpenRouter as supported", () => {
+      const factory = new ProviderFactory({}, logger);
+
+      expect(factory.isProviderSupported("openrouter")).toBe(true);
+      expect(factory.isProviderSupported("OpenRouter")).toBe(true);
+    });
+  });
+
+  describe("Registry consistency", () => {
+    it("should create every provider that the provider list offers", () => {
+      const config = {
+        openAIKey: "test-openai-key",
+        geminiKey: "test-gemini-key",
+        openRouterKey: "test-openrouter-key",
+      };
+      const factory = new ProviderFactory(config, logger);
+      const listedIds = new ProviderService(config, logger, undefined as unknown as KVNamespace)
+        .getProviders()
+        .map((provider) => provider.id);
+
+      expect(listedIds).toEqual(factory.getSupportedProviders());
+      for (const id of listedIds) {
+        expect(factory.isProviderSupported(id)).toBe(true);
+        expect(factory.createProvider(id).getProviderName()).toBe(id);
+      }
+    });
+  });
+
   describe("getSupportedProviders", () => {
     it("should return list of supported provider names", () => {
       
@@ -203,7 +258,7 @@ describe("ProviderFactory", () => {
 
       const providers = factory.getSupportedProviders();
 
-      expect(providers).toEqual(["openai", "google"]);
+      expect(providers).toEqual(["openai", "google", "openrouter"]);
     });
 
     it("should return same list regardless of config", () => {
@@ -226,9 +281,9 @@ describe("ProviderFactory", () => {
         
       }, logger);
 
-      expect(factory1.getSupportedProviders()).toEqual(["openai", "google"]);
-      expect(factory2.getSupportedProviders()).toEqual(["openai", "google"]);
-      expect(factory3.getSupportedProviders()).toEqual(["openai", "google"]);
+      expect(factory1.getSupportedProviders()).toEqual(["openai", "google", "openrouter"]);
+      expect(factory2.getSupportedProviders()).toEqual(["openai", "google", "openrouter"]);
+      expect(factory3.getSupportedProviders()).toEqual(["openai", "google", "openrouter"]);
     });
   });
 
@@ -242,7 +297,7 @@ describe("ProviderFactory", () => {
       }, logger);
 
       expect(factory).toBeDefined();
-      expect(factory.getSupportedProviders()).toEqual(["openai", "google"]);
+      expect(factory.getSupportedProviders()).toEqual(["openai", "google", "openrouter"]);
     });
 
     it("should handle undefined API keys in config", () => {

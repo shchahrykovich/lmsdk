@@ -22,10 +22,14 @@ export class EntityId<T = number> {
 		return new ProjectId(this.projectId, this.tenantId, this.userId);
 	}
 
+	private static invalidIdError(paramName: string): ClientInputValidationError {
+		const entityName = paramName.replace(/Id$/i, "");
+		return new ClientInputValidationError(`Invalid ${entityName} ID`);
+	}
+
 	private static validate(id: number, paramName: string): void {
 		if (isNaN(id) || !Number.isInteger(id) || id <= 0) {
-			const entityName = paramName.replace(/Id$/i, "");
-			throw new ClientInputValidationError(`Invalid ${entityName} ID`);
+			throw this.invalidIdError(paramName);
 		}
 	}
 
@@ -40,6 +44,9 @@ export class EntityId<T = number> {
 	static parseAsString(c: Context<HonoEnv>, paramName: string): EntityId<string> {
 		const projectId = ProjectId.parse(c);
 		const idParam = c.req.param(paramName);
+		if (!idParam) {
+			throw this.invalidIdError(paramName);
+		}
 		return new EntityId<string>(idParam, projectId);
 	}
 

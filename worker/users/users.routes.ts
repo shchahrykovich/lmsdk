@@ -4,6 +4,14 @@ import { requireAuth } from "../middleware/auth.middleware.ts";
 import { getUserFromContext } from "../middleware/auth.ts";
 import { UserService } from "./user.service.ts";
 import type { HonoEnv } from "../routes/app.ts";
+import { z } from "zod";
+import { ManagementKeyService } from "./management-key.service.ts";
+
+const createManagementKeySchema = z.object({
+  name: z.string().trim().min(1).max(32),
+  access: z.enum(["read", "write"]),
+  expiresInDays: z.number().int().min(1).max(365).optional(),
+});
 
 const users = new Hono<HonoEnv>();
 
@@ -57,6 +65,23 @@ users.post("/", async (c) => {
 
     return c.json({ error: "Failed to create user" }, 500);
   }
+});
+
+users.post("/management-keys", async (c) => {
+  const user = getUserFromContext(c);
+  const parsed = createManagementKeySchema.safeParse(await c.req.json().catch(() => null));
+
+  if (!parsed.success) {
+    const message = parsed.error.issues
+      .map((issue) => `${issue.path.join(".") || "body"}: ${issue.message}`)
+      .join("; ");
+    return c.json({ error: message }, 400);
+  }
+
+  const service = new ManagementKeyService(c.get("auth"));
+  const key = await service.createKey(user.id, parsed.data);
+
+  return c.json(key, 201);
 });
 
 export default users;

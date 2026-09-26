@@ -1,0 +1,175 @@
+import OpenAI from "openai";
+import type {
+  ChatCompletion,
+  ChatCompletionCreateParamsNonStreaming,
+} from "openai/resources/chat/completions";
+import {
+  AIProvider,
+  type ExecuteRequest,
+  type ExecuteResult,
+} from "./base-provider";
+import type { IPromptExecutionLogger } from "./logger/execution-logger";
+
+export const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
+
+type OpenRouterRequest = ChatCompletionCreateParamsNonStreaming & {
+  provider?: { require_parameters: boolean };
+};
+
+interface OpenRouterErrorObject {
+  code?: number | string;
+  message?: string;
+}
+
+type OpenRouterChoice = Omit<ChatCompletion["choices"][number], "finish_reason"> & {
+  finish_reason: string | null;
+  error?: OpenRouterErrorObject;
+};
+
+type OpenRouterResponse = Omit<Partial<ChatCompletion>, "choices"> & {
+  choices?: OpenRouterChoice[];
+  error?: OpenRouterErrorObject;
+};
+
+export class OpenRouterProvider extends AIProvider {
+  private client: OpenAI;
+  protected logger: IPromptExecutionLogger;
+  private proxyConfig?: { token?: string; baseUrl?: string };
+
+  constructor(
+    apiKey: string,
+    logger: IPromptExecutionLogger,
+    proxyConfig?: { token?: string; baseUrl?: string }
+  ) {
+    super(apiKey);
+    this.client = new OpenAI({ apiKey: this.apiKey, baseURL: OPENROUTER_BASE_URL });
+    this.logger = logger;
+    this.proxyConfig = proxyConfig;
+  }
+
+  getProviderName(): string {
+    return "openrouter";
+  }
+
+  isModelSupported(model: string): boolean {
+    return model.length > 0;
+  }
+
+  async execute(request: ExecuteRequest): Promise<ExecuteResult> {
+    const startTime = Date.now();
+
+    if (request.variables) {
+      await this.logger.logVariables({ variables: request.variables });
+    }
+
+    try {
+      const payload = this.buildRequestPayload(request);
+      await this.logger.logInput({ input: payload });
+
+      const response = (await this.getClient(request).chat.completions.create(payload)) as OpenRouterResponse;
+      await this.logger.logOutput({ output: response });
+
+      const choice = this.firstChoiceOrThrow(response);
+      const durationMs = Date.now() - startTime;
+      const result = this.buildResult(request.model, response, choice, durationMs);
+
+      await this.logger.logResult({ output: result });
+      await this.logger.logSuccess({ durationMs });
+
+      return result;
+    } catch (error) {
+      const durationMs = Date.now() - startTime;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      await this.logger.logError({ durationMs, errorMessage });
+      throw error;
+    }
+  }
+
+  private buildResult(
+    requestedModel: string,
+    response: OpenRouterResponse,
+    choice: OpenRouterChoice,
+    durationMs: number
+  ): ExecuteResult {
+    return {
+      content: choice.message?.content ?? "",
+      model: response.model ?? requestedModel,
+      usage: {
+        prompt_tokens: response.usage?.prompt_tokens ?? 0,
+        completion_tokens: response.usage?.completion_tokens ?? 0,
+        total_tokens: response.usage?.total_tokens ?? 0,
+      },
+      duration_ms: durationMs,
+    };
+  }
+
+  private buildRequestPayload(request: ExecuteRequest): OpenRouterRequest {
+    const payload: OpenRouterRequest = {
+      model: request.model,
+      messages: request.messages.map((msg) => ({ role: msg.role, content: msg.content })),
+    };
+
+    const responseFormat = this.buildResponseFormat(request.response_format);
+    if (responseFormat) {
+      payload.response_format = responseFormat;
+      payload.provider = { require_parameters: true };
+    }
+
+    return payload;
+  }
+
+  private buildResponseFormat(
+    responseFormat: ExecuteRequest["response_format"]
+  ): OpenRouterRequest["response_format"] | undefined {
+    if (responseFormat?.type === "json_schema" && responseFormat.json_schema) {
+      const jsonSchema = responseFormat.json_schema;
+      return {
+        type: "json_schema",
+        json_schema: {
+          name: jsonSchema.name ?? "response",
+          strict: jsonSchema.strict ?? true,
+          schema: (jsonSchema.schema ?? jsonSchema) as Record<string, unknown>,
+        },
+      };
+    }
+
+    if (responseFormat?.type === "json") {
+      return { type: "json_object" };
+    }
+
+    return undefined;
+  }
+
+  private firstChoiceOrThrow(response: OpenRouterResponse): OpenRouterChoice {
+    const choice = response.choices?.[0];
+    if (!choice) {
+      throw this.openRouterError(response.error, "response has no choices");
+    }
+    if (choice.finish_reason === "error") {
+      throw this.openRouterError(choice.error ?? response.error, "the model finished with an error");
+    }
+    return choice;
+  }
+
+  private openRouterError(error: OpenRouterErrorObject | undefined, fallbackMessage: string): Error {
+    return new Error(`OpenRouter error ${error?.code ?? "unknown"}: ${error?.message ?? fallbackMessage}`);
+  }
+
+  private getClient(request: ExecuteRequest): OpenAI {
+    if (request.proxy !== "cloudflare") {
+      return this.client;
+    }
+
+    if (!this.proxyConfig?.token || !this.proxyConfig?.baseUrl) {
+      return this.client;
+    }
+
+    return new OpenAI({
+      apiKey: this.apiKey,
+      baseURL: this.proxyConfig.baseUrl + "/openrouter",
+      defaultHeaders: {
+        "cf-aig-authorization": `Bearer ${this.proxyConfig.token}`,
+      },
+    });
+  }
+}

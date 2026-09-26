@@ -4,6 +4,7 @@ import { EvaluationService } from "../../../../worker/evaluations/evaluation.ser
 import { EvaluationRepository } from "../../../../worker/evaluations/repositories/evaluation.repository";
 import { applyMigrations } from "../../helpers/db-setup";
 import { ProjectId } from "../../../../worker/shared/project-id";
+import { seedDataSet, seedPrompt } from "../../helpers/seed";
 
 describe("EvaluationService - createEvaluation", () => {
   let evaluationService: EvaluationService;
@@ -19,20 +20,25 @@ describe("EvaluationService - createEvaluation", () => {
     new ProjectId(projectId, tenantId, "test-user");
 
   it("should create evaluation and prompt mappings", async () => {
-    const evaluation = await evaluationService.createEvaluation(mockProjectId(1, 1), {
+    const project = mockProjectId(1, 1);
+    const dataset = await seedDataSet(project, "Tickets");
+    const promptA = await seedPrompt(project, "prompt-a", 1);
+    const promptB = await seedPrompt(project, "prompt-b");
+
+    const evaluation = await evaluationService.createEvaluation(project, {
       name: "My Evaluation",
       type: "run",
-      datasetId: 5,
+      datasetId: dataset.id,
       prompts: [
-        { promptId: 10, versionId: 2 },
-        { promptId: 11, versionId: 3 },
+        { promptId: promptA.prompt.id, versionId: promptA.versionIds[1] },
+        { promptId: promptB.prompt.id, versionId: promptB.versionIds[0] },
       ],
     });
 
     expect(evaluation.name).toBe("My Evaluation");
     expect(evaluation.slug).toBe("my-evaluation");
     expect(evaluation.state).toBe("created");
-    expect(evaluation.datasetId).toBe(5);
+    expect(evaluation.datasetId).toBe(dataset.id);
 
     const result = await env.DB.prepare(
       "SELECT COUNT(*) as count FROM EvaluationPrompts WHERE evaluationId = ?"
@@ -83,11 +89,15 @@ describe("EvaluationService - createEvaluation", () => {
       outputSchema: "{}",
     });
 
-    const evaluation = await evaluationService.createEvaluation(mockProjectId(1, 1), {
+    const project = mockProjectId(1, 1);
+    const dataset = await seedDataSet(project, "Tickets");
+    const { prompt, versionIds } = await seedPrompt(project, "prompt-a");
+
+    const evaluation = await evaluationService.createEvaluation(project, {
       name: "My Evaluation",
       type: "run",
-      datasetId: 5,
-      prompts: [{ promptId: 1, versionId: 1 }],
+      datasetId: dataset.id,
+      prompts: [{ promptId: prompt.id, versionId: versionIds[0] }],
     });
 
     expect(evaluation.slug).toBe("my-evaluation-2");

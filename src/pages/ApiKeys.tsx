@@ -1,10 +1,15 @@
 /* eslint-disable sonarjs/function-return-type */
 import type * as React from "react";
+import { useState } from "react";
 import { ApiKeysCard } from "@daveyplate/better-auth-ui";
 import { Button } from "@/components/ui/button";
-import { FileText } from "lucide-react";
+import { Bot, FileText } from "lucide-react";
+import CreateManageApiKeyDialog from "@/components/CreateManageApiKeyDialog";
 
 export default function ApiKeys(): React.ReactNode {
+  const [manageKeyDialogOpen, setManageKeyDialogOpen] = useState(false);
+  const [keysVersion, setKeysVersion] = useState(0);
+
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* Header */}
@@ -16,21 +21,32 @@ export default function ApiKeys(): React.ReactNode {
               Manage your API keys for authentication
             </p>
           </div>
-          <Button asChild className="gap-2">
-            <a href="/api/docs" target="_blank" rel="noreferrer">
-              <FileText size={18} strokeWidth={2} />
-              API docs
-            </a>
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" className="gap-2" onClick={() => setManageKeyDialogOpen(true)}>
+              <Bot size={18} strokeWidth={2} />
+              Create Manage API Key
+            </Button>
+            <Button asChild className="gap-2">
+              <a href="/api/docs" target="_blank" rel="noreferrer">
+                <FileText size={18} strokeWidth={2} />
+                API docs
+              </a>
+            </Button>
+          </div>
         </div>
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-8 py-6">
         <div className="max-w-4xl">
-          <ApiKeysCard />
+          <ApiKeysCard key={keysVersion} />
         </div>
       </div>
+      <CreateManageApiKeyDialog
+        open={manageKeyDialogOpen}
+        onOpenChange={setManageKeyDialogOpen}
+        onCreated={() => setKeysVersion((version) => version + 1)}
+      />
     </div>
   );
 }

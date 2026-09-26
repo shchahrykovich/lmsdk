@@ -25,7 +25,7 @@ type ParsedListLogsRequest = {
 };
 
 const parseProjectId = (c: Context): ParsedProjectId | ParseError => {
-  const projectId = parseInt(c.req.param("projectId"), 10);
+  const projectId = parseInt(c.req.param("projectId") ?? "", 10);
   if (Number.isNaN(projectId)) {
     return { error: c.json({ error: "Invalid project ID" }, 400) };
   }

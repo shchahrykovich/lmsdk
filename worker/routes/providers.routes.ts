@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { HonoEnv } from "./app";
 import { requireAuth } from "../middleware/auth.middleware";
 import { ProviderService } from "../services/provider.service";
+import { providerConfigFromEnv } from "../providers/provider-factory";
 import type { AIMessage, GoogleSettings, OpenAISettings, ResponseFormat } from "../providers/base-provider";
 
 import {NullPromptExecutionLogger} from "../providers/logger/null-prompt-execution-logger";
@@ -103,12 +104,7 @@ providers.use("/*", requireAuth);
 providers.get("/", (c) => {
   // Initialize provider service with API keys from environment
   // Use NullLogger since this endpoint doesn't execute prompts
-  const providerService = new ProviderService({
-    openAIKey: c.env.OPEN_AI_API_KEY,
-    geminiKey: c.env.GEMINI_API_KEY,
-    cloudflareAiGatewayToken: c.env.CLOUDFLARE_AI_GATEWAY_TOKEN,
-    cloudflareAiGatewayBaseUrl: c.env.CLOUDFLARE_AI_GATEWAY_BASE_URL,
-  }, new NullPromptExecutionLogger(), c.env.CACHE);
+  const providerService = new ProviderService(providerConfigFromEnv(c.env), new NullPromptExecutionLogger(), c.env.CACHE);
 
   const providersList = providerService.getProviders();
 
@@ -136,12 +132,7 @@ providers.post("/execute", async (c) => {
 
     // Initialize provider service with NullLogger
     // This is for testing/development and doesn't need execution logging
-    const providerService = new ProviderService({
-      openAIKey: c.env.OPEN_AI_API_KEY,
-      geminiKey: c.env.GEMINI_API_KEY,
-      cloudflareAiGatewayToken: c.env.CLOUDFLARE_AI_GATEWAY_TOKEN,
-      cloudflareAiGatewayBaseUrl: c.env.CLOUDFLARE_AI_GATEWAY_BASE_URL,
-    }, new NullPromptExecutionLogger(), c.env.CACHE);
+    const providerService = new ProviderService(providerConfigFromEnv(c.env), new NullPromptExecutionLogger(), c.env.CACHE);
 
     const { provider, model, messages, variables, response_format, google_settings, openai_settings, proxy, projectId, promptSlug } =
       parseResult.data;

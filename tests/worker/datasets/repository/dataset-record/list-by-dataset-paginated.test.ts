@@ -3,6 +3,7 @@ import { env } from "cloudflare:test";
 import { DataSetRecordRepository } from "../../../../../worker/datasets/dataset-record.repository";
 import { DataSetRepository } from "../../../../../worker/datasets/dataset.repository";
 import { applyMigrations } from "../../../helpers/db-setup";
+import { insertDataSetRecords } from "../../../helpers/seed";
 import {EntityId} from "../../../../../worker/shared/entity-id";
 import {ProjectId} from "../../../../../worker/shared/project-id";
 
@@ -27,7 +28,7 @@ describe("DataSetRecordRepository - listByDataSetPaginated", () => {
       schema: "{}",
     });
 
-    await recordRepository.createMany([
+    await insertDataSetRecords([
       {
         tenantId: 1,
         projectId: 1,
@@ -73,7 +74,7 @@ describe("DataSetRecordRepository - listByDataSetPaginated", () => {
     });
 
     // Create 5 records
-    await recordRepository.createMany([
+    await insertDataSetRecords([
       {
         tenantId: 1,
         projectId: 1,
@@ -143,7 +144,7 @@ describe("DataSetRecordRepository - listByDataSetPaginated", () => {
       schema: "{}",
     });
 
-    await recordRepository.createMany([
+    await insertDataSetRecords([
       {
         tenantId: 1,
         projectId: 1,
@@ -182,7 +183,7 @@ describe("DataSetRecordRepository - listByDataSetPaginated", () => {
       schema: "{}",
     });
 
-    await recordRepository.createMany([
+    await insertDataSetRecords([
       {
         tenantId: 1,
         projectId: 1,
@@ -213,7 +214,7 @@ describe("DataSetRecordRepository - listByDataSetPaginated", () => {
       schema: "{}",
     });
 
-    await recordRepository.createMany([
+    await insertDataSetRecords([
       {
         tenantId: 1,
         projectId: 1,
@@ -273,7 +274,7 @@ describe("DataSetRecordRepository - listByDataSetPaginated", () => {
       schema: "{}",
     });
 
-    await recordRepository.createMany([
+    await insertDataSetRecords([
       {
         tenantId: 1,
         projectId: 1,

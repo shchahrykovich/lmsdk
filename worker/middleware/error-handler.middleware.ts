@@ -1,6 +1,6 @@
 import type { Context } from "hono";
 import type { HonoEnv } from "../routes/app";
-import { HttpError } from "../shared/errors";
+import { HttpError, isUniqueConstraintError } from "../shared/errors";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 
 /**
@@ -23,6 +23,10 @@ export const errorHandler = (err: Error, c: Context<HonoEnv>): Response => {
   // Handle HttpError and its subclasses (ClientInputValidationError, NotFoundError, etc.)
   if (err instanceof HttpError) {
     return c.json({ error: err.message }, err.statusCode as ContentfulStatusCode);
+  }
+
+  if (isUniqueConstraintError(err)) {
+    return c.json({ error: "A record with the same unique value already exists" }, 409);
   }
 
   // Handle generic errors as 500

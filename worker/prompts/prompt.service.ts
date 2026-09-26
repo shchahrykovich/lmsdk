@@ -4,6 +4,7 @@ import { PromptRepository } from "./prompt.repository.ts";
 import { ProjectId } from "../shared/project-id.ts";
 import { EntityId } from "../shared/entity-id.ts";
 import { PromptVersionId } from "./prompt-version-id.ts";
+import { conflictOnDuplicate, NotFoundError } from "../shared/errors.ts";
 
 export interface CreatePromptInput {
   name: string;
@@ -20,6 +21,10 @@ export interface UpdatePromptInput {
   body?: string;
 }
 
+export interface UpdatePromptOptions {
+  activate?: boolean;
+}
+
 export class PromptService {
   private repository: PromptRepository;
 
@@ -31,92 +36,45 @@ export class PromptService {
     projectId: ProjectId,
     input: CreatePromptInput
   ): Promise<Prompt> {
-    const version = 1;
-
-    const prompt = await this.repository.createPrompt({
-      tenantId: projectId.tenantId,
-      projectId: projectId.id,
-      name: input.name,
-      slug: input.slug,
-      provider: input.provider,
-      model: input.model,
-      body: input.body,
-      latestVersion: version,
-      isActive: true,
-    });
-
-    await this.repository.createPromptVersion({
-      promptId: prompt.id,
-      tenantId: projectId.tenantId,
-      projectId: projectId.id,
-      version: version,
-      name: input.name,
-      provider: input.provider,
-      model: input.model,
-      body: input.body,
-      slug: input.slug,
-    });
-
-    await this.repository.createPromptRouter({
-      promptId: prompt.id,
-      tenantId: projectId.tenantId,
-      projectId: projectId.id,
-      version: version,
-    });
-
-    return prompt;
+    return await conflictOnDuplicate(
+      () =>
+        this.repository.createPromptWithFirstVersion({
+          tenantId: projectId.tenantId,
+          projectId: projectId.id,
+          name: input.name,
+          slug: input.slug,
+          provider: input.provider,
+          model: input.model,
+          body: input.body,
+        }),
+      "A prompt with this name or slug already exists"
+    );
   }
 
   async updatePrompt(
     promptId: EntityId<number>,
-    input: UpdatePromptInput
-  ): Promise<{ count: number }> {
+    input: UpdatePromptInput,
+    options: UpdatePromptOptions = {}
+  ): Promise<{ count: number; version: number }> {
     const currentPrompt = await this.repository.findPromptById(promptId);
 
     if (!currentPrompt) {
-      throw new Error("Prompt not found");
+      throw new NotFoundError("Prompt not found");
     }
 
-    const newVersion = currentPrompt.latestVersion + 1;
+    const version = await this.repository.addPromptVersion(
+      promptId,
+      currentPrompt,
+      {
+        name: input.name ?? currentPrompt.name,
+        provider: input.provider ?? currentPrompt.provider,
+        model: input.model ?? currentPrompt.model,
+        body: input.body ?? currentPrompt.body,
+      },
+      options.activate ?? true
+    );
 
-    await this.repository.updatePrompt(promptId, {
-      name: input.name ?? currentPrompt.name,
-      provider: input.provider ?? currentPrompt.provider,
-      model: input.model ?? currentPrompt.model,
-      body: input.body ?? currentPrompt.body,
-      latestVersion: newVersion,
-    });
-
-    await this.repository.createPromptVersion({
-      promptId: promptId.id,
-      tenantId: promptId.tenantId,
-      projectId: promptId.projectId,
-      version: newVersion,
-      name: input.name ?? currentPrompt.name,
-      provider: input.provider ?? currentPrompt.provider,
-      model: input.model ?? currentPrompt.model,
-      body: input.body ?? currentPrompt.body,
-      slug: currentPrompt.slug,
-    });
-
-    const existingRouter = await this.repository.findPromptRouter(promptId);
-
-    if (existingRouter) {
-      await this.repository.updatePromptRouterVersion(
-        promptId,
-        existingRouter.id,
-        newVersion
-      );
-    } else {
-      await this.repository.createPromptRouter({
-        promptId: promptId.id,
-        tenantId: promptId.tenantId,
-        projectId: promptId.projectId,
-        version: newVersion,
-      });
-    }
-
-    return { count: 1 };
+    return { count: 1, version };
   }
 
   async getPromptById(
@@ -193,6 +151,11 @@ export class PromptService {
     return router?.version ?? null;
   }
 
+  async getActiveRouterVersions(projectId: ProjectId): Promise<Map<number, number>> {
+    const routers = await this.repository.findPromptRoutersByProject(projectId);
+    return new Map(routers.map((router) => [router.promptId, router.version]));
+  }
+
   async setRouterVersion(
     promptId: EntityId<number>,
     version: number
@@ -203,7 +166,7 @@ export class PromptService {
     );
 
     if (!versionExists) {
-      throw new Error("Version not found");
+      throw new NotFoundError("Version not found");
     }
 
     const existingRouter = await this.repository.findPromptRouter(promptId);

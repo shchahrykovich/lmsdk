@@ -142,10 +142,7 @@ export class ExecutionLogProcessingService {
       return;
     }
 
-    const usageResult =
-      provider === "openai"
-        ? this.extractOpenAiUsage(output)
-        : this.extractGoogleUsage(output);
+    const usageResult = this.extractUsage(provider, output);
 
     if (!usageResult) {
       console.warn(`Missing model or usage in output.json for log ${log.id}`);
@@ -188,6 +185,19 @@ export class ExecutionLogProcessingService {
     }
   }
 
+  private extractUsage(provider: string, output: unknown) {
+    switch (provider) {
+      case "openai":
+        return this.extractOpenAiUsage(output);
+      case "google":
+        return this.extractGoogleUsage(output);
+      case "openrouter":
+        return this.extractOpenRouterUsage(output);
+      default:
+        return null;
+    }
+  }
+
   private extractOpenAiUsage(output: unknown) {
     if (!this.isRecord(output) || !this.isRecord(output.usage)) {
       return null;
@@ -218,6 +228,29 @@ export class ExecutionLogProcessingService {
     };
   }
 
+  private extractOpenRouterUsage(output: unknown) {
+    if (!this.isRecord(output) || !this.isRecord(output.usage) || typeof output.model !== "string") {
+      return null;
+    }
+
+    const usage = output.usage;
+    const promptDetails = this.isRecord(usage.prompt_tokens_details) ? usage.prompt_tokens_details : undefined;
+    const completionDetails = this.isRecord(usage.completion_tokens_details)
+      ? usage.completion_tokens_details
+      : undefined;
+
+    return {
+      model: output.model,
+      usage: {
+        prompt_tokens: this.numberOrZero(usage.prompt_tokens),
+        cached_tokens: this.numberOrZero(promptDetails?.cached_tokens),
+        completion_tokens: this.numberOrZero(usage.completion_tokens),
+        reasoning_tokens: this.numberOrZero(completionDetails?.reasoning_tokens),
+        total_tokens: this.numberOrZero(usage.total_tokens),
+      },
+    };
+  }
+
   private extractGoogleUsage(output: unknown) {
     if (!Array.isArray(output)) {
       return null;
@@ -239,6 +272,7 @@ export class ExecutionLogProcessingService {
    * Determine provider from input structure
    * OpenAI has 'input', 'text', 'reasoning' fields
    * Google has 'config', 'contents' fields
+   * OpenRouter has 'model', 'messages' fields
    */
   private determineProvider(input: unknown): string | null {
     if (!this.isRecord(input)) {
@@ -249,6 +283,9 @@ export class ExecutionLogProcessingService {
     }
     if ("config" in input && "contents" in input) {
       return 'google';
+    }
+    if ("model" in input && "messages" in input) {
+      return 'openrouter';
     }
     return null;
   }

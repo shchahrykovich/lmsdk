@@ -12,7 +12,7 @@ describe("ProviderService - Configuration validation", () => {
     }, logger);
 
     expect(service).toBeDefined();
-    expect(service.getSupportedProviderNames()).toEqual(["openai", "google"]);
+    expect(service.getSupportedProviderNames()).toEqual(["openai", "google", "openrouter"]);
   });
 
   it("should create service with partial config", () => {

@@ -6,6 +6,10 @@ import type { TenantProjectContext, Pagination, PaginatedResult } from "../types
 import { LogService } from "../logs/logs.service.ts";
 import type {ProjectId} from "../shared/project-id";
 import type {EntityId} from "../shared/entity-id";
+import { ClientInputValidationError, conflictOnDuplicate, NotFoundError } from "../shared/errors.ts";
+import { MAX_RECORDS_PER_CALL } from "./dataset-limits.ts";
+
+const SCHEMA_MERGE_ATTEMPTS = 5;
 
 interface AddLogsInput {
   logIds: number[];
@@ -41,6 +45,10 @@ export class DataSetService {
     return await this.repository.findById(dataSetId);
   }
 
+  async getDataSetBySlug(projectId: ProjectId, slug: string): Promise<DataSet | undefined> {
+    return await this.repository.findBySlug({ tenantId: projectId.tenantId, projectId: projectId.id, slug });
+  }
+
 
   async createDataSet(context: TenantProjectContext, input: CreateDataSetInput): Promise<DataSet> {
     const baseSlug = this.generateSlug(input.name);
@@ -52,15 +60,19 @@ export class DataSetService {
       slug = `${baseSlug}-${attempt}`;
     }
 
-    return await this.repository.create({
-      tenantId: context.tenantId,
-      projectId: context.projectId,
-      name: input.name,
-      slug,
-      isDeleted: false,
-      countOfRecords: 0,
-      schema: input.schema ?? "{}",
-    });
+    return await conflictOnDuplicate(
+      () =>
+        this.repository.create({
+          tenantId: context.tenantId,
+          projectId: context.projectId,
+          name: input.name,
+          slug,
+          isDeleted: false,
+          countOfRecords: 0,
+          schema: input.schema ?? "{}",
+        }),
+      "A dataset with this name already exists"
+    );
   }
 
   async deleteDataSet(entityId: EntityId): Promise<void> {
@@ -80,8 +92,7 @@ export class DataSetService {
       throw new Error("Log service unavailable");
     }
 
-    const schema = this.parseSchema(dataset.schema);
-    const newRecords = [];
+    const variablesList: Record<string, unknown>[] = [];
     let skipped = 0;
 
     const results = await Promise.allSettled(
@@ -96,25 +107,14 @@ export class DataSetService {
         continue;
       }
 
-      const variables = result.value;
-      this.mergeSchema(schema, variables);
-
-      newRecords.push({
-        tenantId: entityId.tenantId,
-        projectId: entityId.projectId,
-        dataSetId: entityId.id,
-        variables: JSON.stringify(variables),
-        isDeleted: false,
-      });
+      variablesList.push(result.value);
     }
 
-    if (newRecords.length > 0) {
-      await this.recordRepository.createMany(newRecords);
-      await this.repository.incrementRecordCountBy(entityId, newRecords.length);
-      await this.repository.updateSchema(entityId, JSON.stringify(schema));
+    if (variablesList.length > 0) {
+      await this.saveRecords(entityId, dataset, variablesList);
     }
 
-    return { added: newRecords.length, skipped };
+    return { added: variablesList.length, skipped };
   }
 
   async listDataSetRecords(entityId: EntityId): Promise<DataSetRecord[]> {
@@ -147,30 +147,71 @@ export class DataSetService {
   ): Promise<DataSetRecord> {
     const dataset = await this.repository.findById(entityId);
     if (!dataset) {
-      throw new Error("Dataset not found");
+      throw new NotFoundError("Dataset not found");
     }
 
-    const schema = this.parseSchema(dataset.schema);
-    this.mergeSchema(schema, variables);
-
-    const [record] = await this.recordRepository.createMany([
-      {
-        tenantId: entityId.tenantId,
-        projectId: entityId.projectId,
-        dataSetId: entityId.id,
-        variables: JSON.stringify(variables),
-        isDeleted: false,
-      },
-    ]);
-
-    if (!record) {
-      throw new Error("Failed to create record");
-    }
-
-    await this.repository.incrementRecordCountBy(entityId, 1);
-    await this.repository.updateSchema(entityId, JSON.stringify(schema));
-
+    const [record] = await this.saveRecords(entityId, dataset, [variables]);
     return record;
+  }
+
+  async createDataSetRecords(
+    entityId: EntityId,
+    variablesList: Record<string, unknown>[]
+  ): Promise<DataSetRecord[]> {
+    if (variablesList.length === 0 || variablesList.length > MAX_RECORDS_PER_CALL) {
+      throw new ClientInputValidationError(`Send between 1 and ${MAX_RECORDS_PER_CALL} records`);
+    }
+
+    const dataset = await this.repository.findById(entityId);
+    if (!dataset) {
+      throw new NotFoundError("Dataset not found");
+    }
+
+    return await this.saveRecords(entityId, dataset, variablesList);
+  }
+
+  private async saveRecords(
+    entityId: EntityId,
+    dataset: DataSet,
+    variablesList: Record<string, unknown>[]
+  ): Promise<DataSetRecord[]> {
+    const { records, schemaSaved } = await this.repository.addRecords(
+      entityId,
+      variablesList.map((variables) => JSON.stringify(variables)),
+      this.schemaWith(dataset.schema, variablesList),
+      dataset.schema
+    );
+
+    if (!schemaSaved) {
+      await this.mergeSchemaAfterConflict(entityId, variablesList);
+    }
+
+    return records;
+  }
+
+  private async mergeSchemaAfterConflict(
+    entityId: EntityId,
+    variablesList: Record<string, unknown>[]
+  ): Promise<void> {
+    for (let attempt = 0; attempt < SCHEMA_MERGE_ATTEMPTS; attempt++) {
+      const current = await this.repository.findById(entityId);
+      if (!current) {
+        return;
+      }
+      const merged = this.schemaWith(current.schema, variablesList);
+      if (await this.repository.replaceSchema(entityId, current.schema, merged)) {
+        return;
+      }
+    }
+    console.error("Dataset schema was not updated after concurrent writes", { dataSetId: entityId.id });
+  }
+
+  private schemaWith(currentSchema: string, variablesList: Record<string, unknown>[]): string {
+    const schema = this.parseSchema(currentSchema);
+    for (const variables of variablesList) {
+      this.mergeSchema(schema, variables);
+    }
+    return JSON.stringify(schema);
   }
 
   async deleteDataSetRecords(

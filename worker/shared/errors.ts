@@ -58,3 +58,25 @@ export class ForbiddenError extends HttpError {
     super(message, 403);
   }
 }
+
+export function isUniqueConstraintError(error: unknown): boolean {
+  let current: unknown = error;
+  while (current instanceof Error) {
+    if (current.message.includes("UNIQUE constraint failed")) {
+      return true;
+    }
+    current = current.cause;
+  }
+  return false;
+}
+
+export async function conflictOnDuplicate<T>(action: () => Promise<T>, message: string): Promise<T> {
+  try {
+    return await action();
+  } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      throw new ConflictError(message);
+    }
+    throw error;
+  }
+}

@@ -3,6 +3,7 @@ import { env } from "cloudflare:test";
 import { EvaluationPromptRepository } from "../../../../../worker/evaluations/repositories/evaluation-prompt.repository";
 import { EvaluationRepository } from "../../../../../worker/evaluations/repositories/evaluation.repository";
 import { applyMigrations } from "../../../helpers/db-setup";
+import { insertEvaluationPrompts } from "../../../helpers/seed";
 import {EntityId} from "../../../../../worker/shared/entity-id";
 import {ProjectId} from "../../../../../worker/shared/project-id";
 
@@ -29,7 +30,7 @@ describe("EvaluationPromptRepository - listByEvaluation", () => {
       outputSchema: "{}",
     });
 
-    await repository.createMany([
+    await insertEvaluationPrompts([
       {
         tenantId: 1,
         projectId: 1,
@@ -79,7 +80,7 @@ describe("EvaluationPromptRepository - listByEvaluation", () => {
       outputSchema: "{}",
     });
 
-    await repository.createMany([
+    await insertEvaluationPrompts([
       {
         tenantId: 1,
         projectId: 1,

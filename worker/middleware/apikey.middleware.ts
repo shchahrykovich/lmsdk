@@ -60,6 +60,7 @@ export const requireApiKey = createMiddleware<HonoEnv>(async (c, next) => {
 
     // Store user in context (same as session-based auth)
     c.set("user", userRecord as AuthenticatedUser);
+    c.set("apiKeyPermissions", verifyResult.key.permissions ?? null);
     await next();
   } catch (error) {
     console.error("Error in API key middleware:", error);

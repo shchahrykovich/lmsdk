@@ -11,11 +11,13 @@ describe("ProviderService - isProviderSupported", () => {
   it("should return true for supported providers", () => {
     expect(providerService.isProviderSupported("openai")).toBe(true);
     expect(providerService.isProviderSupported("google")).toBe(true);
+    expect(providerService.isProviderSupported("openrouter")).toBe(true);
   });
 
   it("should return true for case-insensitive provider names", () => {
     expect(providerService.isProviderSupported("OpenAI")).toBe(true);
     expect(providerService.isProviderSupported("GOOGLE")).toBe(true);
+    expect(providerService.isProviderSupported("OpenRouter")).toBe(true);
   });
 
   it("should return false for unsupported providers", () => {

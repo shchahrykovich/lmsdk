@@ -3,6 +3,7 @@ import { env } from "cloudflare:test";
 import { DataSetRecordRepository } from "../../../../../worker/datasets/dataset-record.repository";
 import { DataSetRepository } from "../../../../../worker/datasets/dataset.repository";
 import { applyMigrations } from "../../../helpers/db-setup";
+import { insertDataSetRecords } from "../../../helpers/seed";
 import { ProjectId } from "../../../../../worker/shared/project-id";
 
 describe("DataSetRecordRepository - listBatchByProject", () => {
@@ -26,7 +27,7 @@ describe("DataSetRecordRepository - listBatchByProject", () => {
       schema: "{}",
     });
 
-    const [first, second, third] = await recordRepository.createMany([
+    const [first, second, third] = await insertDataSetRecords([
       {
         tenantId: 1,
         projectId: 1,
@@ -81,7 +82,7 @@ describe("DataSetRecordRepository - listBatchByProject", () => {
       schema: "{}",
     });
 
-    await recordRepository.createMany([
+    await insertDataSetRecords([
       {
         tenantId: 1,
         projectId: 2,
