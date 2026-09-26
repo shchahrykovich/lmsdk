@@ -1,0 +1,25 @@
+[
+  {
+    "version": "0.1.15",
+    "date": "2026-09-26",
+    "changes": [
+      "Durations show in readable units: 850ms, 8.5s, 4m 52s",
+      "OpenRouter prompts: set reasoning effort, provider order, temperature and max tokens",
+      "OpenRouter calls stop after 240 s and are not retried, so a slow call ends as a logged error",
+      "API execute returns usage with cost, the model, provider, version and log id",
+      "API execute can run a chosen prompt version",
+      "The local dev server shows a DEV logo and favicon",
+      "Click the version number to see this list of changes"
+    ]
+  },
+  {
+    "version": "0.1.14",
+    "date": "2026-09-26",
+    "changes": [
+      "OpenRouter added as a third AI provider",
+      "New models: GPT-6 and Gemini 3.x; retired Gemini models removed",
+      "Management API for AI agents",
+      "Package and Wrangler updates"
+    ]
+  }
+]

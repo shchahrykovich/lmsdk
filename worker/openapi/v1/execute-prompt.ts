@@ -7,17 +7,20 @@ import { ProjectService } from "../../projects/project.service";
 import { PromptService } from "../../prompts/prompt.service";
 import { ProviderService } from "../../services/provider.service";
 import { providerConfigFromEnv } from "../../providers/provider-factory";
-import type { AIMessage, GoogleSettings, OpenAISettings, ResponseFormat } from "../../providers/base-provider";
+import type { AIMessage, GoogleSettings, OpenAISettings, OpenRouterSettings, ResponseFormat } from "../../providers/base-provider";
 import { CFPromptExecutionLogger } from "../../providers/logger/c-f-prompt-execution-logger";
 import { ExecutePromptResponse, ErrorResponse } from "./schemas";
 import { ProjectId } from "../../shared/project-id";
 import { EntityId } from "../../shared/entity-id";
+import { PromptVersionId } from "../../prompts/prompt-version-id";
+import type { ExecuteResult } from "../../providers/base-provider";
 
 type PromptBody = {
   messages?: AIMessage[];
   response_format?: ResponseFormat;
   openai_settings?: OpenAISettings;
   google_settings?: GoogleSettings;
+  openrouter_settings?: OpenRouterSettings;
   proxy?: "none" | "cloudflare";
 };
 
@@ -40,29 +43,41 @@ const finalizeLogger = async (c: Context, logger: CFPromptExecutionLogger): Prom
   }
 };
 
-const respondWithResult = async (
-  c: Context,
-  logger: CFPromptExecutionLogger,
-  result: { content: string },
-  responseFormat?: PromptBody["response_format"]
-): Promise<Record<string, unknown>> => {
+const parseContent = (content: string, responseFormat?: PromptBody["response_format"]): unknown => {
   const shouldParseJson =
     responseFormat?.type === "json_schema" || responseFormat?.type === "json";
-  let response: Record<string, unknown>;
-
-  if (shouldParseJson) {
-    try {
-      response = { response: JSON.parse(result.content) };
-    } catch {
-      response = { response: result.content };
-    }
-  } else {
-    response = { response: result.content };
+  if (!shouldParseJson) {
+    return content;
   }
+  try {
+    return JSON.parse(content) as unknown;
+  } catch {
+    return content;
+  }
+};
+
+const respondWithResult = async (params: {
+  c: Context;
+  logger: CFPromptExecutionLogger;
+  result: ExecuteResult;
+  responseFormat?: PromptBody["response_format"];
+  version: { provider: string; version: number };
+}): Promise<Record<string, unknown>> => {
+  const { c, logger, result, responseFormat, version } = params;
+  const response = { response: parseContent(result.content, responseFormat) };
 
   await logger.logResponse({ output: response });
+  const logId = await logger.waitForLogId();
   await finalizeLogger(c, logger);
-  return response;
+
+  return {
+    ...response,
+    usage: result.usage,
+    model: result.model,
+    provider: version.provider,
+    version: version.version,
+    logId: logId ?? null,
+  };
 };
 
 const resolveProject = async (
@@ -99,8 +114,9 @@ const resolveExecutionContext = async (params: {
   userId: string;
   projectSlugOrId: string;
   promptSlugOrId: string;
+  requestedVersion?: number;
 }) => {
-  const { projectService, promptService, tenantId, userId, projectSlugOrId, promptSlugOrId } = params;
+  const { projectService, promptService, tenantId, userId, projectSlugOrId, promptSlugOrId, requestedVersion } = params;
   const project = await resolveProject(projectService, tenantId, userId, projectSlugOrId);
 
   if (!project) {
@@ -119,6 +135,15 @@ const resolveExecutionContext = async (params: {
   }
 
   const promptEntityId = new EntityId(prompt.id, projectId);
+
+  if (requestedVersion !== undefined) {
+    const version = await promptService.getPromptVersion(new PromptVersionId(requestedVersion, promptEntityId));
+    if (!version) {
+      return { error: Response.json({ error: `Prompt version ${requestedVersion} not found` }, { status: 404 }) };
+    }
+    return { project, prompt, activeVersion: version };
+  }
+
   const activeVersion = await promptService.getActivePromptVersion(promptEntityId);
 
   if (!activeVersion) {
@@ -150,6 +175,12 @@ export class V1ExecutePrompt extends OpenAPIRoute {
           "application/json": {
             schema: z.object({
               variables: z.any().optional().describe("Variables to substitute in the prompt template (key-value pairs)"),
+              version: z
+                .number()
+                .int()
+                .positive()
+                .optional()
+                .describe("Prompt version to run. When left out, the active version runs."),
             }),
           },
         },
@@ -201,15 +232,15 @@ export class V1ExecutePrompt extends OpenAPIRoute {
   async handle(c: Context): Promise<Response | Record<string, unknown>> {
     const db = drizzle(c.env.DB);
     const logger = new CFPromptExecutionLogger(db, c.env.PRIVATE_FILES, c.env.NEW_LOGS);
+    const data = await this.getValidatedData<typeof this.schema>();
 
     try {
       const user = getUserFromContext(c);
-      const data = await this.getValidatedData<typeof this.schema>();
       const { projectSlugOrId, promptSlugOrId } = data.params as {
         projectSlugOrId: string;
         promptSlugOrId: string;
       };
-      const body = (data.body ?? {}) as { variables?: Record<string, unknown> };
+      const body = (data.body ?? {}) as { variables?: Record<string, unknown>; version?: number };
 
       const projectService = new ProjectService(db);
       const promptService = new PromptService(db);
@@ -221,6 +252,7 @@ export class V1ExecutePrompt extends OpenAPIRoute {
         userId: user.id,
         projectSlugOrId,
         promptSlugOrId,
+        requestedVersion: body.version,
       });
 
       if ("error" in executionContext) {
@@ -265,12 +297,19 @@ export class V1ExecutePrompt extends OpenAPIRoute {
         response_format: promptBody.response_format,
         openai_settings: promptBody.openai_settings,
         google_settings: promptBody.google_settings,
+        openrouter_settings: promptBody.openrouter_settings,
         proxy: promptBody.proxy,
         projectId: activeVersion.projectId,
         promptSlug: activeVersion.slug,
       });
 
-      return await respondWithResult(c, logger, result, promptBody.response_format);
+      return await respondWithResult({
+        c,
+        logger,
+        result,
+        responseFormat: promptBody.response_format,
+        version: activeVersion,
+      });
     } catch (error) {
       console.error("Error executing prompt:", error);
 

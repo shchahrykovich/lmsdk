@@ -23,6 +23,8 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { useState, useEffect } from "react";
 import { getVersion } from "@/lib/get-version";
+import { AppLogo } from "@/components/AppLogo";
+import { ChangelogDialog } from "@/components/ChangelogDialog";
 
 type MenuItem = {
   name: string;
@@ -302,14 +304,14 @@ export default function AppLayout(): React.ReactNode {
               className="flex items-center gap-2 hover:opacity-80 transition-opacity"
             >
               <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center">
-                <span className="text-primary-foreground text-sm font-semibold"><img alt={'LM SDK'} src={'/icon.png'}/></span>
+                <span className="text-primary-foreground text-sm font-semibold"><AppLogo /></span>
               </div>
               <span className="font-semibold text-foreground">LM SDK</span>
             </button>
           )}
           {isSidebarCollapsed && (
             <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center mx-auto">
-              <span className="text-primary-foreground text-sm font-semibold"><img alt={'LM SDK'} src={'/icon.png'}/></span>
+              <span className="text-primary-foreground text-sm font-semibold"><AppLogo /></span>
             </div>
           )}
         </div>
@@ -397,11 +399,7 @@ export default function AppLayout(): React.ReactNode {
               isSidebarCollapsed ? "items-center" : "px-3"
             }`}
           >
-            <div
-              className={`w-full text-center ${isSidebarCollapsed ? "text-[10px]" : ""}`}
-            >
-              v{appVersion}
-            </div>
+            <ChangelogDialog currentVersion={appVersion} compact={isSidebarCollapsed} />
           </div>
         </div>
       </aside>

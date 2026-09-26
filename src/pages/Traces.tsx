@@ -12,6 +12,7 @@ import { usePaginationParams } from "@/hooks/use-pagination-params";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Clock, AlertCircle, CheckCircle2, Timer, Network as NetworkIcon } from "lucide-react";
+import { formatDuration } from "@/lib/format";
 
 interface Project {
   id: number;
@@ -231,7 +232,7 @@ export default function Traces(): React.ReactNode {
           <div className="flex items-center gap-1.5 text-muted-foreground">
             <Timer className="h-3.5 w-3.5" />
             {typeof row.original.totalDurationMs === "number"
-              ? `${row.original.totalDurationMs} ms`
+              ? formatDuration(row.original.totalDurationMs)
               : "—"}
           </div>
         ),

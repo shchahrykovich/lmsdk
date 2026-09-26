@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { normalizeOutput, generateDiffHtml } from "@/lib/diff-utils";
 import "diff2html/bundles/css/diff2html.min.css";
+import { formatDuration } from "@/lib/format";
 
 interface Prompt {
   promptId: number;
@@ -117,11 +118,8 @@ export default function EvaluationFullScreenDialog({
     }
   };
 
-const formatDuration = (durationMs: number | null): string => {
-    if (durationMs === null) return "N/A";
-    if (durationMs < 1000) return `${durationMs} ms`;
-    return `${(durationMs / 1000).toFixed(2)} s`;
-  };
+const formatOutputDuration = (durationMs: number | null): string =>
+    durationMs === null ? "N/A" : formatDuration(durationMs);
 
   const getOutputForPrompt = (outputs: ResultOutput[], promptId: number, versionId: number) => {
     return outputs.find((o) => o.promptId === promptId && o.versionId === versionId);
@@ -245,11 +243,11 @@ const formatDuration = (durationMs: number | null): string => {
                       <div className="flex justify-between text-xs text-muted-foreground px-2">
                         <span>
                           {leftPrompt.promptName} (v{leftPrompt.version}):{" "}
-                          {formatDuration(leftOutput.durationMs)}
+                          {formatOutputDuration(leftOutput.durationMs)}
                         </span>
                         <span>
                           {rightPrompt.promptName} (v{rightPrompt.version}):{" "}
-                          {formatDuration(rightOutput.durationMs)}
+                          {formatOutputDuration(rightOutput.durationMs)}
                         </span>
                       </div>
                     </div>

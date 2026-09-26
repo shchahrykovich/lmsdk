@@ -235,6 +235,38 @@ describe("Providers Routes", () => {
       });
     });
 
+    it("passes openrouter settings to the provider service", async () => {
+      setAuthenticatedUser(1);
+      executePromptMock.mockResolvedValue({ content: "ok", model: "deepseek/deepseek-v4-flash" });
+
+      const response = await app.request(
+        "/api/providers/execute",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            provider: "openrouter",
+            model: "deepseek/deepseek-v4-flash",
+            messages: [{ role: "user", content: "Hello" }],
+            openrouter_settings: { reasoning_effort: "low", provider_sort: "throughput" },
+          }),
+        },
+        {
+          DB: {} as any,
+          PRIVATE_FILES: {} as any,
+          OPENROUTER_API_KEY: "test-key",
+        }
+      );
+
+      expect(response.status).toBe(200);
+      expect(executePromptMock).toHaveBeenCalledWith(
+        "openrouter",
+        expect.objectContaining({
+          openrouter_settings: { reasoning_effort: "low", provider_sort: "throughput" },
+        })
+      );
+    });
+
     it("returns 400 when provider is missing", async () => {
       setAuthenticatedUser(1);
 

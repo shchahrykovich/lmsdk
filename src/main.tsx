@@ -5,6 +5,11 @@ import App from './App.tsx'
 import { AuthUIProvider } from '@daveyplate/better-auth-ui'
 import { authClient } from './lib/auth-client'
 import { NuqsAdapter } from 'nuqs/adapters/react-router'
+import { installDevFavicon } from './lib/app-icon'
+
+if (import.meta.env.DEV) {
+  installDevFavicon()
+}
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

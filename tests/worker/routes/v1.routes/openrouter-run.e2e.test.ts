@@ -72,7 +72,8 @@ describe("E2E - API run of an OpenRouter prompt", () => {
       ctx
     );
     expect(res.status).toBe(200);
-    expect(JSON.stringify(await res.json())).toContain("billing");
+    const body = await res.json<Record<string, unknown>>();
+    expect(body.response).toEqual({ queue: "billing" });
 
     expect(mockChatCreate).toHaveBeenCalledTimes(1);
     const payload = mockChatCreate.mock.calls[0][0];
@@ -84,6 +85,20 @@ describe("E2E - API run of an OpenRouter prompt", () => {
 
     const logged = await readLog();
     expect(logged).toMatchObject({ isSuccess: 1, provider: null, usage: null });
+    expect(body).toMatchObject({
+      model: "anthropic/claude-sonnet-5-20260801",
+      provider: "openrouter",
+      version: 1,
+      logId: logged!.id,
+      usage: {
+        prompt_tokens: 120,
+        completion_tokens: 80,
+        total_tokens: 200,
+        cached_tokens: 40,
+        reasoning_tokens: 30,
+        cost: 0.0012,
+      },
+    });
     const inputText = await (await env.PRIVATE_FILES.get(`${logged!.logPath}/input.json`))!.text();
     const outputText = await (await env.PRIVATE_FILES.get(`${logged!.logPath}/output.json`))!.text();
     expect(JSON.parse(inputText)).toMatchObject({ model: "anthropic/claude-sonnet-5" });
@@ -114,5 +129,48 @@ describe("E2E - API run of an OpenRouter prompt", () => {
       reasoning_tokens: 30,
       total_tokens: 200,
     });
+  });
+
+  it("sends the reasoning effort and provider sort saved in the prompt version", async () => {
+    const created = await manage("/projects/support/prompts", f.keys.write, {
+      method: "POST",
+      body: {
+        name: "Fast scorer",
+        slug: "fast-scorer",
+        provider: "openrouter",
+        model: "deepseek/deepseek-v4.1-flash",
+        body: {
+          messages: [{ role: "user", content: "Score: {{product}}" }],
+          response_format: { type: "json" },
+          openrouter_settings: {
+            reasoning_effort: "none",
+            provider_sort: "throughput",
+            temperature: 0,
+            max_tokens: 1200,
+          },
+        },
+      },
+    });
+    expect(created.status).toBe(201);
+
+    const ctx = createExecutionContext();
+    const res = await app.request(
+      "/api/v1/projects/support/prompts/fast-scorer/execute",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": f.keys.write },
+        body: JSON.stringify({ variables: { product: "Vitamin D3 2000 IU" } }),
+      },
+      { ...env, OPENROUTER_API_KEY: TEST_OPENROUTER_KEY },
+      ctx
+    );
+    expect(res.status).toBe(200);
+    await waitOnExecutionContext(ctx);
+
+    const payload = mockChatCreate.mock.calls[0][0];
+    expect(payload.reasoning).toEqual({ effort: "none" });
+    expect(payload.provider).toEqual({ require_parameters: true, sort: "throughput" });
+    expect(payload.temperature).toBe(0);
+    expect(payload.max_tokens).toBe(1200);
   });
 });

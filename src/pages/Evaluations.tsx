@@ -8,6 +8,7 @@ import { Plus, Trash2 } from "lucide-react";
 import DeleteConfirmationDialog from "@/components/DeleteConfirmationDialog";
 import { usePaginationParams } from "@/hooks/use-pagination-params";
 import { Pagination } from "@/components/Pagination";
+import { formatDuration } from "@/lib/format";
 
 interface Evaluation {
   id: number;
@@ -131,11 +132,8 @@ export default function Evaluations(): React.ReactNode {
     return date.toLocaleDateString();
   };
 
-  const formatDuration = (durationMs: number | null) => {
-    if (durationMs === null) return "—";
-    if (durationMs < 1000) return `${durationMs} ms`;
-    return `${(durationMs / 1000).toFixed(2)} s`;
-  };
+  const formatEvaluationDuration = (durationMs: number | null) =>
+    durationMs === null ? "—" : formatDuration(durationMs);
 
   if (loading) {
     return (
@@ -250,7 +248,7 @@ export default function Evaluations(): React.ReactNode {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-muted-foreground">
-                        {formatDuration(evaluation.durationMs)}
+                        {formatEvaluationDuration(evaluation.durationMs)}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">

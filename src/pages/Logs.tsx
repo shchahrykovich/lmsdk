@@ -13,6 +13,7 @@ import { usePaginationParams } from "@/hooks/use-pagination-params";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { formatDuration } from "@/lib/format";
 import {
   applyDirectFilters,
   applySortParams,
@@ -390,7 +391,7 @@ export default function Logs(): React.ReactNode {
         cell: ({ row }) => (
           <div className="flex items-center gap-1.5 text-muted-foreground">
             {typeof row.original.durationMs === "number"
-              ? `${row.original.durationMs} ms`
+              ? formatDuration(row.original.durationMs)
               : "—"}
           </div>
         ),

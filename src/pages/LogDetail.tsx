@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import ProjectPageHeader from "@/components/ProjectPageHeader";
 import JsonSection from "@/components/JsonSection";
 import { AddLogsToDatasetDialog } from "@/components/AddLogsToDatasetDialog";
+import { formatDuration } from "@/lib/format";
 
 interface Project {
   id: number;
@@ -165,7 +166,7 @@ export default function LogDetail(): React.ReactNode {
           <div className="rounded-lg border border-border bg-card p-6">
             <div className="flex flex-wrap items-center gap-3">
               <span className="text-sm text-muted-foreground">
-                Duration: {typeof log.durationMs === "number" ? `${log.durationMs} ms` : "Duration unavailable"}
+                Duration: {typeof log.durationMs === "number" ? formatDuration(log.durationMs) : "Duration unavailable"}
               </span>
             </div>
 						<div className="flex flex-wrap items-center gap-3">

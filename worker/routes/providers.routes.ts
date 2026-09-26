@@ -3,7 +3,7 @@ import type { HonoEnv } from "./app";
 import { requireAuth } from "../middleware/auth.middleware";
 import { ProviderService } from "../services/provider.service";
 import { providerConfigFromEnv } from "../providers/provider-factory";
-import type { AIMessage, GoogleSettings, OpenAISettings, ResponseFormat } from "../providers/base-provider";
+import type { AIMessage, GoogleSettings, OpenAISettings, OpenRouterSettings, ResponseFormat } from "../providers/base-provider";
 
 import {NullPromptExecutionLogger} from "../providers/logger/null-prompt-execution-logger";
 
@@ -17,6 +17,7 @@ type ParsedExecuteRequest = {
   variables?: Record<string, unknown>;
   google_settings?: GoogleSettings;
   openai_settings?: OpenAISettings;
+  openrouter_settings?: OpenRouterSettings;
   projectId?: number;
   promptSlug?: string;
   proxy?: "none" | "cloudflare";
@@ -86,6 +87,7 @@ const parseExecuteBody = (
       variables: getRecord(value.variables),
       google_settings: getRecord(value.google_settings) as GoogleSettings | undefined,
       openai_settings: getRecord(value.openai_settings) as OpenAISettings | undefined,
+      openrouter_settings: getRecord(value.openrouter_settings) as OpenRouterSettings | undefined,
       projectId: getNumber(value.projectId),
       promptSlug: getString(value.promptSlug),
       proxy: getProxy(value.proxy),
@@ -134,8 +136,19 @@ providers.post("/execute", async (c) => {
     // This is for testing/development and doesn't need execution logging
     const providerService = new ProviderService(providerConfigFromEnv(c.env), new NullPromptExecutionLogger(), c.env.CACHE);
 
-    const { provider, model, messages, variables, response_format, google_settings, openai_settings, proxy, projectId, promptSlug } =
-      parseResult.data;
+    const {
+      provider,
+      model,
+      messages,
+      variables,
+      response_format,
+      google_settings,
+      openai_settings,
+      openrouter_settings,
+      proxy,
+      projectId,
+      promptSlug,
+    } = parseResult.data;
 
     // Execute the prompt using the provider service
     const result = await providerService.executePrompt(provider, {
@@ -145,6 +158,7 @@ providers.post("/execute", async (c) => {
       response_format,
       google_settings,
       openai_settings,
+      openrouter_settings,
       proxy,
       projectId,
       promptSlug,

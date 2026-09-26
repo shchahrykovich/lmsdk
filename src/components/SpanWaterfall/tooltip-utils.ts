@@ -42,10 +42,7 @@ export const normalizeTimestamp = (value: string | number): number => {
 	return new Date(value).getTime();
 };
 
-export const formatDuration = (ms: number): string => {
-	if (ms < 1000) return `${ms.toFixed(0)}ms`;
-	return `${(ms / 1000).toFixed(2)}s`;
-};
+export { formatDuration } from "@/lib/format";
 
 export const formatTime = (timestamp: number): string => {
 	return new Date(timestamp).toLocaleTimeString(undefined, {

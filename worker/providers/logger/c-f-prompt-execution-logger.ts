@@ -63,6 +63,11 @@ export class CFPromptExecutionLogger implements IPromptExecutionLogger {
         this.logRecord = undefined;
     }
 
+    async waitForLogId(): Promise<number | undefined> {
+        await Promise.all(this.pendingTasks);
+        return this.logRecord?.logId;
+    }
+
     /**
      * Wait for all pending logging operations to complete
      * Then send a message to the queue for background R2 processing

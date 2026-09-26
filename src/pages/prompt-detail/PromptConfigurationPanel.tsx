@@ -9,6 +9,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import type { OpenRouterSettingsState } from "@/lib/openrouter-settings";
+import { OpenRouterSettingsSection } from "./OpenRouterSettingsSection";
 
 type ResponseType = "text" | "json";
 type ReasoningEffort = "low" | "medium" | "high";
@@ -48,6 +50,8 @@ type PromptConfigurationPanelProps = Readonly<{
   setGoogleSearchEnabled: (value: boolean) => void;
   cacheSystemMessage: boolean;
   setCacheSystemMessage: (value: boolean) => void;
+  openRouterSettings: OpenRouterSettingsState;
+  setOpenRouterSettings: (value: OpenRouterSettingsState) => void;
 }>;
 
 export function PromptConfigurationPanel({
@@ -78,6 +82,8 @@ export function PromptConfigurationPanel({
   setGoogleSearchEnabled,
   cacheSystemMessage,
   setCacheSystemMessage,
+  openRouterSettings,
+  setOpenRouterSettings,
 }: PromptConfigurationPanelProps): React.ReactNode {
   return (
     <div className="w-1/2 border-r border-border overflow-y-auto">
@@ -334,6 +340,13 @@ export function PromptConfigurationPanel({
               </div>
               <div className="relative"></div>
             </>
+          )}
+
+          {provider === "openrouter" && (
+            <OpenRouterSettingsSection
+              settings={openRouterSettings}
+              setSettings={setOpenRouterSettings}
+            />
           )}
 
           {/* System Message */}

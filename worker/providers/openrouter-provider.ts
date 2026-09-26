@@ -11,9 +11,14 @@ import {
 import type { IPromptExecutionLogger } from "./logger/execution-logger";
 
 export const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
+export const OPENROUTER_TIMEOUT_MS = 240_000;
+export const OPENROUTER_MAX_RETRIES = 0;
+
+type OpenRouterSettings = NonNullable<ExecuteRequest["openrouter_settings"]>;
 
 type OpenRouterRequest = ChatCompletionCreateParamsNonStreaming & {
-  provider?: { require_parameters: boolean };
+  provider?: { require_parameters?: boolean; sort?: OpenRouterSettings["provider_sort"] };
+  reasoning?: { effort: NonNullable<OpenRouterSettings["reasoning_effort"]> };
 };
 
 interface OpenRouterErrorObject {
@@ -26,8 +31,13 @@ type OpenRouterChoice = Omit<ChatCompletion["choices"][number], "finish_reason">
   error?: OpenRouterErrorObject;
 };
 
-type OpenRouterResponse = Omit<Partial<ChatCompletion>, "choices"> & {
+type OpenRouterUsage = NonNullable<ChatCompletion["usage"]> & {
+  cost?: number;
+};
+
+type OpenRouterResponse = Omit<Partial<ChatCompletion>, "choices" | "usage"> & {
   choices?: OpenRouterChoice[];
+  usage?: OpenRouterUsage;
   error?: OpenRouterErrorObject;
 };
 
@@ -42,7 +52,7 @@ export class OpenRouterProvider extends AIProvider {
     proxyConfig?: { token?: string; baseUrl?: string }
   ) {
     super(apiKey);
-    this.client = new OpenAI({ apiKey: this.apiKey, baseURL: OPENROUTER_BASE_URL });
+    this.client = this.createClient(OPENROUTER_BASE_URL);
     this.logger = logger;
     this.proxyConfig = proxyConfig;
   }
@@ -94,13 +104,29 @@ export class OpenRouterProvider extends AIProvider {
     return {
       content: choice.message?.content ?? "",
       model: response.model ?? requestedModel,
-      usage: {
-        prompt_tokens: response.usage?.prompt_tokens ?? 0,
-        completion_tokens: response.usage?.completion_tokens ?? 0,
-        total_tokens: response.usage?.total_tokens ?? 0,
-      },
+      usage: this.buildUsage(response.usage),
       duration_ms: durationMs,
     };
+  }
+
+  private buildUsage(usage: OpenRouterUsage | undefined): ExecuteResult["usage"] {
+    return {
+      prompt_tokens: usage?.prompt_tokens ?? 0,
+      completion_tokens: usage?.completion_tokens ?? 0,
+      total_tokens: usage?.total_tokens ?? 0,
+      ...this.buildUsageDetails(usage),
+    };
+  }
+
+  private buildUsageDetails(
+    usage: OpenRouterUsage | undefined
+  ): Pick<ExecuteResult["usage"], "cached_tokens" | "reasoning_tokens" | "cost"> {
+    const details = {
+      cached_tokens: usage?.prompt_tokens_details?.cached_tokens,
+      reasoning_tokens: usage?.completion_tokens_details?.reasoning_tokens,
+      cost: usage?.cost,
+    };
+    return Object.fromEntries(Object.entries(details).filter(([, value]) => value !== undefined));
   }
 
   private buildRequestPayload(request: ExecuteRequest): OpenRouterRequest {
@@ -112,10 +138,39 @@ export class OpenRouterProvider extends AIProvider {
     const responseFormat = this.buildResponseFormat(request.response_format);
     if (responseFormat) {
       payload.response_format = responseFormat;
-      payload.provider = { require_parameters: true };
+    }
+
+    const providerRouting = this.buildProviderRouting(Boolean(responseFormat), request.openrouter_settings);
+    if (providerRouting) {
+      payload.provider = providerRouting;
+    }
+
+    const settings = request.openrouter_settings;
+    if (settings?.reasoning_effort) {
+      payload.reasoning = { effort: settings.reasoning_effort };
+    }
+    if (settings?.temperature !== undefined) {
+      payload.temperature = settings.temperature;
+    }
+    if (settings?.max_tokens !== undefined) {
+      payload.max_tokens = settings.max_tokens;
     }
 
     return payload;
+  }
+
+  private buildProviderRouting(
+    requiresResponseFormat: boolean,
+    settings: ExecuteRequest["openrouter_settings"]
+  ): OpenRouterRequest["provider"] | undefined {
+    const routing: NonNullable<OpenRouterRequest["provider"]> = {};
+    if (requiresResponseFormat) {
+      routing.require_parameters = true;
+    }
+    if (settings?.provider_sort) {
+      routing.sort = settings.provider_sort;
+    }
+    return Object.keys(routing).length > 0 ? routing : undefined;
   }
 
   private buildResponseFormat(
@@ -164,12 +219,18 @@ export class OpenRouterProvider extends AIProvider {
       return this.client;
     }
 
+    return this.createClient(this.proxyConfig.baseUrl + "/openrouter", {
+      "cf-aig-authorization": `Bearer ${this.proxyConfig.token}`,
+    });
+  }
+
+  private createClient(baseURL: string, defaultHeaders?: Record<string, string>): OpenAI {
     return new OpenAI({
       apiKey: this.apiKey,
-      baseURL: this.proxyConfig.baseUrl + "/openrouter",
-      defaultHeaders: {
-        "cf-aig-authorization": `Bearer ${this.proxyConfig.token}`,
-      },
+      baseURL,
+      timeout: OPENROUTER_TIMEOUT_MS,
+      maxRetries: OPENROUTER_MAX_RETRIES,
+      ...(defaultHeaders ? { defaultHeaders } : {}),
     });
   }
 }

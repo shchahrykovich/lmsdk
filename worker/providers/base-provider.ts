@@ -41,6 +41,19 @@ export interface GoogleSettings {
 }
 
 /**
+ * OpenRouter-specific settings for reasoning and upstream provider routing
+ */
+export const OPENROUTER_REASONING_EFFORTS = ["none", "minimal", "low", "medium", "high"] as const;
+export const OPENROUTER_PROVIDER_SORTS = ["throughput", "latency", "price"] as const;
+
+export interface OpenRouterSettings {
+  reasoning_effort?: (typeof OPENROUTER_REASONING_EFFORTS)[number];
+  provider_sort?: (typeof OPENROUTER_PROVIDER_SORTS)[number];
+  temperature?: number;
+  max_tokens?: number;
+}
+
+/**
  * Request parameters for AI execution
  */
 export interface ExecuteRequest {
@@ -49,6 +62,7 @@ export interface ExecuteRequest {
   response_format?: ResponseFormat;
   openai_settings?: OpenAISettings;
   google_settings?: GoogleSettings;
+  openrouter_settings?: OpenRouterSettings;
   variables?: Record<string, unknown>;
   proxy?: "none" | "cloudflare";
   // For Google cache key generation
@@ -67,6 +81,9 @@ export interface TokenUsage {
   thoughts_tokens?: number; // Google: tokens used for thinking/reasoning
   tool_use_prompt_tokens?: number; // Google: tokens from tool execution results
   cached_content_tokens?: number; // Google: tokens from cached content
+  cached_tokens?: number; // OpenRouter: prompt tokens read from the provider cache
+  reasoning_tokens?: number; // OpenRouter: output tokens spent on reasoning
+  cost?: number; // OpenRouter: charged cost in USD
 }
 
 /**

@@ -118,6 +118,7 @@ export class ProviderService {
       response_format: request.response_format,
       openai_settings: request.openai_settings,
       google_settings: request.google_settings,
+      openrouter_settings: request.openrouter_settings,
       variables: request.variables,
       proxy: request.proxy,
 			promptSlug: request.promptSlug,

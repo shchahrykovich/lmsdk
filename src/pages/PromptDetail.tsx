@@ -9,6 +9,12 @@ import { PromptConfigurationPanel } from "@/pages/prompt-detail/PromptConfigurat
 import { PromptTestingPanel } from "@/pages/prompt-detail/PromptTestingPanel";
 import { JsonSchemaDialog } from "@/pages/prompt-detail/JsonSchemaDialog";
 import CreateDatasetDialog from "@/components/CreateDatasetDialog";
+import {
+  DEFAULT_OPENROUTER_SETTINGS,
+  type OpenRouterSettingsState,
+  parseOpenRouterSettings,
+  toOpenRouterSettingsBody,
+} from "@/lib/openrouter-settings";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -68,6 +74,9 @@ export default function PromptDetail(): React.ReactNode {
   const [thinkingLevel, setThinkingLevel] = useState<"THINKING_LEVEL_UNSPECIFIED" | "LOW" | "MEDIUM" | "HIGH" | "MINIMAL">("THINKING_LEVEL_UNSPECIFIED");
   const [googleSearchEnabled, setGoogleSearchEnabled] = useState(false);
   const [cacheSystemMessage, setCacheSystemMessage] = useState(false);
+
+  // OpenRouter-specific settings
+  const [openRouterSettings, setOpenRouterSettings] = useState<OpenRouterSettingsState>(DEFAULT_OPENROUTER_SETTINGS);
 
   // Test area
   const [testOutput, setTestOutput] = useState("");
@@ -207,6 +216,7 @@ export default function PromptDetail(): React.ReactNode {
     applyResponseFormat(parsedBody);
     applyOpenAiSettings(parsedBody);
     applyGoogleSettings(parsedBody);
+    setOpenRouterSettings(parseOpenRouterSettings(parsedBody));
   };
 
   const loadProviders = async () => {
@@ -455,6 +465,10 @@ export default function PromptDetail(): React.ReactNode {
         };
       }
 
+      if (provider === "openrouter") {
+        body.openrouter_settings = toOpenRouterSettingsBody(openRouterSettings);
+      }
+
       return { body };
     };
 
@@ -620,6 +634,8 @@ export default function PromptDetail(): React.ReactNode {
           setGoogleSearchEnabled={setGoogleSearchEnabled}
           cacheSystemMessage={cacheSystemMessage}
           setCacheSystemMessage={setCacheSystemMessage}
+          openRouterSettings={openRouterSettings}
+          setOpenRouterSettings={setOpenRouterSettings}
         />
 
         <PromptTestingPanel
@@ -641,6 +657,7 @@ export default function PromptDetail(): React.ReactNode {
           thinkingLevel={thinkingLevel}
           googleSearchEnabled={googleSearchEnabled}
           cacheSystemMessage={cacheSystemMessage}
+          openRouterSettings={openRouterSettings}
           projectId={project.id}
           promptSlug={promptSlug ?? prompt.slug}
           testOutput={testOutput}

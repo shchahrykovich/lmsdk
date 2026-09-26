@@ -1,6 +1,7 @@
 import {type JSX, useState} from "react";
 import JsonView from "@uiw/react-json-view";
 import { Button } from "@/components/ui/button";
+import { formatDuration } from "@/lib/format";
 
 interface Prompt {
   promptId: number;
@@ -189,9 +190,7 @@ export default function EvaluationResultsTable({
                           )}
                           {output.durationMs !== null && (
                             <div className="text-xs text-muted-foreground mt-2">
-                              {output.durationMs < 1000
-                                ? `${output.durationMs} ms`
-                                : `${(output.durationMs / 1000).toFixed(2)} s`}
+                              {formatDuration(output.durationMs)}
                             </div>
                           )}
                         </div>

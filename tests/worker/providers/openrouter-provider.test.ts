@@ -73,10 +73,12 @@ describe("OpenRouterProvider", () => {
       expect(provider.getProviderName()).toBe("openrouter");
     });
 
-    it("points the client at the OpenRouter API", () => {
+    it("points the client at the OpenRouter API with a 240 s timeout and no SDK retries", () => {
       expect(constructedOptions[0]).toEqual({
         apiKey: API_KEY,
         baseURL: "https://openrouter.ai/api/v1",
+        timeout: 240_000,
+        maxRetries: 0,
       });
     });
   });
@@ -161,16 +163,105 @@ describe("OpenRouterProvider", () => {
     });
   });
 
+  describe("OpenRouter settings", () => {
+    it("sends the reasoning effort", async () => {
+      mockChatCreate.mockResolvedValue(completion());
+
+      await provider.execute(baseRequest({ openrouter_settings: { reasoning_effort: "low" } }));
+
+      expect(mockChatCreate.mock.calls[0][0].reasoning).toEqual({ effort: "low" });
+    });
+
+    it("sends effort none to turn reasoning off", async () => {
+      mockChatCreate.mockResolvedValue(completion());
+
+      await provider.execute(baseRequest({ openrouter_settings: { reasoning_effort: "none" } }));
+
+      expect(mockChatCreate.mock.calls[0][0].reasoning).toEqual({ effort: "none" });
+    });
+
+    it("sends the provider sort order", async () => {
+      mockChatCreate.mockResolvedValue(completion());
+
+      await provider.execute(baseRequest({ openrouter_settings: { provider_sort: "throughput" } }));
+
+      expect(mockChatCreate.mock.calls[0][0].provider).toEqual({ sort: "throughput" });
+    });
+
+    it("keeps require_parameters for JSON when a provider sort is set", async () => {
+      mockChatCreate.mockResolvedValue(completion());
+
+      await provider.execute(
+        baseRequest({ response_format: { type: "json" }, openrouter_settings: { provider_sort: "latency" } })
+      );
+
+      expect(mockChatCreate.mock.calls[0][0].provider).toEqual({ require_parameters: true, sort: "latency" });
+    });
+
+    it("sends temperature and max_tokens", async () => {
+      mockChatCreate.mockResolvedValue(completion());
+
+      await provider.execute(baseRequest({ openrouter_settings: { temperature: 0.2, max_tokens: 1500 } }));
+
+      const payload = mockChatCreate.mock.calls[0][0];
+      expect(payload.temperature).toBe(0.2);
+      expect(payload.max_tokens).toBe(1500);
+    });
+
+    it("sends temperature 0", async () => {
+      mockChatCreate.mockResolvedValue(completion());
+
+      await provider.execute(baseRequest({ openrouter_settings: { temperature: 0 } }));
+
+      expect(mockChatCreate.mock.calls[0][0]).toHaveProperty("temperature", 0);
+    });
+
+    it("sends no reasoning and no provider routing for empty settings", async () => {
+      mockChatCreate.mockResolvedValue(completion());
+
+      await provider.execute(baseRequest({ openrouter_settings: {} }));
+
+      expect(Object.keys(mockChatCreate.mock.calls[0][0]).sort()).toEqual(["messages", "model"]);
+    });
+
+    it("logs the reasoning and provider settings in the input payload", async () => {
+      mockChatCreate.mockResolvedValue(completion());
+
+      await provider.execute(
+        baseRequest({ openrouter_settings: { reasoning_effort: "minimal", provider_sort: "price" } })
+      );
+
+      expect(logger.inputs[0]).toMatchObject({ reasoning: { effort: "minimal" }, provider: { sort: "price" } });
+    });
+  });
+
   describe("Response mapping", () => {
-    it("returns content, the model from the response, and token usage", async () => {
+    it("returns content, the model from the response, and token usage with cost", async () => {
       mockChatCreate.mockResolvedValue(completion({ model: "anthropic/claude-sonnet-5-20260801" }));
 
       const result = await provider.execute(baseRequest());
 
       expect(result.content).toBe("Hello from OpenRouter");
       expect(result.model).toBe("anthropic/claude-sonnet-5-20260801");
-      expect(result.usage).toEqual({ prompt_tokens: 12, completion_tokens: 8, total_tokens: 20 });
+      expect(result.usage).toEqual({
+        prompt_tokens: 12,
+        completion_tokens: 8,
+        total_tokens: 20,
+        cached_tokens: 4,
+        reasoning_tokens: 3,
+        cost: 0.00012,
+      });
       expect(result.duration_ms).toBeGreaterThanOrEqual(0);
+    });
+
+    it("leaves out cost and token details that OpenRouter did not report", async () => {
+      mockChatCreate.mockResolvedValue(
+        completion({ usage: { prompt_tokens: 12, completion_tokens: 8, total_tokens: 20 } })
+      );
+
+      const result = await provider.execute(baseRequest());
+
+      expect(result.usage).toEqual({ prompt_tokens: 12, completion_tokens: 8, total_tokens: 20 });
     });
 
     it("returns an empty string when the message content is null", async () => {
@@ -282,6 +373,8 @@ describe("OpenRouterProvider", () => {
       expect(gatewayOptions.baseURL).toBe("https://gateway.example/openrouter");
       expect(gatewayOptions.apiKey).toBe(API_KEY);
       expect(gatewayOptions.defaultHeaders["cf-aig-authorization"]).toBe("Bearer cf-token");
+      expect(gatewayOptions.timeout).toBe(240_000);
+      expect(gatewayOptions.maxRetries).toBe(0);
     });
 
     it("uses the direct client when the gateway token is missing", async () => {

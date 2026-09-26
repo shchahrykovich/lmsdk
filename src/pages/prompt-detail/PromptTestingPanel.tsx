@@ -4,6 +4,8 @@ import type { Dispatch, SetStateAction } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import JsonView from "@uiw/react-json-view";
+import { formatDuration } from "@/lib/format";
+import { type OpenRouterSettingsState, toOpenRouterSettingsBody } from "@/lib/openrouter-settings";
 
 type ResponseType = "text" | "json";
 type ReasoningEffort = "low" | "medium" | "high";
@@ -39,6 +41,7 @@ type PromptTestingPanelProps = Readonly<{
   thinkingLevel: ThinkingLevel;
   googleSearchEnabled: boolean;
   cacheSystemMessage: boolean;
+  openRouterSettings: OpenRouterSettingsState;
   projectId: number;
   promptSlug: string;
   testOutput: string;
@@ -66,6 +69,7 @@ export function PromptTestingPanel({
   thinkingLevel,
   googleSearchEnabled,
   cacheSystemMessage,
+  openRouterSettings,
   projectId,
   promptSlug,
   testOutput,
@@ -160,6 +164,10 @@ export function PromptTestingPanel({
         cache_system_message: cacheSystemMessage,
       };
     }
+
+    if (provider === "openrouter") {
+      requestBody.openrouter_settings = toOpenRouterSettingsBody(openRouterSettings);
+    }
   };
 
   const handleRunTest = async () => {
@@ -214,7 +222,7 @@ export function PromptTestingPanel({
         const usageText = formatUsage(result.usage);
         const durationMs =
           typeof result.duration_ms === "number" ? result.duration_ms : null;
-        const durationText = durationMs !== null ? `${durationMs} ms` : "N/A";
+        const durationText = durationMs !== null ? formatDuration(durationMs) : "N/A";
 
         setTestOutput(
           `${result.content}\n\n---\nModel: ${result.model}\nTokens: ${usageText}\nExecution: ${durationText}`

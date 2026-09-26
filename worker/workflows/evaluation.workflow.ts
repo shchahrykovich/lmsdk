@@ -7,7 +7,7 @@ import { PromptService } from "../prompts/prompt.service";
 import { ProviderService } from "../services/provider.service";
 import { NullPromptExecutionLogger } from "../providers/logger/null-prompt-execution-logger";
 import { providerConfigFromEnv, type ProviderConfig } from "../providers/provider-factory";
-import type { AIMessage, ResponseFormat } from "../providers/base-provider";
+import type { AIMessage, OpenRouterSettings, ResponseFormat } from "../providers/base-provider";
 import {drizzle} from "drizzle-orm/d1";
 import {EntityId} from "../shared/entity-id";
 import {ProjectId} from "../shared/project-id";
@@ -186,6 +186,7 @@ export async function runEvaluationWorkflow(
               response_format: promptBody.response_format,
               openai_settings: promptBody.openai_settings,
               google_settings: promptBody.google_settings,
+              openrouter_settings: promptBody.openrouter_settings,
               proxy: promptBody.proxy,
               projectId: version.projectId,
               promptSlug: version.slug,
@@ -291,6 +292,7 @@ type PromptBody = {
   response_format?: ResponseFormat;
   openai_settings?: Record<string, unknown>;
   google_settings?: Record<string, unknown>;
+  openrouter_settings?: OpenRouterSettings;
   proxy?: "none" | "cloudflare";
 };
 

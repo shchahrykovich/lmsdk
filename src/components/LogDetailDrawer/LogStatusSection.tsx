@@ -1,6 +1,7 @@
 /* eslint-disable sonarjs/function-return-type */
 import type * as React from "react";
 import { Clock, Timer, CheckCircle2, AlertCircle } from "lucide-react";
+import { formatDuration } from "@/lib/format";
 
 type LogStatusSectionProps = Readonly<{
   isSuccess: boolean;
@@ -41,7 +42,7 @@ export function LogStatusSection({
           <Timer className="h-3.5 w-3.5" />
           <span>
             {typeof durationMs === "number"
-              ? `${durationMs} ms`
+              ? formatDuration(durationMs)
               : "Duration unavailable"}
           </span>
         </div>

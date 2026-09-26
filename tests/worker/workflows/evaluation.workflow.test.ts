@@ -215,6 +215,7 @@ describe("EvaluationWorkflow", () => {
       body: JSON.stringify({
         messages: [{ role: "user", content: "Hello {{name}}" }],
         response_format: { type: "json" },
+        openrouter_settings: { reasoning_effort: "low" },
       }),
       slug: "prompt",
       createdAt: 1000,
@@ -292,6 +293,10 @@ describe("EvaluationWorkflow", () => {
       101
     );
     expect(executePromptMock).toHaveBeenCalledTimes(4);
+    expect(executePromptMock).toHaveBeenCalledWith(
+      "openai",
+      expect.objectContaining({ openrouter_settings: { reasoning_effort: "low" } })
+    );
     expect(createResultMock).toHaveBeenCalledTimes(4);
     expect(updateOutputSchemaMock).toHaveBeenCalled();
 
