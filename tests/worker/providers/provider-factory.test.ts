@@ -116,8 +116,8 @@ describe("ProviderFactory", () => {
         
       }, logger);
 
-      expect(() => factory.createProvider("anthropic")).toThrow(
-        "Provider 'anthropic' is not supported. Supported providers: openai, google, openrouter"
+      expect(() => factory.createProvider("mistral")).toThrow(
+        "Provider 'mistral' is not supported. Supported providers: openai, google, openrouter, anthropic"
       );
     });
 
@@ -187,7 +187,7 @@ describe("ProviderFactory", () => {
         
       }, logger);
 
-      expect(factory.isProviderSupported("anthropic")).toBe(false);
+      expect(factory.isProviderSupported("mistral")).toBe(false);
       expect(factory.isProviderSupported("cohere")).toBe(false);
       expect(factory.isProviderSupported("")).toBe(false);
       expect(factory.isProviderSupported("unknown")).toBe(false);
@@ -233,6 +233,7 @@ describe("ProviderFactory", () => {
         openAIKey: "test-openai-key",
         geminiKey: "test-gemini-key",
         openRouterKey: "test-openrouter-key",
+        anthropicKey: "test-anthropic-key",
       };
       const factory = new ProviderFactory(config, logger);
       const listedIds = new ProviderService(config, logger, undefined as unknown as KVNamespace)
@@ -258,7 +259,7 @@ describe("ProviderFactory", () => {
 
       const providers = factory.getSupportedProviders();
 
-      expect(providers).toEqual(["openai", "google", "openrouter"]);
+      expect(providers).toEqual(["openai", "google", "openrouter", "anthropic"]);
     });
 
     it("should return same list regardless of config", () => {
@@ -281,9 +282,9 @@ describe("ProviderFactory", () => {
         
       }, logger);
 
-      expect(factory1.getSupportedProviders()).toEqual(["openai", "google", "openrouter"]);
-      expect(factory2.getSupportedProviders()).toEqual(["openai", "google", "openrouter"]);
-      expect(factory3.getSupportedProviders()).toEqual(["openai", "google", "openrouter"]);
+      expect(factory1.getSupportedProviders()).toEqual(["openai", "google", "openrouter", "anthropic"]);
+      expect(factory2.getSupportedProviders()).toEqual(["openai", "google", "openrouter", "anthropic"]);
+      expect(factory3.getSupportedProviders()).toEqual(["openai", "google", "openrouter", "anthropic"]);
     });
   });
 
@@ -297,7 +298,7 @@ describe("ProviderFactory", () => {
       }, logger);
 
       expect(factory).toBeDefined();
-      expect(factory.getSupportedProviders()).toEqual(["openai", "google", "openrouter"]);
+      expect(factory.getSupportedProviders()).toEqual(["openai", "google", "openrouter", "anthropic"]);
     });
 
     it("should handle undefined API keys in config", () => {

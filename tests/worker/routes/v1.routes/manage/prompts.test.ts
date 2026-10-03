@@ -99,6 +99,54 @@ describe("Manage API - prompts", () => {
     expect(missing.status).toBe(404);
   });
 
+  it("renames the prompt with PATCH without a new version and keeps the slug", async () => {
+    const res = await manage("/projects/support/prompts/classifier", f.keys.write, {
+      method: "PATCH",
+      body: { name: "Ticket classifier" },
+    });
+    const body = await res.json<{ prompt: { name: string; slug: string; latestVersion: number } }>();
+    const versions = await env.DB.prepare("SELECT COUNT(*) as count FROM PromptVersions WHERE promptId = ?")
+      .bind(f.tenant1.prompt.id)
+      .first<{ count: number }>();
+
+    expect(res.status).toBe(200);
+    expect(body.prompt).toMatchObject({ name: "Ticket classifier", slug: "classifier", latestVersion: 1 });
+    expect(versions?.count).toBe(1);
+  });
+
+  it("returns the same prompt when the same PATCH rename is repeated", async () => {
+    const rename = () =>
+      manage("/projects/support/prompts/classifier", f.keys.write, { method: "PATCH", body: { name: "Again" } });
+
+    const first = await rename();
+    const second = await rename();
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+  });
+
+  it("returns 409 when PATCH renames the prompt to the name of another prompt", async () => {
+    await createPrompt(f.keys.write, newPrompt);
+
+    const res = await manage("/projects/support/prompts/classifier", f.keys.write, {
+      method: "PATCH",
+      body: { name: newPrompt.name },
+    });
+
+    expect(res.status).toBe(409);
+  });
+
+  it("returns 409 when a new version takes the name of another prompt", async () => {
+    await createPrompt(f.keys.write, newPrompt);
+
+    const res = await manage("/projects/support/prompts/classifier/versions", f.keys.write, {
+      method: "POST",
+      body: { name: newPrompt.name },
+    });
+
+    expect(res.status).toBe(409);
+  });
+
   it("gets and lists prompts by slug and by id", async () => {
     const bySlug = await manage("/projects/support/prompts/classifier", f.keys.read);
     const byId = await manage(`/projects/${f.tenant1.project.id}/prompts/${f.tenant1.prompt.id}`, f.keys.read);

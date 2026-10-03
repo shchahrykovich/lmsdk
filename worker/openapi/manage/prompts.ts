@@ -168,6 +168,35 @@ export class ManageGetPrompt extends OpenAPIRoute {
   }
 }
 
+export class ManageRenamePrompt extends OpenAPIRoute {
+  schema = {
+    tags: [MANAGE_TAG],
+    summary: "Rename a prompt",
+    description:
+      "Changes the prompt name only. It creates no version and keeps the slug, so callers that use the slug are not affected. Safe to repeat.",
+    security: manageSecurity,
+    request: {
+      params: promptParams,
+      body: jsonBody(z.object({ name: z.string().trim().min(1).max(200) })),
+    },
+    responses: {
+      "200": jsonContent(z.object({ prompt: PromptSchema }), "The renamed prompt"),
+      ...errorResponses,
+      ...notFoundResponse,
+      ...conflictResponse,
+    },
+  };
+
+  async handle(c: Context<HonoEnv>): Promise<Response> {
+    const { params, body } = await this.getValidatedData<typeof this.schema>();
+    const resolver = new ManageResolver(c);
+    const { projectId } = await resolver.project(params.project);
+    const { promptId } = await resolver.prompt(projectId, params.prompt);
+    await promptService(c).setPromptName(promptId, body.name);
+    return c.json({ prompt: await promptResponse(c, promptId) });
+  }
+}
+
 export class ManageListPromptVersions extends OpenAPIRoute {
   schema = {
     tags: [MANAGE_TAG],
@@ -206,7 +235,15 @@ export class ManageCreatePromptVersion extends OpenAPIRoute {
       params: promptParams,
       body: jsonBody(
         z.object({
-          name: z.string().trim().min(1).max(200).optional(),
+          name: z
+            .string()
+            .trim()
+            .min(1)
+            .max(200)
+            .optional()
+            .describe(
+              "Renames the whole prompt, not only this version. To rename without a new version, use PATCH .../prompts/{prompt}."
+            ),
           provider: z.string().optional(),
           model: z.string().optional(),
           body: PromptBodySchema.optional(),

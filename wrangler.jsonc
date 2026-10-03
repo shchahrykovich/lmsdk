@@ -59,12 +59,22 @@
 		"consumers": [
 			{
 				"queue": "lmsdk-queue"
+			},
+			{
+				"queue": "lmsdk-batch-paced",
+				"max_batch_size": 4,
+				"max_concurrency": 4,
+				"max_retries": 10
 			}
 		],
 		"producers": [
 			{
 				"queue": "lmsdk-queue",
 				"binding": "NEW_LOGS"
+			},
+			{
+				"queue": "lmsdk-batch-paced",
+				"binding": "BATCH_PACED"
 			}
 		]
 	},
@@ -73,8 +83,16 @@
 			"name": "evaluation-workflow",
 			"binding": "EVALUATION_WORKFLOW",
 			"class_name": "EvaluationWorkflow"
+		},
+		{
+			"name": "batch-workflow",
+			"binding": "BATCH_WORKFLOW",
+			"class_name": "BatchWorkflow"
 		}
 	],
+	"triggers": {
+		"crons": ["23 3 * * *"]
+	},
 	"vars": {
 		"GITHUB_URL": "https://github.com/shchahrykovich/lmsdk",
 		"ALLOW_TO_CREATE_MORE_THAN_ONE_TENANT": "false",

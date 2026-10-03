@@ -1,7 +1,7 @@
 {
   "name": "lmsdk",
   "private": true,
-  "version": "0.1.17",
+  "version": "0.1.18",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -18,9 +18,11 @@
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
-    "test:ai": "vitest run --teardown-timeout=2500 --reporter=./tests/vitest-ai-reporter.ts"
+    "test:ai": "vitest run --teardown-timeout=2500 --reporter=./tests/vitest-ai-reporter.ts",
+    "test:large": "LMSDK_LARGE_TESTS=1 vitest run --teardown-timeout=2500 --reporter=./tests/vitest-ai-reporter.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "0.129.0",
     "@daveyplate/better-auth-ui": "3.3.15",
     "@dnd-kit/core": "6.3.1",
     "@dnd-kit/modifiers": "9.0.0",

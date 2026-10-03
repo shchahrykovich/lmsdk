@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.1.17",
+    "date": "2026-10-03",
+    "changes": [
+      "Batch API: create a batch, add items, submit, read results page by page, cancel. OpenAI, Anthropic and Google run at the provider batch price",
+      "OpenRouter batches run through execute at full price only when you ask for fallback paced",
+      "Anthropic added as a fourth AI provider",
+      "API execute returns cost for OpenAI, Google and Anthropic prompts, computed from the LM SDK price table",
+      "Google prompts with Google search enabled now really send the search tool",
+      "Rename a prompt without a new version: PATCH /manage/projects/{project}/prompts/{prompt}"
+    ]
+  },
+  {
     "version": "0.1.16",
     "date": "2026-09-26",
     "changes": [

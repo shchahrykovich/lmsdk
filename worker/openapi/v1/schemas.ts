@@ -13,9 +13,15 @@ export const ExecutePromptResponse = z.object({
       prompt_tokens: z.number(),
       completion_tokens: z.number(),
       total_tokens: z.number(),
-      cached_tokens: z.number().optional().describe("OpenRouter: prompt tokens read from the provider cache"),
-      reasoning_tokens: z.number().optional().describe("OpenRouter: output tokens spent on reasoning"),
-      cost: z.number().optional().describe("OpenRouter: charged cost in USD"),
+      cached_tokens: z.number().optional().describe("Prompt tokens read from the provider cache (OpenAI, Anthropic, OpenRouter)"),
+      cache_creation_tokens: z.number().optional().describe("Anthropic: prompt tokens written to the cache"),
+      reasoning_tokens: z.number().optional().describe("Output tokens spent on reasoning (OpenAI, OpenRouter)"),
+      cost: z
+        .number()
+        .optional()
+        .describe(
+          "Cost in USD. OpenRouter reports it. For OpenAI, Google and Anthropic, LM SDK computes it from its price table at the standard price. Left out when the model has no price in the table."
+        ),
     })
     .passthrough()
     .describe("Token usage reported by the provider"),

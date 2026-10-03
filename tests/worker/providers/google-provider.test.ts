@@ -287,9 +287,9 @@ describe("GoogleProvider", () => {
       const callArgs = mockGenerateContentStream.mock.calls[0][0];
       expect(callArgs.config.responseMimeType).toBe("application/json");
       expect(callArgs.config.responseSchema).toEqual({
-        type: "object",
+        type: "OBJECT",
         properties: {
-          answer: { type: "string" },
+          answer: { type: "STRING" },
         },
         required: ["answer"],
       });
@@ -328,9 +328,9 @@ describe("GoogleProvider", () => {
           type: "json_schema",
           json_schema: {
             schema: {
-              type: "object",
+              type: "OBJECT",
               properties: {
-                data: { type: "object" },
+                data: { type: "OBJECT" },
               },
             },
           },
@@ -341,9 +341,9 @@ describe("GoogleProvider", () => {
 
       const callArgs = mockGenerateContentStream.mock.calls[0][0];
       expect(callArgs.config.responseSchema).toEqual({
-        type: "object",
+        type: "OBJECT",
         properties: {
-          data: { type: "object" },
+          data: { type: "OBJECT" },
         },
       });
     });
@@ -359,9 +359,9 @@ describe("GoogleProvider", () => {
         response_format: {
           type: "json_schema",
           json_schema: {
-            type: "object",
+            type: "OBJECT",
             properties: {
-              value: { type: "number" },
+              value: { type: "NUMBER" },
             },
           },
         },
@@ -372,9 +372,9 @@ describe("GoogleProvider", () => {
       // When json_schema doesn't have .schema, use the whole object as schema
       const callArgs = mockGenerateContentStream.mock.calls[0][0];
       expect(callArgs.config.responseSchema).toEqual({
-        type: "object",
+        type: "OBJECT",
         properties: {
-          value: { type: "number" },
+          value: { type: "NUMBER" },
         },
       });
     });
@@ -1124,7 +1124,7 @@ describe("GoogleProvider", () => {
 
         const callArgs = mockGenerateContentStream.mock.calls[0][0];
         expect(callArgs.config.tools).toBeDefined();
-        expect(callArgs.config.tools).toEqual([{ type: 'google_search' }]);
+        expect(callArgs.config.tools).toEqual([{ googleSearch: {} }]);
       });
 
       it("should not add tools when google_search is disabled", async () => {
@@ -1182,7 +1182,7 @@ describe("GoogleProvider", () => {
         expect(callArgs.config.thinkingConfig).toBeDefined();
         expect(callArgs.config.thinkingConfig.includeThoughts).toBe(true);
         expect(callArgs.config.thinkingConfig.thinkingBudget).toBe(10000);
-        expect(callArgs.config.tools).toEqual([{ type: 'google_search' }]);
+        expect(callArgs.config.tools).toEqual([{ googleSearch: {} }]);
       });
 
       it("should combine thinking_level with google_search", async () => {
@@ -1205,7 +1205,7 @@ describe("GoogleProvider", () => {
         expect(callArgs.config.thinkingConfig).toBeDefined();
         expect(callArgs.config.thinkingConfig.includeThoughts).toBe(false);
         expect(callArgs.config.thinkingConfig.thinkingLevel).toBe("HIGH");
-        expect(callArgs.config.tools).toEqual([{ type: 'google_search' }]);
+        expect(callArgs.config.tools).toEqual([{ googleSearch: {} }]);
       });
 
       it("should work with JSON response format and Google settings", async () => {
@@ -1243,7 +1243,7 @@ describe("GoogleProvider", () => {
         expect(callArgs.config.thinkingConfig).toBeDefined();
         expect(callArgs.config.thinkingConfig.includeThoughts).toBe(true);
         expect(callArgs.config.thinkingConfig.thinkingLevel).toBe("MEDIUM");
-        expect(callArgs.config.tools).toEqual([{ type: 'google_search' }]);
+        expect(callArgs.config.tools).toEqual([{ googleSearch: {} }]);
       });
 
       it("should handle empty google_settings object", async () => {

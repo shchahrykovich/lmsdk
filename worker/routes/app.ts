@@ -23,6 +23,15 @@ import {V1PromptVersion} from "../openapi/v1/prompt-version";
 import {V1PromptVersionLatest} from "../openapi/v1/prompt-version-latest";
 import {V1PromptVersionActive} from "../openapi/v1/prompt-version-active";
 import {getVersion} from "../utils/get-version";
+import {
+	V1AddBatchItems,
+	V1BatchResults,
+	V1CancelBatch,
+	V1CreateBatch,
+	V1GetBatch,
+	V1ListBatches,
+	V1SubmitBatch,
+} from "../openapi/v1/batches";
 
 export interface HonoEnv {
 	Bindings: Env;
@@ -77,6 +86,14 @@ export function createHonoApp(): Hono<HonoEnv> {
 	openapi.get("/api/v1/projects/:projectSlugOrId/prompts/:promptSlugOrId/versions/latest", V1PromptVersionLatest);
 	openapi.get("/api/v1/projects/:projectSlugOrId/prompts/:promptSlugOrId/versions/active", V1PromptVersionActive);
 	openapi.get("/api/v1/projects/:projectSlugOrId/prompts/:promptSlugOrId/versions/:versionId", V1PromptVersion);
+	const batchesPath = "/api/v1/projects/:projectSlugOrId/prompts/:promptSlugOrId/batches";
+	openapi.post(batchesPath, V1CreateBatch);
+	openapi.get(batchesPath, V1ListBatches);
+	openapi.get(`${batchesPath}/:batchId`, V1GetBatch);
+	openapi.post(`${batchesPath}/:batchId/items`, V1AddBatchItems);
+	openapi.post(`${batchesPath}/:batchId/submit`, V1SubmitBatch);
+	openapi.get(`${batchesPath}/:batchId/results`, V1BatchResults);
+	openapi.post(`${batchesPath}/:batchId/cancel`, V1CancelBatch);
 	registerManageRoutes(openapi);
 
 	// Mount regular routes (non-OpenAPI)

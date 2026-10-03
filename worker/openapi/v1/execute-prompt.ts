@@ -7,7 +7,7 @@ import { ProjectService } from "../../projects/project.service";
 import { PromptService } from "../../prompts/prompt.service";
 import { ProviderService } from "../../services/provider.service";
 import { providerConfigFromEnv } from "../../providers/provider-factory";
-import type { AIMessage, GoogleSettings, OpenAISettings, OpenRouterSettings, ResponseFormat } from "../../providers/base-provider";
+import type { ResponseFormat } from "../../providers/base-provider";
 import { CFPromptExecutionLogger } from "../../providers/logger/c-f-prompt-execution-logger";
 import { ProviderTimeoutError } from "../../providers/provider-timeout-error";
 import { ExecutePromptResponse, ErrorResponse } from "./schemas";
@@ -15,25 +15,10 @@ import { ProjectId } from "../../shared/project-id";
 import { EntityId } from "../../shared/entity-id";
 import { PromptVersionId } from "../../prompts/prompt-version-id";
 import type { ExecuteResult } from "../../providers/base-provider";
+import { parsePromptBody } from "../../execution/prompt-body";
+import { buildExecuteRequest } from "../../execution/prompt-renderer";
+import { parseResponseContent } from "../../execution/response-content";
 
-type PromptBody = {
-  messages?: AIMessage[];
-  response_format?: ResponseFormat;
-  openai_settings?: OpenAISettings;
-  google_settings?: GoogleSettings;
-  openrouter_settings?: OpenRouterSettings;
-  proxy?: "none" | "cloudflare";
-};
-
-const parsePromptBody = (rawBody: string): { body?: PromptBody; error?: Response } => {
-  try {
-    return { body: JSON.parse(rawBody) as PromptBody };
-  } catch {
-    return {
-      error: Response.json({ error: "Invalid prompt body format" }, { status: 500 }),
-    };
-  }
-};
 
 const finalizeLogger = async (c: Context, logger: CFPromptExecutionLogger): Promise<void> => {
   const finishPromise = logger.finish();
@@ -44,28 +29,15 @@ const finalizeLogger = async (c: Context, logger: CFPromptExecutionLogger): Prom
   }
 };
 
-const parseContent = (content: string, responseFormat?: PromptBody["response_format"]): unknown => {
-  const shouldParseJson =
-    responseFormat?.type === "json_schema" || responseFormat?.type === "json";
-  if (!shouldParseJson) {
-    return content;
-  }
-  try {
-    return JSON.parse(content) as unknown;
-  } catch {
-    return content;
-  }
-};
-
 const respondWithResult = async (params: {
   c: Context;
   logger: CFPromptExecutionLogger;
   result: ExecuteResult;
-  responseFormat?: PromptBody["response_format"];
+  responseFormat?: ResponseFormat;
   version: { provider: string; version: number };
 }): Promise<Record<string, unknown>> => {
   const { c, logger, result, responseFormat, version } = params;
-  const response = { response: parseContent(result.content, responseFormat) };
+  const response = { response: parseResponseContent(result.content, responseFormat) };
 
   await logger.logResponse({ output: response });
   const logId = await logger.waitForLogId();
@@ -283,14 +255,12 @@ export class V1ExecutePrompt extends OpenAPIRoute {
         rawTraceId: traceparent,
       });
 
-      const { body: promptBody, error: promptBodyError } = parsePromptBody(activeVersion.body);
-      if (promptBodyError || !promptBody) {
-        return promptBodyError ?? Response.json({ error: "Invalid prompt body format" }, { status: 500 });
+      const promptBody = parsePromptBody(activeVersion.body);
+      if (!promptBody) {
+        return Response.json({ error: "Invalid prompt body format" }, { status: 500 });
       }
 
-      const messages: AIMessage[] = promptBody.messages ?? [];
-
-      if (messages.length === 0) {
+      if (promptBody.messages.length === 0) {
         return Response.json({ error: "No messages found in prompt body" }, { status: 400 });
       }
 
@@ -299,18 +269,10 @@ export class V1ExecutePrompt extends OpenAPIRoute {
 
       // Execute the prompt with variables (provider service handles variable substitution)
       // Note: Logging is now handled inside the provider's execute method
-      const result = await providerService.executePrompt(activeVersion.provider, {
-        model: activeVersion.model,
-        messages,
-        variables: body.variables,
-        response_format: promptBody.response_format,
-        openai_settings: promptBody.openai_settings,
-        google_settings: promptBody.google_settings,
-        openrouter_settings: promptBody.openrouter_settings,
-        proxy: promptBody.proxy,
-        projectId: activeVersion.projectId,
-        promptSlug: activeVersion.slug,
-      });
+      const result = await providerService.executePrompt(
+        activeVersion.provider,
+        buildExecuteRequest(activeVersion, promptBody, body.variables)
+      );
 
       return await respondWithResult({
         c,

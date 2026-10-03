@@ -52,6 +52,7 @@ export const validBodies: Record<string, unknown> = {
     body: validBody,
   },
   "POST /api/v1/manage/projects/{project}/prompts/{prompt}/versions": { activate: true },
+  "PATCH /api/v1/manage/projects/{project}/prompts/{prompt}": { name: "Renamed prompt" },
   "PUT /api/v1/manage/projects/{project}/prompts/{prompt}/active-version": { version: 1 },
   "POST /api/v1/manage/projects/{project}/datasets": { name: "New dataset" },
   "POST /api/v1/manage/projects/{project}/datasets/{dataset}/records": { records: [{ ticket: "x" }] },

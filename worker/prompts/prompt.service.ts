@@ -77,6 +77,18 @@ export class PromptService {
     return { count: 1, version };
   }
 
+  async setPromptName(promptId: EntityId<number>, name: string): Promise<Prompt> {
+    const existing = await this.repository.findPromptById(promptId);
+    if (!existing) {
+      throw new NotFoundError("Prompt not found");
+    }
+    await conflictOnDuplicate(
+      () => this.repository.updatePromptName(promptId, name),
+      "A prompt with this name already exists"
+    );
+    return { ...existing, name };
+  }
+
   async getPromptById(
     promptId: EntityId<number>
   ): Promise<(Prompt & { currentVersion: PromptVersion | null }) | null> {

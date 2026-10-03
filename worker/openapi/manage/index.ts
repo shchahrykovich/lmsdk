@@ -7,6 +7,7 @@ import {
   ManageGetPrompt,
   ManageListPromptVersions,
   ManageListPrompts,
+  ManageRenamePrompt,
   ManageSetActiveVersion,
 } from "./prompts";
 import { ManageAddRecords, ManageCreateDataSet, ManageGetDataSet } from "./datasets";
@@ -26,6 +27,7 @@ export function registerManageRoutes(openapi: HonoOpenAPIRouterType<HonoEnv>): v
   openapi.get(`${project}/prompts`, ManageListPrompts);
   openapi.post(`${project}/prompts`, ManageCreatePrompt);
   openapi.get(`${project}/prompts/:prompt`, ManageGetPrompt);
+  openapi.patch(`${project}/prompts/:prompt`, ManageRenamePrompt);
   openapi.get(`${project}/prompts/:prompt/versions`, ManageListPromptVersions);
   openapi.post(`${project}/prompts/:prompt/versions`, ManageCreatePromptVersion);
   openapi.put(`${project}/prompts/:prompt/active-version`, ManageSetActiveVersion);

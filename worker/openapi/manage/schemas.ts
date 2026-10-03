@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { MAX_RECORDS_PER_CALL } from "../../datasets/dataset-limits";
-import { OPENROUTER_PROVIDER_SORTS, OPENROUTER_REASONING_EFFORTS } from "../../providers/base-provider";
+import { ANTHROPIC_EFFORTS, OPENROUTER_PROVIDER_SORTS, OPENROUTER_REASONING_EFFORTS } from "../../providers/base-provider";
 
 export const MANAGE_TAG = "manage";
 
@@ -91,12 +91,18 @@ const OpenRouterSettingsSchema = z.looseObject({
   max_tokens: z.number().int().positive().optional().describe("Limit on output tokens, reasoning included."),
 });
 
+const AnthropicSettingsSchema = z.looseObject({
+  max_tokens: z.number().int().positive().optional().describe("Limit on output tokens. Default 16000."),
+  effort: z.enum(ANTHROPIC_EFFORTS).optional().describe("Thinking depth. Left out, the model default applies."),
+});
+
 export const PromptBodySchema = z.object({
   messages: z.array(MessageSchema).min(1).describe("At least one message"),
   response_format: ResponseFormatSchema.optional(),
   openai_settings: OpenAISettingsSchema.optional(),
   google_settings: GoogleSettingsSchema.optional(),
   openrouter_settings: OpenRouterSettingsSchema.optional(),
+  anthropic_settings: AnthropicSettingsSchema.optional(),
   proxy: z.enum(["none", "cloudflare"]).optional(),
 });
 

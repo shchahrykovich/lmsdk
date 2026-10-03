@@ -21,7 +21,7 @@ describe("ProviderService - isProviderSupported", () => {
   });
 
   it("should return false for unsupported providers", () => {
-    expect(providerService.isProviderSupported("anthropic")).toBe(false);
+    expect(providerService.isProviderSupported("mistral")).toBe(false);
     expect(providerService.isProviderSupported("cohere")).toBe(false);
     expect(providerService.isProviderSupported("")).toBe(false);
   });

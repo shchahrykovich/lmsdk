@@ -11,7 +11,7 @@ describe("ProviderService - getProviders", () => {
   it("should return list of available providers", () => {
     const providers = providerService.getProviders();
 
-    expect(providers).toHaveLength(3);
+    expect(providers).toHaveLength(4);
     expect(providers[0]).toEqual({
       id: "openai",
       name: "OpenAI",
@@ -30,6 +30,18 @@ describe("ProviderService - getProviders", () => {
       description: expect.any(String),
       models: expect.any(Array),
     });
+    expect(providers[3]).toEqual({
+      id: "anthropic",
+      name: "Anthropic",
+      description: expect.any(String),
+      models: expect.any(Array),
+    });
+  });
+
+  it("offers the Anthropic models with Claude Opus 5.5 first", () => {
+    const anthropic = providerService.getProviders().find((p) => p.id === "anthropic");
+
+    expect(anthropic!.models[0]).toEqual({ id: "claude-opus-5-5", name: "Claude Opus 5.5" });
   });
 
   it("should offer the curated OpenRouter models in order", () => {

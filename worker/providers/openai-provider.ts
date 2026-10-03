@@ -1,31 +1,16 @@
 import OpenAI from "openai";
-import type {
-  Response,
-  ResponseCreateParamsNonStreaming,
-  ResponseOutputMessage,
-  ResponseOutputText,
-} from "openai/resources/responses/responses";
 import {
   AIProvider,
   type ExecuteRequest,
   type ExecuteResult,
 } from "./base-provider";
 import type { IPromptExecutionLogger } from "./logger/execution-logger";
+import { buildOpenAIRequest, openAIResult } from "./openai-codec";
 
 /**
  * OpenAI provider implementation
  * Uses OpenAI Responses API for executing prompts
  */
-type OpenAIReasoningSummary = NonNullable<Reasoning["summary"]>;
-
-const toOpenAIReasoningSummary = (
-  saved: NonNullable<ExecuteRequest["openai_settings"]>["reasoning_summary"]
-): OpenAIReasoningSummary | undefined => {
-  if (saved === "disabled") return undefined;
-  if (saved === "concise" || saved === "detailed") return saved;
-  return "auto";
-};
-
 export class OpenAIProvider extends AIProvider {
   private client: OpenAI;
   protected logger: IPromptExecutionLogger;
@@ -53,25 +38,11 @@ export class OpenAIProvider extends AIProvider {
 
   async execute(request: ExecuteRequest): Promise<ExecuteResult> {
     const startTime = Date.now();
-    const { model, messages, response_format, openai_settings, variables } = request;
 
-    await this.logVariablesIfNeeded(variables);
+    await this.logVariablesIfNeeded(request.variables);
 
     try {
-      const inputMessages = this.buildInputMessages(messages);
-      const textFormat = this.buildTextFormat(response_format);
-      const reasoningConfig = this.buildReasoningConfig(openai_settings);
-      const includeArray = this.buildIncludeArray(openai_settings);
-      const store = openai_settings?.store !== false;
-			const requestPayload = this.buildRequestPayload({
-        model,
-        inputMessages,
-        textFormat,
-        reasoningConfig,
-				// @ts-expect-error no type
-        includeArray,
-        store,
-      });
+      const requestPayload = buildOpenAIRequest(request);
 
       await this.logger.logInput({ input: requestPayload });
 
@@ -79,19 +50,9 @@ export class OpenAIProvider extends AIProvider {
 
       // Execute the prompt using responses.create
       const response = await client.responses.create(requestPayload);
-      const outputText = this.extractOutputText(response);
 
       const durationMs = Date.now() - startTime;
-      const result = {
-        content: outputText,
-        model: response.model,
-        usage: {
-          prompt_tokens: response.usage?.input_tokens ?? 0,
-          completion_tokens: response.usage?.output_tokens ?? 0,
-          total_tokens: (response.usage?.input_tokens ?? 0) + (response.usage?.output_tokens ?? 0),
-        },
-        duration_ms: durationMs,
-      };
+      const result = openAIResult({ requestedModel: request.model, response, durationMs, tier: "standard" });
 
       // Log output
       await this.logger.logOutput({
@@ -122,92 +83,11 @@ export class OpenAIProvider extends AIProvider {
     }
   }
 
-  private buildInputMessages(messages: ExecuteRequest["messages"]) {
-    return messages.map((msg) => ({
-      role: msg.role === "system" ? "developer" : msg.role,
-      content: [
-        {
-          type: "input_text",
-          text: msg.content,
-        },
-      ],
-    }));
-  }
-
   private async logVariablesIfNeeded(variables: ExecuteRequest["variables"]) {
     if (!variables) {
       return;
     }
     await this.logger.logVariables({ variables });
-  }
-
-  private buildTextFormat(responseFormat: ExecuteRequest["response_format"]): ResponseTextConfig {
-    if (responseFormat?.type === "json_schema" && responseFormat.json_schema) {
-      const schema = responseFormat.json_schema;
-      return {
-        format: {
-          type: "json_schema",
-          name: schema.name ?? "response",
-          strict: schema.strict ?? true,
-					// @ts-expect-error no type
-          schema: schema.schema ?? schema,
-        },
-        verbosity: "medium",
-      };
-    }
-
-    return {
-      format: {
-        type: "text",
-      },
-      verbosity: "medium",
-    };
-  }
-
-  private buildReasoningConfig(openaiSettings: ExecuteRequest["openai_settings"]): Reasoning | null {
-    const effort = openaiSettings?.reasoning_effort ?? "medium";
-    const summary = toOpenAIReasoningSummary(openaiSettings?.reasoning_summary);
-    return summary ? { effort, summary } : { effort };
-  }
-
-  private buildIncludeArray(openaiSettings: ExecuteRequest["openai_settings"]) {
-    return openaiSettings?.include_encrypted_reasoning !== false
-      ? ["reasoning.encrypted_content"]
-      : [];
-  }
-
-  private buildRequestPayload(params: {
-    model: string;
-    inputMessages: ReturnType<OpenAIProvider["buildInputMessages"]>;
-    textFormat: ResponseTextConfig;
-    reasoningConfig: Reasoning | null;
-    includeArray: ResponseIncludable[];
-    store: boolean;
-  }): ResponseCreateParamsNonStreaming {
-    const { model, inputMessages, textFormat, reasoningConfig, includeArray, store } = params;
-    return {
-      model,
-      input: inputMessages as ResponseCreateParamsNonStreaming["input"],
-      text: textFormat,
-      reasoning: reasoningConfig,
-      tools: [],
-      store,
-      include: includeArray,
-    };
-  }
-
-  private extractOutputText(response: Response): string {
-    if (!response.output || !Array.isArray(response.output)) {
-      return "";
-    }
-
-    const messageOutput = response.output.find(
-      (item): item is ResponseOutputMessage => item.type === "message"
-    );
-    const textContent = messageOutput?.content?.find(
-      (content): content is ResponseOutputText => content.type === "output_text"
-    );
-    return textContent?.text ?? "";
   }
 
   private getClient(request: ExecuteRequest): OpenAI {

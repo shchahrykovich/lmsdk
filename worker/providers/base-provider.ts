@@ -53,6 +53,13 @@ export interface OpenRouterSettings {
   max_tokens?: number;
 }
 
+export const ANTHROPIC_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
+
+export interface AnthropicSettings {
+  max_tokens?: number;
+  effort?: (typeof ANTHROPIC_EFFORTS)[number];
+}
+
 /**
  * Request parameters for AI execution
  */
@@ -63,6 +70,7 @@ export interface ExecuteRequest {
   openai_settings?: OpenAISettings;
   google_settings?: GoogleSettings;
   openrouter_settings?: OpenRouterSettings;
+  anthropic_settings?: AnthropicSettings;
   variables?: Record<string, unknown>;
   proxy?: "none" | "cloudflare";
   // For Google cache key generation
@@ -81,9 +89,10 @@ export interface TokenUsage {
   thoughts_tokens?: number; // Google: tokens used for thinking/reasoning
   tool_use_prompt_tokens?: number; // Google: tokens from tool execution results
   cached_content_tokens?: number; // Google: tokens from cached content
-  cached_tokens?: number; // OpenRouter: prompt tokens read from the provider cache
-  reasoning_tokens?: number; // OpenRouter: output tokens spent on reasoning
-  cost?: number; // OpenRouter: charged cost in USD
+  cached_tokens?: number; // OpenAI, Anthropic, OpenRouter: prompt tokens read from the provider cache
+  cache_creation_tokens?: number; // Anthropic: prompt tokens written to the cache
+  reasoning_tokens?: number; // OpenAI, OpenRouter: output tokens spent on reasoning
+  cost?: number; // USD: charged by OpenRouter, or computed from the LM SDK price table
 }
 
 /**

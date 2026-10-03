@@ -2,8 +2,9 @@ import { ProviderFactory, type ProviderConfig } from "../providers/provider-fact
 import type { ExecuteRequest, ExecuteResult, AIMessage } from "../providers/base-provider";
 import { getOpenAIModels } from "../utils/openai-models";
 import { getOpenRouterModels } from "../utils/openrouter-models";
+import { getAnthropicModels } from "../utils/anthropic-models";
 import type { IPromptExecutionLogger } from "../providers/logger/execution-logger";
-import {replaceAllVariables} from "../utils/variable-replacer";
+import { renderExecuteRequest } from "../execution/prompt-renderer";
 
 /**
  * Provider metadata for frontend display
@@ -32,14 +33,6 @@ export class ProviderService {
 
   constructor(config: ProviderConfig, logger: IPromptExecutionLogger, cache: KVNamespace) {
     this.factory = new ProviderFactory(config, logger, cache);
-  }
-
-  /**
-   * Replace variables in a template string
-   * Supports {{variable}} and {{variable.property}} syntax
-   */
-  private replaceVariables(template: string, variables: Record<string, unknown>): string {
-    return replaceAllVariables(template, variables);
   }
 
   /**
@@ -81,6 +74,12 @@ export class ProviderService {
         description: "Claude, Grok, DeepSeek, Qwen, Kimi, Mistral, GLM and Llama through one API",
         models: getOpenRouterModels(),
       },
+      {
+        id: "anthropic",
+        name: "Anthropic",
+        description: "Claude models through the Anthropic API, with native batch support",
+        models: getAnthropicModels(),
+      },
     ];
   }
 
@@ -103,27 +102,7 @@ export class ProviderService {
       throw new Error(`Model '${request.model}' is not supported by provider '${providerName}'`);
     }
 
-    // Replace variables in messages if variables are provided
-    const messages = request.variables
-      ? request.messages.map((msg) => ({
-          ...msg,
-          content: this.replaceVariables(msg.content, request.variables ?? {}),
-        }))
-      : request.messages;
-
-    // Execute the prompt
-    const result = await provider.execute({
-      model: request.model,
-      messages,
-      response_format: request.response_format,
-      openai_settings: request.openai_settings,
-      google_settings: request.google_settings,
-      openrouter_settings: request.openrouter_settings,
-      variables: request.variables,
-      proxy: request.proxy,
-			promptSlug: request.promptSlug,
-			projectId: request.projectId,
-    });
+    const result = await provider.execute(renderExecuteRequest(request));
     return result;
   }
 

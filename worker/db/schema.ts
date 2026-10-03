@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, index, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
 // Tenants table
@@ -320,6 +320,101 @@ export const evaluationEvents = sqliteTable("EvaluationEvents", {
 
 
 // Type exports for use in application code
+export const batches = sqliteTable("Batches", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  tenantId: integer("tenantId").notNull(),
+  projectId: integer("projectId").notNull(),
+  promptId: integer("promptId").notNull(),
+  version: integer("version").notNull(),
+  provider: text("provider").notNull(),
+  model: text("model").notNull(),
+  mode: text("mode").notNull(),
+  state: text("state").notNull().default("draft"),
+  idempotencyKey: text("idempotencyKey"),
+  metadata: text("metadata").notNull().default("{}"),
+  totalItems: integer("totalItems").notNull().default(0),
+  totalBytes: integer("totalBytes").notNull().default(0),
+  succeededCount: integer("succeededCount").notNull().default(0),
+  erroredCount: integer("erroredCount").notNull().default(0),
+  expiredCount: integer("expiredCount").notNull().default(0),
+  cancelledCount: integer("cancelledCount").notNull().default(0),
+  promptTokens: integer("promptTokens").notNull().default(0),
+  completionTokens: integer("completionTokens").notNull().default(0),
+  totalTokens: integer("totalTokens").notNull().default(0),
+  costUsd: real("costUsd").notNull().default(0),
+  unpricedCount: integer("unpricedCount").notNull().default(0),
+  workflowId: text("workflowId"),
+  errorMessage: text("errorMessage"),
+  cancelRequestedAt: integer("cancelRequestedAt", { mode: "timestamp" }),
+  submittedAt: integer("submittedAt", { mode: "timestamp" }),
+  finishedAt: integer("finishedAt", { mode: "timestamp" }),
+  resultsExpireAt: integer("resultsExpireAt", { mode: "timestamp" }),
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+}, (table) => ({
+  idempotencyKeyUnique: uniqueIndex("Batches_tenantId_projectId_promptId_idempotencyKey_key").on(
+    table.tenantId,
+    table.projectId,
+    table.promptId,
+    table.idempotencyKey
+  ),
+  promptIdx: index("Batches_tenantId_projectId_promptId_idx").on(table.tenantId, table.projectId, table.promptId),
+  resultsExpireAtIdx: index("Batches_resultsExpireAt_idx").on(table.resultsExpireAt),
+}));
+
+export const batchShards = sqliteTable("BatchShards", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  batchId: integer("batchId").notNull(),
+  tenantId: integer("tenantId").notNull(),
+  projectId: integer("projectId").notNull(),
+  seq: integer("seq").notNull(),
+  parts: text("parts").notNull().default("[]"),
+  itemCount: integer("itemCount").notNull(),
+  bytes: integer("bytes").notNull(),
+  state: text("state").notNull().default("planned"),
+  providerBatchId: text("providerBatchId"),
+  inputFileId: text("inputFileId"),
+  providerStatus: text("providerStatus"),
+  outcome: text("outcome"),
+  resultFiles: text("resultFiles").notNull().default("[]"),
+  errorMessage: text("errorMessage"),
+  submitAttempts: integer("submitAttempts").notNull().default(0),
+  submittedAt: integer("submittedAt", { mode: "timestamp" }),
+  endedAt: integer("endedAt", { mode: "timestamp" }),
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+}, (table) => ({
+  batchSeqUnique: uniqueIndex("BatchShards_batchId_seq_key").on(table.batchId, table.seq),
+}));
+
+export const batchItems = sqliteTable("BatchItems", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  batchId: integer("batchId").notNull(),
+  tenantId: integer("tenantId").notNull(),
+  projectId: integer("projectId").notNull(),
+  customId: text("customId").notNull(),
+  partKey: text("partKey").notNull(),
+  lineIndex: integer("lineIndex").notNull(),
+  byteOffset: integer("byteOffset").notNull(),
+  bytes: integer("bytes").notNull(),
+  shardId: integer("shardId"),
+  status: text("status").notNull().default("pending"),
+  promptTokens: integer("promptTokens"),
+  completionTokens: integer("completionTokens"),
+  totalTokens: integer("totalTokens"),
+  usage: text("usage"),
+  costUsd: real("costUsd"),
+  error: text("error"),
+  hasResult: integer("hasResult", { mode: "boolean" }).notNull().default(false),
+  completedAt: integer("completedAt", { mode: "timestamp" }),
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+}, (table) => ({
+  customIdUnique: uniqueIndex("BatchItems_batchId_customId_key").on(table.batchId, table.customId),
+  lineUnique: uniqueIndex("BatchItems_batchId_partKey_lineIndex_key").on(table.batchId, table.partKey, table.lineIndex),
+  statusIdx: index("BatchItems_batchId_status_idx").on(table.batchId, table.status),
+  shardIdx: index("BatchItems_batchId_shardId_idx").on(table.batchId, table.shardId),
+}));
+
 export type Tenant = typeof tenants.$inferSelect;
 export type NewTenant = typeof tenants.$inferInsert;
 export type Project = typeof projects.$inferSelect;
@@ -356,3 +451,9 @@ export type EvaluationResult = typeof evaluationResults.$inferSelect;
 export type NewEvaluationResult = typeof evaluationResults.$inferInsert;
 export type EvaluationEventRow = typeof evaluationEvents.$inferSelect;
 export type NewEvaluationEventRow = typeof evaluationEvents.$inferInsert;
+export type Batch = typeof batches.$inferSelect;
+export type NewBatch = typeof batches.$inferInsert;
+export type BatchShard = typeof batchShards.$inferSelect;
+export type NewBatchShard = typeof batchShards.$inferInsert;
+export type BatchItem = typeof batchItems.$inferSelect;
+export type NewBatchItem = typeof batchItems.$inferInsert;

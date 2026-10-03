@@ -17,8 +17,8 @@ describe("Manage API - permission matrix over every documented route", () => {
     operations = await manageOperations();
   });
 
-  it("finds the 16 documented manage operations", () => {
-    expect(operations).toHaveLength(16);
+  it("finds the 17 documented manage operations", () => {
+    expect(operations).toHaveLength(17);
   });
 
   it("returns 401 without a key on every route", async () => {

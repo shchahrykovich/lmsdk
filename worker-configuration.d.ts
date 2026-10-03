@@ -6,6 +6,7 @@ interface __BaseEnv_Env {
 	PRIVATE_FILES: R2Bucket;
 	DB: D1Database;
 	NEW_LOGS: Queue;
+	BATCH_PACED: Queue;
 	ASSETS: Fetcher;
 	GITHUB_URL: string;
 	ALLOW_TO_CREATE_MORE_THAN_ONE_TENANT: string;
@@ -17,7 +18,9 @@ interface __BaseEnv_Env {
 	CLOUDFLARE_AI_GATEWAY_TOKEN: string;
 	CLOUDFLARE_AI_GATEWAY_BASE_URL: string;
 	OPENROUTER_API_KEY: string;
+	ANTHROPIC_API_KEY: string;
 	EVALUATION_WORKFLOW: Workflow<Parameters<import("./worker/index").EvaluationWorkflow['run']>[0]['payload']>;
+	BATCH_WORKFLOW: Workflow<Parameters<import("./worker/index").BatchWorkflow['run']>[0]['payload']>;
 }
 declare namespace Cloudflare {
 	interface GlobalProps {
@@ -30,7 +33,7 @@ type StringifyValues<EnvType extends Record<string, unknown>> = {
 	[Binding in keyof EnvType]: EnvType[Binding] extends string ? EnvType[Binding] : string;
 };
 declare namespace NodeJS {
-	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "GITHUB_URL" | "ALLOW_TO_CREATE_MORE_THAN_ONE_TENANT" | "BETTER_AUTH_DISABLED_SIGN_UP" | "BETTER_AUTH_SECRET" | "OPEN_AI_API_KEY" | "GEMINI_API_KEY" | "FOR_LOCAL_TESTS" | "CLOUDFLARE_AI_GATEWAY_TOKEN" | "CLOUDFLARE_AI_GATEWAY_BASE_URL" | "OPENROUTER_API_KEY">> {}
+	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "GITHUB_URL" | "ALLOW_TO_CREATE_MORE_THAN_ONE_TENANT" | "BETTER_AUTH_DISABLED_SIGN_UP" | "BETTER_AUTH_SECRET" | "OPEN_AI_API_KEY" | "GEMINI_API_KEY" | "FOR_LOCAL_TESTS" | "CLOUDFLARE_AI_GATEWAY_TOKEN" | "CLOUDFLARE_AI_GATEWAY_BASE_URL" | "OPENROUTER_API_KEY" | "ANTHROPIC_API_KEY">> {}
 }
 
 // Begin runtime types

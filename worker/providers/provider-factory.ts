@@ -2,6 +2,7 @@ import { AIProvider } from "./base-provider";
 import { OpenAIProvider } from "./openai-provider";
 import { GoogleProvider } from "./google-provider";
 import { OpenRouterProvider } from "./openrouter-provider";
+import { AnthropicProvider } from "./anthropic-provider";
 import type { IPromptExecutionLogger } from "./logger/execution-logger";
 
 /**
@@ -11,17 +12,19 @@ export interface ProviderConfig {
   openAIKey?: string;
   geminiKey?: string;
   openRouterKey?: string;
+  anthropicKey?: string;
   cloudflareAiGatewayToken?: string;
   cloudflareAiGatewayBaseUrl?: string;
 }
 
-export const SUPPORTED_PROVIDERS = ["openai", "google", "openrouter"] as const;
+export const SUPPORTED_PROVIDERS = ["openai", "google", "openrouter", "anthropic"] as const;
 
 export function providerConfigFromEnv(env: Env): ProviderConfig {
   return {
     openAIKey: env.OPEN_AI_API_KEY,
     geminiKey: env.GEMINI_API_KEY,
     openRouterKey: env.OPENROUTER_API_KEY,
+    anthropicKey: env.ANTHROPIC_API_KEY,
     cloudflareAiGatewayToken: env.CLOUDFLARE_AI_GATEWAY_TOKEN,
     cloudflareAiGatewayBaseUrl: env.CLOUDFLARE_AI_GATEWAY_BASE_URL,
   };
@@ -73,6 +76,15 @@ export class ProviderFactory {
           throw new Error("OpenRouter API key not configured. Please set OPENROUTER_API_KEY secret.");
         }
         return new OpenRouterProvider(this.config.openRouterKey, this.logger, {
+          token: this.config.cloudflareAiGatewayToken,
+          baseUrl: this.config.cloudflareAiGatewayBaseUrl,
+        });
+
+      case "anthropic":
+        if (!this.config.anthropicKey) {
+          throw new Error("Anthropic API key not configured. Please set ANTHROPIC_API_KEY secret.");
+        }
+        return new AnthropicProvider(this.config.anthropicKey, this.logger, {
           token: this.config.cloudflareAiGatewayToken,
           baseUrl: this.config.cloudflareAiGatewayBaseUrl,
         });

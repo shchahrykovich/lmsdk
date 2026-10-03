@@ -42,6 +42,15 @@ export class ConflictError extends HttpError {
 }
 
 /**
+ * Unprocessable entity error (422)
+ */
+export class UnprocessableEntityError extends HttpError {
+  constructor(message: string) {
+    super(message, 422);
+  }
+}
+
+/**
  * Unauthorized error (401)
  */
 export class UnauthorizedError extends HttpError {

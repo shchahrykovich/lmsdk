@@ -4,6 +4,7 @@ import {
   defineWorkersProject,
 } from "@cloudflare/vitest-pool-workers/config";
 import { readFileSync, readdirSync } from "node:fs";
+import { configDefaults } from "vitest/config";
 
 const pkg = JSON.parse(
 	readFileSync(new URL("./package.json", import.meta.url), "utf-8")
@@ -20,6 +21,9 @@ for (const file of migrationFiles) {
   migrations[file] = content;
 }
 
+const largeTests = process.env.LMSDK_LARGE_TESTS === "1";
+const LARGE_TEST_GLOB = "**/*.large.test.ts";
+
 export default defineWorkersProject(async () => {
   const assetsPath = path.join(__dirname, "public");
 
@@ -29,9 +33,13 @@ export default defineWorkersProject(async () => {
 			__DB_MIGRATIONS__: JSON.stringify(migrations),
 		},
     test: {
+      ...(largeTests
+        ? { include: [LARGE_TEST_GLOB] }
+        : { exclude: [...configDefaults.exclude, LARGE_TEST_GLOB] }),
       poolOptions: {
         workers: {
           singleWorker: true,
+          isolatedStorage: !largeTests,
           main: "./worker/index.ts",
           wrangler: { configPath: "./wrangler.jsonc" },
           miniflare: {
@@ -46,9 +54,14 @@ export default defineWorkersProject(async () => {
             },
             queueProducers: {
               NEW_LOGS: 'test-queue',
+              BATCH_PACED: 'test-batch-paced',
             },
             kvNamespaces: {
               CACHE: 'test-cache',
+            },
+            bindings: {
+              LIVE_BATCH_TESTS: process.env.LIVE_BATCH_TESTS ?? "",
+              LIVE_BATCH_TIMEOUT_MINUTES: process.env.LIVE_BATCH_TIMEOUT_MINUTES ?? "",
             },
           },
         },

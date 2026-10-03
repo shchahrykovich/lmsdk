@@ -5,6 +5,12 @@ import {
   type ExecuteResult,
 } from "./base-provider";
 import type { IPromptExecutionLogger } from "./logger/execution-logger";
+import {
+  buildGoogleRequest,
+  googleResult,
+  splitGoogleContents,
+  type GoogleUsageMetadata,
+} from "./google-codec";
 
 /**
  * Cache TTL (Time To Live) configuration
@@ -23,15 +29,6 @@ interface CachedContentParams {
   projectId?: number;
   promptSlug?: string;
 }
-
-type GoogleUsageMetadata = {
-  promptTokenCount?: number;
-  candidatesTokenCount?: number;
-  totalTokenCount?: number;
-  thoughtsTokenCount?: number;
-  toolUsePromptTokenCount?: number;
-  cachedContentTokenCount?: number;
-};
 
 type GoogleStreamChunk = {
   text?: string;
@@ -72,7 +69,7 @@ export class GoogleProvider extends AIProvider {
 
   async execute(request: ExecuteRequest): Promise<ExecuteResult> {
     const startTime = Date.now();
-    const { model, messages, response_format, variables, google_settings, projectId, promptSlug } = request;
+    const { model, messages, variables, google_settings, projectId, promptSlug } = request;
 
     // Log variables if provided
     if (variables) {
@@ -80,7 +77,7 @@ export class GoogleProvider extends AIProvider {
     }
 
     try {
-      const { systemInstruction, contents } = this.buildContents(messages);
+      const { systemInstruction } = splitGoogleContents(messages);
       const cachedContentName = await this.getCachedContentName({
         model,
         googleSettings: google_settings,
@@ -88,12 +85,7 @@ export class GoogleProvider extends AIProvider {
         projectId,
         promptSlug,
       });
-      const config = this.buildGenerationConfig(
-        response_format,
-        google_settings,
-        systemInstruction,
-        cachedContentName
-      );
+      const { config, contents } = buildGoogleRequest(request, cachedContentName);
 
       // Log input
       await this.logger.logInput({
@@ -117,7 +109,7 @@ export class GoogleProvider extends AIProvider {
 
       const durationMs = Date.now() - startTime;
 
-      const result = this.buildResult(model, outputText, usageMetadata, durationMs);
+      const result = googleResult({ model, outputText, usageMetadata, durationMs, tier: "standard" });
 
       // Log output
       await this.logger.logOutput({
@@ -147,37 +139,6 @@ export class GoogleProvider extends AIProvider {
 
       throw error;
     }
-  }
-
-  private buildContents(messages: ExecuteRequest["messages"]) {
-    let systemInstruction = "";
-    const contents: { role: string; parts: { text: string }[] }[] = [];
-
-    for (const msg of messages) {
-      if (msg.role === "system") {
-        systemInstruction += msg.content + "\n\n";
-      } else if (msg.role === "user") {
-        contents.push({
-          role: "user",
-          parts: [{ text: msg.content }],
-        });
-      } else if (msg.role === "assistant") {
-        contents.push({
-          role: "model",
-          parts: [{ text: msg.content }],
-        });
-      }
-    }
-
-    if (contents.length === 0 && systemInstruction) {
-      contents.push({
-        role: "user",
-        parts: [{ text: systemInstruction }],
-      });
-      systemInstruction = "";
-    }
-
-    return { systemInstruction, contents };
   }
 
   private async getCachedContentName(params: CachedContentParams): Promise<string | null> {
@@ -265,80 +226,6 @@ export class GoogleProvider extends AIProvider {
     return typeof message === "string" && (message.includes("duplicate") || message.includes("already exists"));
   }
 
-  private buildGenerationConfig(
-    responseFormat: ExecuteRequest["response_format"],
-    googleSettings: ExecuteRequest["google_settings"],
-    systemInstruction: string,
-    cachedContentName: string | null
-  ) {
-    const config: Record<string, unknown> = {};
-
-    this.applySystemInstruction(config, systemInstruction, cachedContentName);
-    this.applyResponseFormat(config, responseFormat);
-    this.applyGoogleSettings(config, googleSettings);
-
-    return config;
-  }
-
-  private applySystemInstruction(
-    config: Record<string, unknown>,
-    systemInstruction: string,
-    cachedContentName: string | null
-  ) {
-    if (cachedContentName) {
-      config.cachedContent = cachedContentName;
-      return;
-    }
-
-    if (systemInstruction.trim()) {
-      config.systemInstruction = systemInstruction.trim();
-    }
-  }
-
-  private applyResponseFormat(
-    config: Record<string, unknown>,
-    responseFormat: ExecuteRequest["response_format"]
-  ) {
-    if (responseFormat?.type !== "json_schema" && responseFormat?.type !== "json") {
-      return;
-    }
-
-    config.responseMimeType = "application/json";
-    if (responseFormat.json_schema) {
-      config.responseSchema = responseFormat.json_schema.schema ?? responseFormat.json_schema;
-    }
-  }
-
-  private applyGoogleSettings(
-    config: Record<string, unknown>,
-    googleSettings: ExecuteRequest["google_settings"]
-  ) {
-    if (!googleSettings) return;
-
-    const thinkingConfig: Record<string, unknown> = {};
-
-    if (googleSettings.include_thoughts !== undefined) {
-      thinkingConfig.includeThoughts = googleSettings.include_thoughts;
-    }
-
-    if (googleSettings.thinking_budget !== undefined && googleSettings.thinking_budget != 0) {
-      thinkingConfig.thinkingBudget = googleSettings.thinking_budget;
-    } else if (
-      googleSettings.thinking_level &&
-      googleSettings.thinking_level !== "THINKING_LEVEL_UNSPECIFIED"
-    ) {
-      thinkingConfig.thinkingLevel = googleSettings.thinking_level;
-    }
-
-    if (Object.keys(thinkingConfig).length > 0) {
-      config.thinkingConfig = thinkingConfig;
-    }
-
-    if (googleSettings.google_search_enabled) {
-      config.tools = [{ type: "google_search" }];
-    }
-  }
-
   private async collectStream(response: AsyncIterable<GoogleStreamChunk>) {
     let outputText = "";
     const chunks: GoogleStreamChunk[] = [];
@@ -355,27 +242,6 @@ export class GoogleProvider extends AIProvider {
     }
 
     return { outputText, chunks, usageMetadata };
-  }
-
-  private buildResult(
-    model: string,
-    outputText: string,
-    usageMetadata: GoogleUsageMetadata | null,
-    durationMs: number
-  ): ExecuteResult {
-    return {
-      content: outputText,
-      model: model,
-      usage: {
-        prompt_tokens: usageMetadata?.promptTokenCount ?? 0,
-        completion_tokens: usageMetadata?.candidatesTokenCount ?? 0,
-        total_tokens: usageMetadata?.totalTokenCount ?? 0,
-        thoughts_tokens: usageMetadata?.thoughtsTokenCount,
-        tool_use_prompt_tokens: usageMetadata?.toolUsePromptTokenCount,
-        cached_content_tokens: usageMetadata?.cachedContentTokenCount,
-      },
-      duration_ms: durationMs,
-    };
   }
 
   private getClient(request: ExecuteRequest): GoogleGenAI {

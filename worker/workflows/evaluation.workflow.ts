@@ -8,7 +8,9 @@ import { ProviderService } from "../services/provider.service";
 import { CFPromptExecutionLogger } from "../providers/logger/c-f-prompt-execution-logger";
 import type { PromptExecutionContext } from "../providers/logger/execution-logger";
 import { providerConfigFromEnv, type ProviderConfig } from "../providers/provider-factory";
-import type { AIMessage, ExecuteRequest, ExecuteResult, OpenRouterSettings, ResponseFormat } from "../providers/base-provider";
+import type { ExecuteRequest, ExecuteResult, ResponseFormat } from "../providers/base-provider";
+import { parsePromptBody } from "../execution/prompt-body";
+import { buildExecuteRequest } from "../execution/prompt-renderer";
 import {drizzle} from "drizzle-orm/d1";
 import {EntityId} from "../shared/entity-id";
 import {ProjectId} from "../shared/project-id";
@@ -232,18 +234,7 @@ async function runEvaluationSteps(
               version: version.version,
             };
             const result = await runCallWithEvents({ evaluationService, evaluationId, call, attempt }, () =>
-              executePromptWithLog(deps, logContext, version.provider, {
-                model: version.model,
-                messages: promptBody.messages,
-                variables,
-                response_format: promptBody.response_format,
-                openai_settings: promptBody.openai_settings,
-                google_settings: promptBody.google_settings,
-                openrouter_settings: promptBody.openrouter_settings,
-                proxy: promptBody.proxy,
-                projectId: version.projectId,
-                promptSlug: version.slug,
-              })
+              executePromptWithLog(deps, logContext, version.provider, buildExecuteRequest(version, promptBody, variables))
             );
 
             console.log("[EvaluationWorkflow] Prompt execution completed", {
@@ -422,28 +413,6 @@ async function executePromptWithLog(
     });
   }
 }
-
-type PromptBody = {
-  messages?: AIMessage[];
-  response_format?: ResponseFormat;
-  openai_settings?: Record<string, unknown>;
-  google_settings?: Record<string, unknown>;
-  openrouter_settings?: OpenRouterSettings;
-  proxy?: "none" | "cloudflare";
-};
-
-const parsePromptBody = (
-  rawBody: string
-): (Required<Pick<PromptBody, "messages">> & PromptBody) | null => {
-  if (!rawBody) return null;
-  try {
-    const parsed = JSON.parse(rawBody) as PromptBody;
-    const messages = Array.isArray(parsed.messages) ? parsed.messages : [];
-    return { ...parsed, messages };
-  } catch {
-    return null;
-  }
-};
 
 const parseVariables = (rawVariables: string): Record<string, unknown> => {
   if (!rawVariables) return {};

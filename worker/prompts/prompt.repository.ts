@@ -123,6 +123,13 @@ export class PromptRepository {
       .where(promptId.toWhereClause(prompts));
   }
 
+  async updatePromptName(promptId: EntityId<number>, name: string): Promise<void> {
+    await this.db
+      .update(prompts)
+      .set({ name, updatedAt: new Date() })
+      .where(promptId.toWhereClause(prompts));
+  }
+
   async findPromptVersions(
     promptId: EntityId<number>
   ): Promise<PromptVersion[]> {
