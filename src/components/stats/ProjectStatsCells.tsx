@@ -1,6 +1,6 @@
 /* eslint-disable sonarjs/function-return-type */
 import type * as React from "react";
-import { formatCount, formatRate, successRate, type ProjectStats } from "@/lib/project-stats";
+import { formatCost, formatCount, formatRate, successRate, type ProjectStats } from "@/lib/project-stats";
 
 type ProjectStatsCellsProps = Readonly<{
   stats: ProjectStats | undefined;
@@ -14,6 +14,7 @@ export default function ProjectStatsCells({ stats }: ProjectStatsCellsProps): Re
       <td className={cellClassName}>{formatCount(stats?.prompts ?? 0)}</td>
       <td className={cellClassName}>{formatCount(stats?.executions.total ?? 0)}</td>
       <td className={cellClassName}>{formatRate(stats ? successRate(stats.executions) : null)}</td>
+      <td className={cellClassName}>{formatCost(stats?.executions.costUsd ?? 0)}</td>
     </>
   );
 }

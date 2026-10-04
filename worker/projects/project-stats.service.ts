@@ -4,6 +4,7 @@ import {
   type StatsScope,
 } from "./project-stats.repository.ts";
 import type { ProjectId } from "../shared/project-id";
+import { roundUsd } from "../pricing/cost";
 
 export const DAILY_WINDOW_DAYS = 14;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -14,6 +15,8 @@ export interface ExecutionStats {
   failed: number;
   avgDurationMs: number | null;
   totalTokens: number;
+  costUsd: number;
+  unpricedCount: number;
   lastExecutionAt: Date | null;
 }
 
@@ -43,32 +46,28 @@ export interface TenantStatsResponse {
   projects: { projectId: number; stats: ProjectStats }[];
 }
 
-interface StatsTally {
-  prompts: number;
-  executions: number;
-  succeeded: number;
-  durationSumMs: number;
-  timedCount: number;
-  totalTokens: number;
+const SUMMED_FIELDS = [
+  "prompts",
+  "executions",
+  "succeeded",
+  "durationSumMs",
+  "timedCount",
+  "totalTokens",
+  "costUsd",
+  "unpricedCount",
+  "traces",
+  "datasets",
+  "datasetRecords",
+  "evaluations",
+] as const;
+
+type StatsTally = Record<(typeof SUMMED_FIELDS)[number], number> & {
   lastExecutionAt: Date | null;
-  traces: number;
-  datasets: number;
-  datasetRecords: number;
-  evaluations: number;
-}
+};
 
 const emptyTally = (): StatsTally => ({
-  prompts: 0,
-  executions: 0,
-  succeeded: 0,
-  durationSumMs: 0,
-  timedCount: 0,
-  totalTokens: 0,
+  ...(Object.fromEntries(SUMMED_FIELDS.map((field) => [field, 0])) as Record<(typeof SUMMED_FIELDS)[number], number>),
   lastExecutionAt: null,
-  traces: 0,
-  datasets: 0,
-  datasetRecords: 0,
-  evaluations: 0,
 });
 
 const laterDate = (a: Date | null, b: Date | null): Date | null => {
@@ -78,17 +77,10 @@ const laterDate = (a: Date | null, b: Date | null): Date | null => {
 };
 
 const mergeTally = (target: StatsTally, part: Partial<StatsTally>): void => {
-  target.prompts += part.prompts ?? 0;
-  target.executions += part.executions ?? 0;
-  target.succeeded += part.succeeded ?? 0;
-  target.durationSumMs += part.durationSumMs ?? 0;
-  target.timedCount += part.timedCount ?? 0;
-  target.totalTokens += part.totalTokens ?? 0;
+  for (const field of SUMMED_FIELDS) {
+    target[field] += part[field] ?? 0;
+  }
   target.lastExecutionAt = laterDate(target.lastExecutionAt, part.lastExecutionAt ?? null);
-  target.traces += part.traces ?? 0;
-  target.datasets += part.datasets ?? 0;
-  target.datasetRecords += part.datasetRecords ?? 0;
-  target.evaluations += part.evaluations ?? 0;
 };
 
 const toProjectStats = (tally: StatsTally): ProjectStats => ({
@@ -99,6 +91,8 @@ const toProjectStats = (tally: StatsTally): ProjectStats => ({
     failed: tally.executions - tally.succeeded,
     avgDurationMs: tally.timedCount > 0 ? Math.round(tally.durationSumMs / tally.timedCount) : null,
     totalTokens: tally.totalTokens,
+    costUsd: roundUsd(tally.costUsd),
+    unpricedCount: tally.unpricedCount,
     lastExecutionAt: tally.lastExecutionAt,
   },
   traces: tally.traces,
@@ -161,6 +155,8 @@ export class ProjectStatsService {
         durationSumMs: row.durationSumMs,
         timedCount: row.timedCount,
         totalTokens: row.totalTokens,
+        costUsd: row.costUsd,
+        unpricedCount: row.unpricedCount,
         lastExecutionAt: row.lastExecutionAt,
       })
     );

@@ -18,9 +18,13 @@ export async function insertLog(params: {
   isSuccess: boolean;
   durationMs?: number | null;
   totalTokens?: number;
+  cost?: number;
   createdAt?: Date;
 }): Promise<void> {
-  const usage = params.totalTokens === undefined ? null : JSON.stringify({ total_tokens: params.totalTokens });
+  const usage =
+    params.totalTokens === undefined
+      ? null
+      : JSON.stringify({ total_tokens: params.totalTokens, ...(params.cost === undefined ? {} : { cost: params.cost }) });
   const createdAt = toEpochSeconds(params.createdAt ?? new Date());
   await env.DB.prepare(
     "INSERT INTO PromptExecutionLogs (tenantId, projectId, promptId, version, isSuccess, durationMs, usage, createdAt) VALUES (?, ?, 1, 1, ?, ?, ?, ?)"

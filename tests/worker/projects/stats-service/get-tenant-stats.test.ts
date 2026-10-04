@@ -46,9 +46,25 @@ describe("ProjectStatsService - getTenantStats", () => {
       failed: 1,
       avgDurationMs: 200,
       totalTokens: 15,
+      costUsd: 0,
+      unpricedCount: 2,
       lastExecutionAt: new Date("2026-09-12T00:00:00Z"),
     });
     expect(result.totals.datasets).toBe(1);
+  });
+
+  it("sums the cost per project and across all projects", async () => {
+    await insertLog({ tenantId: 1, projectId: 10, isSuccess: true, totalTokens: 10, cost: 1.25, createdAt: now });
+    await insertLog({ tenantId: 1, projectId: 20, isSuccess: true, totalTokens: 10, cost: 0.5, createdAt: now });
+    await insertLog({ tenantId: 1, projectId: 20, isSuccess: true, totalTokens: 10, createdAt: now });
+    await insertLog({ tenantId: 2, projectId: 30, isSuccess: true, totalTokens: 10, cost: 100, createdAt: now });
+
+    const result = await service.getTenantStats(1, now);
+    const byProject = new Map(result.projects.map((entry) => [entry.projectId, entry.stats]));
+
+    expect(byProject.get(10)?.executions).toMatchObject({ costUsd: 1.25, unpricedCount: 0 });
+    expect(byProject.get(20)?.executions).toMatchObject({ costUsd: 0.5, unpricedCount: 1 });
+    expect(result.totals.executions).toMatchObject({ costUsd: 1.75, unpricedCount: 1 });
   });
 
   it("weights the average duration by the number of timed executions", async () => {

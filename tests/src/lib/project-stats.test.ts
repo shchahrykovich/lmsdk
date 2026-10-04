@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   barHeightPercent,
+  costDetail,
   formatCompact,
   formatCount,
+  formatCost,
   formatDayLabel,
   formatRate,
   successRate,
@@ -18,6 +20,18 @@ describe("project stats formatting", () => {
     expect(formatCompact(950)).toBe("950");
     expect(formatCompact(12_345)).toBe("12.3K");
     expect(formatCompact(4_200_000)).toBe("4.2M");
+  });
+
+  it("formats cost in US dollars with more digits for small amounts", () => {
+    expect(formatCost(0)).toBe("$0.00");
+    expect(formatCost(1234.5)).toBe("$1,234.50");
+    expect(formatCost(0.0042)).toBe("$0.0042");
+    expect(formatCost(0.00001)).toBe("<$0.0001");
+  });
+
+  it("says how many runs have no price", () => {
+    expect(costDetail({ unpricedCount: 0 })).toBe("Total spend");
+    expect(costDetail({ unpricedCount: 1200 })).toBe("1,200 runs without a price");
   });
 
   it("returns no success rate when there are no executions", () => {

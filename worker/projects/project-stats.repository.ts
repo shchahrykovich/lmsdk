@@ -20,6 +20,8 @@ export interface ExecutionTotalsRow {
   durationSumMs: number;
   timedCount: number;
   totalTokens: number;
+  costUsd: number;
+  unpricedCount: number;
   lastExecutionAt: Date | null;
 }
 
@@ -95,6 +97,7 @@ export class ProjectStatsRepository {
   }
 
   async sumExecutions(scope: StatsScope): Promise<ExecutionTotalsRow[]> {
+    const cost = sql`json_extract(${promptExecutionLogs.usage}, '$.cost')`;
     return await this.db
       .select({
         projectId: promptExecutionLogs.projectId,
@@ -103,6 +106,8 @@ export class ProjectStatsRepository {
         durationSumMs: sumOf(promptExecutionLogs.durationMs),
         timedCount: count(promptExecutionLogs.durationMs),
         totalTokens: sumOf(sql`json_extract(${promptExecutionLogs.usage}, '$.total_tokens')`),
+        costUsd: sumOf(cost),
+        unpricedCount: sumOf(sql`case when ${promptExecutionLogs.usage} is not null and ${cost} is null then 1 else 0 end`),
         lastExecutionAt: max(promptExecutionLogs.createdAt),
       })
       .from(promptExecutionLogs)

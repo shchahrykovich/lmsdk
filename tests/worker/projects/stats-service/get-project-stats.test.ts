@@ -26,6 +26,8 @@ describe("ProjectStatsService - getProjectStats", () => {
         failed: 0,
         avgDurationMs: null,
         totalTokens: 0,
+        costUsd: 0,
+        unpricedCount: 0,
         lastExecutionAt: null,
       },
       traces: 0,
@@ -39,7 +41,7 @@ describe("ProjectStatsService - getProjectStats", () => {
 
   it("combines counts from every table into one project summary", async () => {
     await insertPrompt(1, 10);
-    await insertLog({ tenantId: 1, projectId: 10, isSuccess: true, durationMs: 100, totalTokens: 30, createdAt: now });
+    await insertLog({ tenantId: 1, projectId: 10, isSuccess: true, durationMs: 100, totalTokens: 30, cost: 0.02, createdAt: now });
     await insertLog({ tenantId: 1, projectId: 10, isSuccess: false, durationMs: 201, createdAt: now });
     await insertTrace(1, 10);
     await insertDataSet(1, 10, 4);
@@ -55,6 +57,8 @@ describe("ProjectStatsService - getProjectStats", () => {
         failed: 1,
         avgDurationMs: 151,
         totalTokens: 30,
+        costUsd: 0.02,
+        unpricedCount: 0,
         lastExecutionAt: new Date("2026-09-14T15:00:00Z"),
       },
       traces: 1,

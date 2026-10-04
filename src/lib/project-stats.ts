@@ -4,6 +4,8 @@ export interface ExecutionStats {
   failed: number;
   avgDurationMs: number | null;
   totalTokens: number;
+  costUsd: number;
+  unpricedCount: number;
   lastExecutionAt: string | null;
 }
 
@@ -42,6 +44,25 @@ export function formatCount(value: number): string {
 
 export function formatCompact(value: number): string {
   return compactFormat.format(value);
+}
+
+const dollarFormat = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+const smallDollarFormat = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumSignificantDigits: 2,
+});
+const SMALLEST_SHOWN_USD = 0.0001;
+
+export function formatCost(value: number): string {
+  if (value === 0 || value >= 0.01) return dollarFormat.format(value);
+  if (value < SMALLEST_SHOWN_USD) return "<$0.0001";
+  return smallDollarFormat.format(value);
+}
+
+export function costDetail(executions: Pick<ExecutionStats, "unpricedCount">): string {
+  if (executions.unpricedCount === 0) return "Total spend";
+  return `${countFormat.format(executions.unpricedCount)} runs without a price`;
 }
 
 export function successRate(executions: Pick<ExecutionStats, "total" | "succeeded">): number | null {

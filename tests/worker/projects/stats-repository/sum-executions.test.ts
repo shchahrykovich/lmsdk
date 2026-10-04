@@ -35,6 +35,18 @@ describe("ProjectStatsRepository - sumExecutions", () => {
     expect(byProject.get(20)).toMatchObject({ total: 1, succeeded: 1, totalTokens: 7 });
   });
 
+  it("sums the cost and counts processed executions that have no cost", async () => {
+    await insertLog({ tenantId: 1, projectId: 10, isSuccess: true, totalTokens: 50, cost: 0.25 });
+    await insertLog({ tenantId: 1, projectId: 10, isSuccess: true, totalTokens: 20, cost: 0.5 });
+    await insertLog({ tenantId: 1, projectId: 10, isSuccess: true, totalTokens: 30 });
+    await insertLog({ tenantId: 1, projectId: 10, isSuccess: false });
+
+    const [row] = await repository.sumExecutions({ tenantId: 1 });
+
+    expect(row.costUsd).toBeCloseTo(0.75);
+    expect(row.unpricedCount).toBe(1);
+  });
+
   it("returns the latest execution time as a Date", async () => {
     await insertLog({ tenantId: 1, projectId: 10, isSuccess: true, createdAt: new Date("2026-09-01T10:00:00Z") });
     await insertLog({ tenantId: 1, projectId: 10, isSuccess: true, createdAt: new Date("2026-09-03T12:00:00Z") });

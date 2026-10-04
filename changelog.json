@@ -1,5 +1,13 @@
 [
   {
+    "version": "0.1.19",
+    "date": "2026-10-04",
+    "changes": [
+      "Project stats show cost in USD: for one project, for all projects together, and for each project in the projects table",
+      "Cost counts runs logged from this version on. Older runs and models without a price show as runs without a price"
+    ]
+  },
+  {
     "version": "0.1.18",
     "date": "2026-10-04",
     "changes": [

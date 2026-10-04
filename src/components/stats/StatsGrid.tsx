@@ -1,10 +1,22 @@
 /* eslint-disable sonarjs/function-return-type */
 import type * as React from "react";
-import { Activity, CheckCircle2, Clock, Coins, Database, FileText, FlaskConical, GitBranch } from "lucide-react";
+import {
+  Activity,
+  CheckCircle2,
+  Clock,
+  Coins,
+  Database,
+  DollarSign,
+  FileText,
+  FlaskConical,
+  GitBranch,
+} from "lucide-react";
 import StatCard from "./StatCard";
 import { formatDate, formatDuration } from "@/lib/format";
 import {
+  costDetail,
   formatCompact,
+  formatCost,
   formatCount,
   formatRate,
   successRate,
@@ -24,7 +36,7 @@ export default function StatsGrid({ stats }: StatsGridProps): React.ReactNode {
     : "No runs yet";
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
       <StatCard
         label="Executions"
         value={formatCount(executions.total)}
@@ -48,6 +60,12 @@ export default function StatsGrid({ stats }: StatsGridProps): React.ReactNode {
         value={formatCompact(executions.totalTokens)}
         detail={`${formatCount(executions.totalTokens)} total`}
         icon={<Coins size={ICON_SIZE} />}
+      />
+      <StatCard
+        label="Cost"
+        value={formatCost(executions.costUsd)}
+        detail={costDetail(executions)}
+        icon={<DollarSign size={ICON_SIZE} />}
       />
       <StatCard label="Prompts" value={formatCount(stats.prompts)} icon={<FileText size={ICON_SIZE} />} />
       <StatCard label="Traces" value={formatCount(stats.traces)} icon={<GitBranch size={ICON_SIZE} />} />

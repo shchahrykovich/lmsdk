@@ -149,12 +149,15 @@ export class ExecutionLogProcessingService {
       return;
     }
 
+    const cost = await this.readResultCost(log);
+    const usage = cost === undefined ? usageResult.usage : { ...usageResult.usage, cost };
+
     await this.db
       .update(promptExecutionLogs)
       .set({
         provider,
         model: usageResult.model,
-        usage: JSON.stringify(usageResult.usage),
+        usage: JSON.stringify(usage),
       })
       .where(eq(promptExecutionLogs.id, log.id));
 
@@ -174,6 +177,20 @@ export class ExecutionLogProcessingService {
       console.error(`Failed to read ${label}:`, error);
       return null;
     }
+  }
+
+  private async readResultCost(log: typeof promptExecutionLogs.$inferSelect): Promise<number | undefined> {
+    const object = await this.r2.get(`${log.logPath}/result.json`);
+    if (!object) {
+      return undefined;
+    }
+
+    const result = this.parseJson(await object.text(), "result.json");
+    if (!this.isRecord(result) || !this.isRecord(result.usage)) {
+      return undefined;
+    }
+
+    return typeof result.usage.cost === "number" ? result.usage.cost : undefined;
   }
 
   private parseJson(text: string, label: string): unknown | null {

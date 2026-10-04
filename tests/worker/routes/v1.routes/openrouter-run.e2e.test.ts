@@ -129,6 +129,7 @@ describe("E2E - API run of an OpenRouter prompt", () => {
       completion_tokens: 80,
       reasoning_tokens: 30,
       total_tokens: 200,
+      cost: 0.0012,
     });
   });
 

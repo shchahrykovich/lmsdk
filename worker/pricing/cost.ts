@@ -48,7 +48,7 @@ const pricesFor = (price: ModelPrice, tier: PriceTier, promptTokens: number): To
   return long && promptTokens > long.thresholdTokens ? long : selected;
 };
 
-const roundUsd = (value: number): number => Math.round(value * 1e9) / 1e9;
+export const roundUsd = (value: number): number => Math.round(value * 1e9) / 1e9;
 
 export function computeCost(params: {
   provider: string;

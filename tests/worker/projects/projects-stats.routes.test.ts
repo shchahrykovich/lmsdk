@@ -37,6 +37,8 @@ const stats = {
     failed: 1,
     avgDurationMs: 120,
     totalTokens: 900,
+    costUsd: 1.5,
+    unpricedCount: 0,
     lastExecutionAt: "2026-09-14T15:00:00.000Z",
   },
   traces: 3,
