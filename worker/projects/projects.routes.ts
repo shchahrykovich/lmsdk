@@ -1,6 +1,7 @@
 import {Hono} from "hono";
 import {drizzle} from "drizzle-orm/d1";
 import {ProjectService} from "./project.service.ts";
+import {ProjectStatsService} from "./project-stats.service.ts";
 import {requireAuth} from "../middleware/auth.middleware.ts";
 import {getUserFromContext} from "../middleware/auth.ts";
 import type {HonoEnv} from "../routes/app.ts";
@@ -50,6 +51,39 @@ projects.post("/", async (c) => {
 	});
 
 	return c.json({project}, 201);
+});
+
+/**
+ * GET /api/projects/stats
+ * Aggregated statistics for all projects of the authenticated user's tenant
+ */
+projects.get("/stats", async (c) => {
+	const user = getUserFromContext(c);
+
+	const statsService = new ProjectStatsService(c.env.DB);
+	const stats = await statsService.getTenantStats(user.tenantId);
+
+	return c.json(stats);
+});
+
+/**
+ * GET /api/projects/:id/stats
+ * Statistics for a single project
+ */
+projects.get("/:id/stats", async (c) => {
+	const projectId = ProjectId.parse(c, "id");
+
+	const projectService = new ProjectService(drizzle(c.env.DB));
+	const project = await projectService.getProjectById(projectId);
+
+	if (!project) {
+		return c.json({error: "Project not found"}, 404);
+	}
+
+	const statsService = new ProjectStatsService(c.env.DB);
+	const stats = await statsService.getProjectStats(projectId);
+
+	return c.json(stats);
 });
 
 /**

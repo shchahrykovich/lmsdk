@@ -4,6 +4,9 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import ProjectPageHeader from "@/components/ProjectPageHeader";
+import StatsGrid from "@/components/stats/StatsGrid";
+import DailyExecutionsChart from "@/components/stats/DailyExecutionsChart";
+import type { ProjectStatsResponse } from "@/lib/project-stats";
 
 interface Project {
   id: number;
@@ -21,15 +24,40 @@ export default function ProjectDetail(): React.ReactNode {
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [stats, setStats] = useState<ProjectStatsResponse | null>(null);
+  const [statsError, setStatsError] = useState<string | null>(null);
 
   useEffect(() => {
     void fetchProject();
   }, [slug]);
 
+  useEffect(() => {
+    if (project) {
+      void fetchStats(project.id);
+    }
+  }, [project]);
+
+  const fetchStats = async (projectId: number) => {
+    try {
+      setStatsError(null);
+      const response = await fetch(`/api/projects/${projectId}/stats`);
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch project stats: ${response.statusText}`);
+      }
+
+      setStats((await response.json()) as ProjectStatsResponse);
+    } catch (err) {
+      setStatsError(err instanceof Error ? err.message : "Failed to load project stats");
+      console.error("Error fetching project stats:", err);
+    }
+  };
+
   const fetchProject = async () => {
     try {
       setLoading(true);
       setError(null);
+      setStats(null);
       const response = await fetch("/api/projects");
 
       if (!response.ok) {
@@ -99,7 +127,18 @@ export default function ProjectDetail(): React.ReactNode {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-8 py-6">
-        <div className="max-w-4xl space-y-6">
+        <div className="max-w-5xl space-y-6">
+          {statsError && <div className="text-sm text-red-500">{statsError}</div>}
+          {!stats && !statsError && (
+            <div className="text-sm text-muted-foreground">Loading stats...</div>
+          )}
+          {stats && (
+            <>
+              <StatsGrid stats={stats.stats} />
+              <DailyExecutionsChart daily={stats.daily} />
+            </>
+          )}
+
           <div className="border border-border rounded-lg p-6 bg-card">
             <h2 className="text-lg font-semibold text-foreground mb-4">
               Project Information
@@ -136,15 +175,6 @@ export default function ProjectDetail(): React.ReactNode {
                 </dd>
               </div>
             </dl>
-          </div>
-
-          <div className="border border-border rounded-lg p-6 bg-card">
-            <h2 className="text-lg font-semibold text-foreground mb-4">
-              Project Details
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Additional project configuration and details will be displayed here.
-            </p>
           </div>
         </div>
       </div>

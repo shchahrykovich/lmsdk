@@ -1,5 +1,13 @@
 [
   {
+    "version": "0.1.18",
+    "date": "2026-10-04",
+    "changes": [
+      "Project page shows stats: executions, success rate, average latency, tokens, prompts, traces, datasets, evaluations, and a 14-day executions chart",
+      "Projects page shows the same stats for all projects together, plus prompts, executions and success rate for each project in the table"
+    ]
+  },
+  {
     "version": "0.1.17",
     "date": "2026-10-03",
     "changes": [

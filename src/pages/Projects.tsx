@@ -20,6 +20,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Plus, MoreHorizontal, Trash2 } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
+import StatsGrid from "@/components/stats/StatsGrid";
+import DailyExecutionsChart from "@/components/stats/DailyExecutionsChart";
+import ProjectStatsCells from "@/components/stats/ProjectStatsCells";
+import type { ProjectStats, TenantStatsResponse } from "@/lib/project-stats";
 
 interface Project {
   id: number;
@@ -45,6 +49,10 @@ export default function Projects(): React.ReactNode {
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [tenantStats, setTenantStats] = useState<TenantStatsResponse | null>(null);
+  const statsByProject = new Map<number, ProjectStats>(
+    (tenantStats?.projects ?? []).map((entry) => [entry.projectId, entry.stats])
+  );
 
   useEffect(() => {
     void fetchProjects();
@@ -63,7 +71,23 @@ export default function Projects(): React.ReactNode {
     }
   }, [projectName]);
 
+  const fetchTenantStats = async () => {
+    try {
+      const response = await fetch("/api/projects/stats");
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch project stats: ${response.statusText}`);
+      }
+
+      setTenantStats((await response.json()) as TenantStatsResponse);
+    } catch (err) {
+      setTenantStats(null);
+      console.error("Error fetching project stats:", err);
+    }
+  };
+
   const fetchProjects = async () => {
+    void fetchTenantStats();
     try {
       setLoading(true);
       setError(null);
@@ -205,91 +229,109 @@ export default function Projects(): React.ReactNode {
     );
   } else {
     content = (
-      <div className="border border-border rounded-lg overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-muted/50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Name
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Slug
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Status
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Created
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Updated
-              </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-card divide-y divide-border">
-            {projects.map((project) => (
-              <tr
-                key={project.id}
-                className="hover:bg-muted/30 transition-colors cursor-pointer"
-                onClick={() => { void navigate(`/projects/${project.slug}`); }}
-              >
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm font-medium text-foreground">
-                    {project.name}
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-muted-foreground">
-                    {project.slug}
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span
-                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      project.isActive
-                        ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                        : "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-400"
-                    }`}
-                  >
-                    {project.isActive ? "Active" : "Inactive"}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
-                  {formatDate(project.createdAt)}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
-                  {formatDate(project.updatedAt)}
-                </td>
-                <td
-                  className="px-6 py-4 whitespace-nowrap text-right text-sm"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {project.isActive && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal size={18} />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          className="text-red-600 focus:text-red-600"
-                          onClick={() => openDeleteDialog(project)}
-                        >
-                          <Trash2 size={16} />
-                          Delete project
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
-                </td>
+      <div className="space-y-6">
+        {tenantStats && (
+          <>
+            <StatsGrid stats={tenantStats.totals} />
+            <DailyExecutionsChart daily={tenantStats.daily} />
+          </>
+        )}
+        <div className="border border-border rounded-lg overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Name
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Slug
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Status
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Prompts
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Executions
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Success
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Created
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Updated
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Actions
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="bg-card divide-y divide-border">
+              {projects.map((project) => (
+                <tr
+                  key={project.id}
+                  className="hover:bg-muted/30 transition-colors cursor-pointer"
+                  onClick={() => { void navigate(`/projects/${project.slug}`); }}
+                >
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium text-foreground">
+                      {project.name}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-muted-foreground">
+                      {project.slug}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        project.isActive
+                          ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                          : "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-400"
+                      }`}
+                    >
+                      {project.isActive ? "Active" : "Inactive"}
+                    </span>
+                  </td>
+                  <ProjectStatsCells stats={statsByProject.get(project.id)} />
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
+                    {formatDate(project.createdAt)}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
+                    {formatDate(project.updatedAt)}
+                  </td>
+                  <td
+                    className="px-6 py-4 whitespace-nowrap text-right text-sm"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {project.isActive && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreHorizontal size={18} />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            className="text-red-600 focus:text-red-600"
+                            onClick={() => openDeleteDialog(project)}
+                          >
+                            <Trash2 size={16} />
+                            Delete project
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     );
   }
