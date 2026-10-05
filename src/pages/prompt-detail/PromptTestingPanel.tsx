@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import JsonView from "@uiw/react-json-view";
 import { formatDuration } from "@/lib/format";
 import { type OpenRouterSettingsState, toOpenRouterSettingsBody } from "@/lib/openrouter-settings";
+import { DECISIONS_PROVIDER, parseDecisionQuestions } from "@/lib/decision-questions";
 
 type ResponseType = "text" | "json";
 type ReasoningEffort = "low" | "medium" | "high";
@@ -42,6 +43,7 @@ type PromptTestingPanelProps = Readonly<{
   googleSearchEnabled: boolean;
   cacheSystemMessage: boolean;
   openRouterSettings: OpenRouterSettingsState;
+  decisionQuestions: string;
   projectId: number;
   promptSlug: string;
   testOutput: string;
@@ -70,6 +72,7 @@ export function PromptTestingPanel({
   googleSearchEnabled,
   cacheSystemMessage,
   openRouterSettings,
+  decisionQuestions,
   projectId,
   promptSlug,
   testOutput,
@@ -77,9 +80,12 @@ export function PromptTestingPanel({
   isTesting,
   setIsTesting,
 }: PromptTestingPanelProps): React.ReactNode {
+  const isDecisions = provider === DECISIONS_PROVIDER;
+  const showsJson = isDecisions || responseType === "json";
+
   const buildMessages = () => {
     const messages = [];
-    if (systemMessage.trim()) {
+    if (!isDecisions && systemMessage.trim()) {
       messages.push({ role: "system", content: systemMessage });
     }
     if (userMessage.trim()) {
@@ -89,6 +95,9 @@ export function PromptTestingPanel({
   };
 
   const buildResponseFormat = () => {
+    if (isDecisions) {
+      return { responseFormat: { type: "json" as const } };
+    }
     if (responseType !== "json" || !jsonSchema.trim()) {
       return { responseFormat: { type: "text" as const } };
     }
@@ -132,12 +141,20 @@ export function PromptTestingPanel({
     }
 
     parts.push(`Total: ${getUsageNumber(usage, "total_tokens")}`);
+
+    const cost = usage.cost;
+    if (typeof cost === "number") {
+      parts.push(`Cost: $${cost.toFixed(6)}`);
+    }
     return parts.join(" | ");
   };
 
   const getValidationError = () => {
     if (!provider.trim() || !model.trim()) {
       return "Provider and model must be selected";
+    }
+    if (isDecisions && !userMessage.trim()) {
+      return "Decisions need a state: add a user message";
     }
     if (!systemMessage.trim() && !userMessage.trim()) {
       return "At least one message is required";
@@ -168,6 +185,18 @@ export function PromptTestingPanel({
     if (provider === "openrouter") {
       requestBody.openrouter_settings = toOpenRouterSettingsBody(openRouterSettings);
     }
+  };
+
+  const applyDecisionQuestions = (requestBody: Record<string, unknown>): string | null => {
+    if (!isDecisions) {
+      return null;
+    }
+    const result = parseDecisionQuestions(decisionQuestions);
+    if ("error" in result) {
+      return result.error;
+    }
+    requestBody.decision_questions = result.questions;
+    return null;
   };
 
   const handleRunTest = async () => {
@@ -201,6 +230,12 @@ export function PromptTestingPanel({
       requestBody.response_format = responseFormat.responseFormat;
 
       applyProviderSettings(requestBody);
+
+      const questionsError = applyDecisionQuestions(requestBody);
+      if (questionsError) {
+        setTestOutput(`Error: ${questionsError}`);
+        return;
+      }
 
       const response = await fetch("/api/providers/execute", {
         method: "POST",
@@ -286,7 +321,7 @@ export function PromptTestingPanel({
             {testOutput ? (
               (() => {
                 // If JSON schema is selected, try to parse and display as JSON
-                if (responseType === "json") {
+                if (showsJson) {
                   try {
                     // Extract the JSON content (everything before the metadata separator)
                     const parts = testOutput.split("\n\n---\n");

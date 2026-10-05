@@ -3,6 +3,7 @@ import type { ExecuteRequest, ExecuteResult, AIMessage } from "../providers/base
 import { getOpenAIModels } from "../utils/openai-models";
 import { getOpenRouterModels } from "../utils/openrouter-models";
 import { getAnthropicModels } from "../utils/anthropic-models";
+import { getOpenRouterDecisionModels } from "../utils/openrouter-decision-models";
 import type { IPromptExecutionLogger } from "../providers/logger/execution-logger";
 import { renderExecuteRequest } from "../execution/prompt-renderer";
 
@@ -79,6 +80,12 @@ export class ProviderService {
         name: "Anthropic",
         description: "Claude models through the Anthropic API, with native batch support",
         models: getAnthropicModels(),
+      },
+      {
+        id: "openrouter-decisions",
+        name: "OpenRouter Decisions",
+        description: "Jev decision model: typed yes/no, choice and score answers with probabilities",
+        models: getOpenRouterDecisionModels(),
       },
     ];
   }

@@ -3,6 +3,7 @@ import { OpenAIProvider } from "./openai-provider";
 import { GoogleProvider } from "./google-provider";
 import { OpenRouterProvider } from "./openrouter-provider";
 import { AnthropicProvider } from "./anthropic-provider";
+import { OpenRouterDecisionsProvider } from "./openrouter-decisions-provider";
 import type { IPromptExecutionLogger } from "./logger/execution-logger";
 
 /**
@@ -17,7 +18,7 @@ export interface ProviderConfig {
   cloudflareAiGatewayBaseUrl?: string;
 }
 
-export const SUPPORTED_PROVIDERS = ["openai", "google", "openrouter", "anthropic"] as const;
+export const SUPPORTED_PROVIDERS = ["openai", "google", "openrouter", "anthropic", "openrouter-decisions"] as const;
 
 export function providerConfigFromEnv(env: Env): ProviderConfig {
   return {
@@ -88,6 +89,12 @@ export class ProviderFactory {
           token: this.config.cloudflareAiGatewayToken,
           baseUrl: this.config.cloudflareAiGatewayBaseUrl,
         });
+
+      case "openrouter-decisions":
+        if (!this.config.openRouterKey) {
+          throw new Error("OpenRouter API key not configured. Please set OPENROUTER_API_KEY secret.");
+        }
+        return new OpenRouterDecisionsProvider(this.config.openRouterKey, this.logger);
 
       default:
         throw new Error(

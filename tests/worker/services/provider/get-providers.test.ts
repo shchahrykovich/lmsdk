@@ -11,7 +11,7 @@ describe("ProviderService - getProviders", () => {
   it("should return list of available providers", () => {
     const providers = providerService.getProviders();
 
-    expect(providers).toHaveLength(4);
+    expect(providers).toHaveLength(5);
     expect(providers[0]).toEqual({
       id: "openai",
       name: "OpenAI",
@@ -35,6 +35,20 @@ describe("ProviderService - getProviders", () => {
       name: "Anthropic",
       description: expect.any(String),
       models: expect.any(Array),
+    });
+  });
+
+  it("offers the Jev decision models under OpenRouter Decisions", () => {
+    const decisions = providerService.getProviders().find((p) => p.id === "openrouter-decisions");
+
+    expect(decisions).toEqual({
+      id: "openrouter-decisions",
+      name: "OpenRouter Decisions",
+      description: expect.any(String),
+      models: [
+        { id: "typesafe/jev-1.13", name: "Jev 1.13" },
+        { id: "~typesafe/jev-latest", name: "Jev (Latest)" },
+      ],
     });
   });
 

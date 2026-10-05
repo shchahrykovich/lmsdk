@@ -11,6 +11,8 @@ import {
 } from "@/components/ui/select";
 import type { OpenRouterSettingsState } from "@/lib/openrouter-settings";
 import { OpenRouterSettingsSection } from "./OpenRouterSettingsSection";
+import { DecisionQuestionsSection } from "./DecisionQuestionsSection";
+import { DECISIONS_PROVIDER } from "@/lib/decision-questions";
 
 type ResponseType = "text" | "json";
 type ReasoningEffort = "low" | "medium" | "high";
@@ -52,6 +54,8 @@ type PromptConfigurationPanelProps = Readonly<{
   setCacheSystemMessage: (value: boolean) => void;
   openRouterSettings: OpenRouterSettingsState;
   setOpenRouterSettings: (value: OpenRouterSettingsState) => void;
+  decisionQuestions: string;
+  onEditDecisionQuestions: () => void;
 }>;
 
 export function PromptConfigurationPanel({
@@ -84,7 +88,10 @@ export function PromptConfigurationPanel({
   setCacheSystemMessage,
   openRouterSettings,
   setOpenRouterSettings,
+  decisionQuestions,
+  onEditDecisionQuestions,
 }: PromptConfigurationPanelProps): React.ReactNode {
+  const isDecisions = provider === DECISIONS_PROVIDER;
   return (
     <div className="w-1/2 border-r border-border overflow-y-auto">
       <div className="p-6 space-y-4">
@@ -95,31 +102,36 @@ export function PromptConfigurationPanel({
         )}
 
         <div className="space-y-6">
-          {/* Response Format */}
-          <div>
-            <Label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-              Response format
-            </Label>
-            <div className="flex items-center gap-2">
-              <Select
-                value={responseType}
-                onValueChange={(value: ResponseType) => setResponseType(value)}
-              >
-                <SelectTrigger className="h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="text">Text</SelectItem>
-                  <SelectItem value="json">JSON Schema</SelectItem>
-                </SelectContent>
-              </Select>
-              {responseType === "json" && (
-                <Button variant="outline" size="sm" onClick={onEditSchema}>
-                  Edit Schema
-                </Button>
-              )}
+          {isDecisions && (
+            <DecisionQuestionsSection decisionQuestions={decisionQuestions} onEdit={onEditDecisionQuestions} />
+          )}
+
+          {!isDecisions && (
+            <div>
+              <Label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                Response format
+              </Label>
+              <div className="flex items-center gap-2">
+                <Select
+                  value={responseType}
+                  onValueChange={(value: ResponseType) => setResponseType(value)}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="text">Text</SelectItem>
+                    <SelectItem value="json">JSON Schema</SelectItem>
+                  </SelectContent>
+                </Select>
+                {responseType === "json" && (
+                  <Button variant="outline" size="sm" onClick={onEditSchema}>
+                    Edit Schema
+                  </Button>
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* OpenAI-specific Settings */}
           {provider === "openai" && (
@@ -349,28 +361,28 @@ export function PromptConfigurationPanel({
             />
           )}
 
-          {/* System Message */}
           {provider !== "openai" && <div className="relative"></div>}
-          <div>
-            <Label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-              System message
-            </Label>
-            <textarea
-              className="w-full min-h-[120px] px-3 py-2 text-sm rounded-md border border-input bg-background resize-y"
-              placeholder="You are a helpful assistant..."
-              value={systemMessage}
-              onChange={(event) => setSystemMessage(event.target.value)}
-            />
-          </div>
+          {!isDecisions && (
+            <div>
+              <Label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                System message
+              </Label>
+              <textarea
+                className="w-full min-h-[120px] px-3 py-2 text-sm rounded-md border border-input bg-background resize-y"
+                placeholder="You are a helpful assistant..."
+                value={systemMessage}
+                onChange={(event) => setSystemMessage(event.target.value)}
+              />
+            </div>
+          )}
 
-          {/* User Message */}
           <div>
             <Label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-              User message
+              {isDecisions ? "State (user message)" : "User message"}
             </Label>
             <textarea
               className="w-full min-h-[120px] px-3 py-2 text-sm rounded-md border border-input bg-background resize-y"
-              placeholder="Hello! How can you help me today?"
+              placeholder={isDecisions ? '{"ticket": "{{ticket}}"}' : "Hello! How can you help me today?"}
               value={userMessage}
               onChange={(event) => setUserMessage(event.target.value)}
             />

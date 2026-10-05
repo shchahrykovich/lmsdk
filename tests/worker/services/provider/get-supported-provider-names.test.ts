@@ -11,6 +11,6 @@ describe("ProviderService - getSupportedProviderNames", () => {
   it("should return array of supported provider names", () => {
     const providerNames = providerService.getSupportedProviderNames();
 
-    expect(providerNames).toEqual(["openai", "google", "openrouter", "anthropic"]);
+    expect(providerNames).toEqual(["openai", "google", "openrouter", "anthropic", "openrouter-decisions"]);
   });
 });

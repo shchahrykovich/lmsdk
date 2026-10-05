@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.1.20",
+    "date": "2026-10-05",
+    "changes": [
+      "OpenRouter Decisions added as a provider: the Jev model answers typed questions (yes/no, choice, score) with probabilities instead of text",
+      "A decision prompt sends the user message as the state and returns the answers as JSON, in the editor, in API execute and in paced batches",
+      "The prompt editor test output shows the cost of a run when the provider returns it"
+    ]
+  },
+  {
     "version": "0.1.19",
     "date": "2026-10-04",
     "changes": [

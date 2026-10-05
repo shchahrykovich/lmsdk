@@ -60,6 +60,28 @@ export interface AnthropicSettings {
   effort?: (typeof ANTHROPIC_EFFORTS)[number];
 }
 
+export interface DecisionNoulQuestion {
+  type: "noul";
+  instructions: string;
+  criteria: { true: string; false: string };
+}
+
+export interface DecisionChoiceQuestion {
+  type: "choice";
+  instructions: string;
+  criteria: Record<string, string>;
+}
+
+export interface DecisionScoreQuestion {
+  type: "score";
+  instructions: string;
+  criteria: string[];
+}
+
+export type DecisionQuestion = DecisionNoulQuestion | DecisionChoiceQuestion | DecisionScoreQuestion;
+
+export type DecisionQuestions = Record<string, DecisionQuestion>;
+
 /**
  * Request parameters for AI execution
  */
@@ -71,6 +93,7 @@ export interface ExecuteRequest {
   google_settings?: GoogleSettings;
   openrouter_settings?: OpenRouterSettings;
   anthropic_settings?: AnthropicSettings;
+  decision_questions?: DecisionQuestions;
   variables?: Record<string, unknown>;
   proxy?: "none" | "cloudflare";
   // For Google cache key generation

@@ -15,7 +15,7 @@ describe("Manage API - providers and projects", () => {
     const body = await res.json<{ providers: { id: string; models: { id: string }[] }[] }>();
 
     expect(res.status).toBe(200);
-    expect(body.providers.map((p) => p.id)).toEqual(["openai", "google", "openrouter", "anthropic"]);
+    expect(body.providers.map((p) => p.id)).toEqual(["openai", "google", "openrouter", "anthropic", "openrouter-decisions"]);
     expect(body.providers[0].models.length).toBeGreaterThan(0);
   });
 

@@ -267,6 +267,39 @@ describe("Providers Routes", () => {
       );
     });
 
+    it("passes decision questions to the provider service", async () => {
+      setAuthenticatedUser(1);
+      executePromptMock.mockResolvedValue({ content: "{}", model: "typesafe/jev-1.13" });
+      const decisionQuestions = {
+        is_bug: { type: "noul", instructions: "Is it a bug?", criteria: { true: "Yes", false: "No" } },
+      };
+
+      const response = await app.request(
+        "/api/providers/execute",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            provider: "openrouter-decisions",
+            model: "typesafe/jev-1.13",
+            messages: [{ role: "user", content: "Blank checkout page" }],
+            decision_questions: decisionQuestions,
+          }),
+        },
+        {
+          DB: {} as any,
+          PRIVATE_FILES: {} as any,
+          OPENROUTER_API_KEY: "test-key",
+        }
+      );
+
+      expect(response.status).toBe(200);
+      expect(executePromptMock).toHaveBeenCalledWith(
+        "openrouter-decisions",
+        expect.objectContaining({ decision_questions: decisionQuestions })
+      );
+    });
+
     it("returns 400 when provider is missing", async () => {
       setAuthenticatedUser(1);
 

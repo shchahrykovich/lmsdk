@@ -9,6 +9,8 @@ import { PromptConfigurationPanel } from "@/pages/prompt-detail/PromptConfigurat
 import { PromptTestingPanel } from "@/pages/prompt-detail/PromptTestingPanel";
 import { JsonSchemaDialog } from "@/pages/prompt-detail/JsonSchemaDialog";
 import CreateDatasetDialog from "@/components/CreateDatasetDialog";
+import { DecisionQuestionsDialog } from "@/pages/prompt-detail/DecisionQuestionsDialog";
+import { DECISIONS_PROVIDER, formatDecisionQuestions, parseDecisionQuestions } from "@/lib/decision-questions";
 import {
   DEFAULT_OPENROUTER_SETTINGS,
   type OpenRouterSettingsState,
@@ -77,6 +79,10 @@ export default function PromptDetail(): React.ReactNode {
 
   // OpenRouter-specific settings
   const [openRouterSettings, setOpenRouterSettings] = useState<OpenRouterSettingsState>(DEFAULT_OPENROUTER_SETTINGS);
+
+  const [decisionQuestions, setDecisionQuestions] = useState("");
+  const [isDecisionQuestionsDialogOpen, setIsDecisionQuestionsDialogOpen] = useState(false);
+  const isDecisions = provider === DECISIONS_PROVIDER;
 
   // Test area
   const [testOutput, setTestOutput] = useState("");
@@ -217,6 +223,7 @@ export default function PromptDetail(): React.ReactNode {
     applyOpenAiSettings(parsedBody);
     applyGoogleSettings(parsedBody);
     setOpenRouterSettings(parseOpenRouterSettings(parsedBody));
+    setDecisionQuestions(formatDecisionQuestions(parsedBody));
   };
 
   const loadProviders = async () => {
@@ -402,6 +409,9 @@ export default function PromptDetail(): React.ReactNode {
       if (!model.trim()) {
         return "Model is required";
       }
+      if (isDecisions && !userMessage.trim()) {
+        return "Decisions need a state: add a user message";
+      }
       if (!systemMessage.trim() && !userMessage.trim()) {
         return "At least one message (system or user) is required";
       }
@@ -409,7 +419,7 @@ export default function PromptDetail(): React.ReactNode {
     };
 
     const buildPromptMessages = () => [
-      systemMessage.trim() && {
+      !isDecisions && systemMessage.trim() && {
         role: "system",
         content: systemMessage.trim(),
       },
@@ -432,7 +442,27 @@ export default function PromptDetail(): React.ReactNode {
       return { response_format: { type: "text" } };
     };
 
+    const buildDecisionsBody = () => {
+      const questions = parseDecisionQuestions(decisionQuestions);
+      if ("error" in questions) {
+        return { error: questions.error };
+      }
+      return {
+        body: {
+          provider: provider.trim(),
+          model: model.trim(),
+          messages: buildPromptMessages(),
+          response_format: { type: "json" },
+          decision_questions: questions.questions,
+        },
+      };
+    };
+
     const buildPromptBody = () => {
+      if (isDecisions) {
+        return buildDecisionsBody();
+      }
+
       const body: Record<string, unknown> = {
         provider: provider.trim(),
         model: model.trim(),
@@ -636,6 +666,8 @@ export default function PromptDetail(): React.ReactNode {
           setCacheSystemMessage={setCacheSystemMessage}
           openRouterSettings={openRouterSettings}
           setOpenRouterSettings={setOpenRouterSettings}
+          decisionQuestions={decisionQuestions}
+          onEditDecisionQuestions={() => setIsDecisionQuestionsDialogOpen(true)}
         />
 
         <PromptTestingPanel
@@ -658,6 +690,7 @@ export default function PromptDetail(): React.ReactNode {
           googleSearchEnabled={googleSearchEnabled}
           cacheSystemMessage={cacheSystemMessage}
           openRouterSettings={openRouterSettings}
+          decisionQuestions={decisionQuestions}
           projectId={project.id}
           promptSlug={promptSlug ?? prompt.slug}
           testOutput={testOutput}
@@ -675,6 +708,13 @@ export default function PromptDetail(): React.ReactNode {
         setSchemaEditValue={setSchemaEditValue}
         jsonSchema={jsonSchema}
         setJsonSchema={setJsonSchema}
+      />
+
+      <DecisionQuestionsDialog
+        open={isDecisionQuestionsDialogOpen}
+        setOpen={setIsDecisionQuestionsDialogOpen}
+        decisionQuestions={decisionQuestions}
+        setDecisionQuestions={setDecisionQuestions}
       />
 
       {/* Create Dataset Dialog */}

@@ -96,6 +96,28 @@ const AnthropicSettingsSchema = z.looseObject({
   effort: z.enum(ANTHROPIC_EFFORTS).optional().describe("Thinking depth. Left out, the model default applies."),
 });
 
+const DecisionQuestionSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("noul"),
+    instructions: z.string().min(1),
+    criteria: z.object({ true: z.string(), false: z.string() }),
+  }),
+  z.object({
+    type: z.literal("choice"),
+    instructions: z.string().min(1),
+    criteria: z.record(z.string(), z.string()).describe("Option key to its description"),
+  }),
+  z.object({
+    type: z.literal("score"),
+    instructions: z.string().min(1),
+    criteria: z.array(z.string()).min(2).describe("Ordered levels, lowest first"),
+  }),
+]);
+
+const DecisionQuestionsSchema = z
+  .record(z.string(), DecisionQuestionSchema)
+  .describe("For provider openrouter-decisions: questions by name. The user message is sent as the state.");
+
 export const PromptBodySchema = z.object({
   messages: z.array(MessageSchema).min(1).describe("At least one message"),
   response_format: ResponseFormatSchema.optional(),
@@ -103,6 +125,7 @@ export const PromptBodySchema = z.object({
   google_settings: GoogleSettingsSchema.optional(),
   openrouter_settings: OpenRouterSettingsSchema.optional(),
   anthropic_settings: AnthropicSettingsSchema.optional(),
+  decision_questions: DecisionQuestionsSchema.optional(),
   proxy: z.enum(["none", "cloudflare"]).optional(),
 });
 

@@ -3,7 +3,14 @@ import type { HonoEnv } from "./app";
 import { requireAuth } from "../middleware/auth.middleware";
 import { ProviderService } from "../services/provider.service";
 import { providerConfigFromEnv } from "../providers/provider-factory";
-import type { AIMessage, GoogleSettings, OpenAISettings, OpenRouterSettings, ResponseFormat } from "../providers/base-provider";
+import type {
+  AIMessage,
+  DecisionQuestions,
+  GoogleSettings,
+  OpenAISettings,
+  OpenRouterSettings,
+  ResponseFormat,
+} from "../providers/base-provider";
 
 import {NullPromptExecutionLogger} from "../providers/logger/null-prompt-execution-logger";
 
@@ -18,6 +25,7 @@ type ParsedExecuteRequest = {
   google_settings?: GoogleSettings;
   openai_settings?: OpenAISettings;
   openrouter_settings?: OpenRouterSettings;
+  decision_questions?: DecisionQuestions;
   projectId?: number;
   promptSlug?: string;
   proxy?: "none" | "cloudflare";
@@ -88,6 +96,7 @@ const parseExecuteBody = (
       google_settings: getRecord(value.google_settings) as GoogleSettings | undefined,
       openai_settings: getRecord(value.openai_settings) as OpenAISettings | undefined,
       openrouter_settings: getRecord(value.openrouter_settings) as OpenRouterSettings | undefined,
+      decision_questions: getRecord(value.decision_questions) as DecisionQuestions | undefined,
       projectId: getNumber(value.projectId),
       promptSlug: getString(value.promptSlug),
       proxy: getProxy(value.proxy),
@@ -145,6 +154,7 @@ providers.post("/execute", async (c) => {
       google_settings,
       openai_settings,
       openrouter_settings,
+      decision_questions,
       proxy,
       projectId,
       promptSlug,
@@ -159,6 +169,7 @@ providers.post("/execute", async (c) => {
       google_settings,
       openai_settings,
       openrouter_settings,
+      decision_questions,
       proxy,
       projectId,
       promptSlug,

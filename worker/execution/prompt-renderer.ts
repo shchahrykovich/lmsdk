@@ -22,6 +22,7 @@ export function buildExecuteRequest(
     google_settings: body.google_settings,
     openrouter_settings: body.openrouter_settings,
     anthropic_settings: body.anthropic_settings,
+    decision_questions: body.decision_questions,
     proxy: body.proxy,
     projectId: version.projectId,
     promptSlug: version.slug,

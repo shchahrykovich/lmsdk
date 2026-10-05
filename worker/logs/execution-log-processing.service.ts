@@ -210,6 +210,8 @@ export class ExecutionLogProcessingService {
         return this.extractGoogleUsage(output);
       case "openrouter":
         return this.extractOpenRouterUsage(output);
+      case "openrouter-decisions":
+        return this.extractDecisionsUsage(output);
       default:
         return null;
     }
@@ -268,6 +270,24 @@ export class ExecutionLogProcessingService {
     };
   }
 
+  private extractDecisionsUsage(output: unknown) {
+    if (!this.isRecord(output) || !this.isRecord(output.usage) || typeof output.model !== "string") {
+      return null;
+    }
+
+    const inputTokens = this.numberOrZero(output.usage.input_tokens);
+    const outputTokens = this.numberOrZero(output.usage.output_tokens);
+
+    return {
+      model: output.model,
+      usage: {
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        total_tokens: inputTokens + outputTokens,
+      },
+    };
+  }
+
   private extractGoogleUsage(output: unknown) {
     if (!Array.isArray(output)) {
       return null;
@@ -290,6 +310,7 @@ export class ExecutionLogProcessingService {
    * OpenAI has 'input', 'text', 'reasoning' fields
    * Google has 'config', 'contents' fields
    * OpenRouter has 'model', 'messages' fields
+   * OpenRouter Decisions has 'state', 'questions' fields
    */
   private determineProvider(input: unknown): string | null {
     if (!this.isRecord(input)) {
@@ -303,6 +324,9 @@ export class ExecutionLogProcessingService {
     }
     if ("model" in input && "messages" in input) {
       return 'openrouter';
+    }
+    if ("state" in input && "questions" in input) {
+      return 'openrouter-decisions';
     }
     return null;
   }
