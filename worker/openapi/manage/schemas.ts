@@ -96,27 +96,39 @@ const AnthropicSettingsSchema = z.looseObject({
   effort: z.enum(ANTHROPIC_EFFORTS).optional().describe("Thinking depth. Left out, the model default applies."),
 });
 
+const DecisionText = z.string().trim().min(1);
+
+const hasAtLeast = (count: number) => (value: Record<string, unknown>) => Object.keys(value).length >= count;
+
 const DecisionQuestionSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("noul"),
-    instructions: z.string().min(1),
-    criteria: z.object({ true: z.string(), false: z.string() }),
+    instructions: DecisionText,
+    criteria: z.object({ true: DecisionText, false: DecisionText }).describe("What a true and a false answer mean"),
   }),
   z.object({
     type: z.literal("choice"),
-    instructions: z.string().min(1),
-    criteria: z.record(z.string(), z.string()).describe("Option key to its description"),
+    instructions: DecisionText,
+    criteria: z
+      .record(z.string(), DecisionText)
+      .refine(hasAtLeast(2), "A choice question needs at least 2 options")
+      .describe("Option key to its description. At least 2 options."),
   }),
   z.object({
     type: z.literal("score"),
-    instructions: z.string().min(1),
-    criteria: z.array(z.string()).min(2).describe("Ordered levels, lowest first"),
+    instructions: DecisionText,
+    criteria: z.array(DecisionText).min(2).describe("Ordered levels, lowest first. At least 2 levels."),
   }),
 ]);
 
+export const DECISIONS_PROVIDER = "openrouter-decisions";
+
 const DecisionQuestionsSchema = z
   .record(z.string(), DecisionQuestionSchema)
-  .describe("For provider openrouter-decisions: questions by name. The user message is sent as the state.");
+  .refine(hasAtLeast(1), "Add at least one decision question")
+  .describe(
+    "Required for provider openrouter-decisions: questions by name, at least one. The user message is sent as the state. The response is always JSON."
+  );
 
 export const PromptBodySchema = z.object({
   messages: z.array(MessageSchema).min(1).describe("At least one message"),

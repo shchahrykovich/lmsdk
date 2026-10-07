@@ -11,6 +11,7 @@ import { providerConfigFromEnv } from "../providers/provider-factory";
 const NATIVE_DELAYS_SECONDS = [30, 60, 120, 300, 600, 900];
 const PACED_DELAYS_SECONDS = [15, 30, 60, 120];
 const NO_RETRY = { retries: { limit: 0, delay: 1000 } };
+const FAIL_BATCH_WAIT_MS = 60_000;
 
 const delayFor = (delays: number[], iteration: number): number => delays[Math.min(iteration, delays.length - 1)]!;
 
@@ -31,6 +32,7 @@ export async function runBatchWorkflow(
     await step.do("finish", () => runner.finish(batchId));
   } catch (error) {
     try {
+      await step.sleep("fail-batch-wait", FAIL_BATCH_WAIT_MS);
       await step.do("fail-batch", () => runner.fail(batchId, errorText(error)));
     } catch (failError) {
       console.error("[BatchWorkflow] Could not mark the batch failed", { batchId: payload.batchId, error: errorText(failError) });

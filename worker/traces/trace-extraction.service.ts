@@ -382,6 +382,12 @@ export class TraceExtractionService {
         reasoning_tokens: 0,
         total_tokens: 0,
       };
+    } else if (provider === 'openrouter-decisions') {
+      return {
+        input_tokens: 0,
+        output_tokens: 0,
+        total_tokens: 0,
+      };
     }
     return {};
   }
@@ -403,7 +409,17 @@ export class TraceExtractionService {
     }
     if (provider === "openrouter") {
       this.aggregateOpenRouterUsage(accumulated, usage);
+      return;
     }
+    if (provider === "openrouter-decisions") {
+      this.aggregateDecisionsUsage(accumulated, usage);
+    }
+  }
+
+  private aggregateDecisionsUsage(accumulated: UsageStats, usage: Record<string, unknown>): void {
+    accumulated.input_tokens += this.numberOrZero(usage.input_tokens);
+    accumulated.output_tokens += this.numberOrZero(usage.output_tokens);
+    accumulated.total_tokens += this.numberOrZero(usage.total_tokens);
   }
 
   private aggregateOpenAiUsage(accumulated: UsageStats, usage: Record<string, unknown>): void {

@@ -89,7 +89,7 @@ export class V1CreateBatch extends OpenAPIRoute {
       "Creates a draft batch for many executions of one prompt version and pins that version now.",
       "Activating another version later does not change the batch.",
       "OpenAI, Anthropic and Google run through their native batch APIs at the batch price.",
-      "A provider without a batch API (OpenRouter) is refused with 422 unless `fallback` is `paced`.",
+      "A provider without a batch API (OpenRouter, OpenRouter Decisions) is refused with 422 unless `fallback` is `paced`.",
       "Safe to retry when you send `idempotency_key`: a repeat with the same key returns the same batch with status 200.",
       "Without a key, a repeat creates another draft.",
     ].join(" "),

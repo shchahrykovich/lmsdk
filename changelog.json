@@ -1,5 +1,13 @@
 [
   {
+    "version": "0.1.21",
+    "date": "2026-10-05",
+    "changes": [
+      "Management API refuses a decision prompt that cannot run: no questions, a choice question with fewer than 2 options, or an empty description",
+      "Trace stats count the input, output and total tokens of OpenRouter Decisions runs"
+    ]
+  },
+  {
     "version": "0.1.20",
     "date": "2026-10-05",
     "changes": [

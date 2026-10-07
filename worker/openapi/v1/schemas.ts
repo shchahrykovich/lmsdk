@@ -7,7 +7,7 @@ export const WhoamiResponse = z.object({
 });
 
 export const ExecutePromptResponse = z.object({
-  response: z.string().or(z.object({}).passthrough()).describe("The generated response from the AI model"),
+  response: z.string().or(z.object({}).passthrough()).describe("The generated response from the AI model. For OpenRouter Decisions: the answers object, one entry per decision question"),
   usage: z
     .object({
       prompt_tokens: z.number(),
@@ -20,7 +20,7 @@ export const ExecutePromptResponse = z.object({
         .number()
         .optional()
         .describe(
-          "Cost in USD. OpenRouter reports it. For OpenAI, Google and Anthropic, LM SDK computes it from its price table at the standard price. Left out when the model has no price in the table."
+          "Cost in USD. OpenRouter and OpenRouter Decisions report it. For OpenAI, Google and Anthropic, LM SDK computes it from its price table at the standard price. Left out when the model has no price in the table."
         ),
     })
     .passthrough()

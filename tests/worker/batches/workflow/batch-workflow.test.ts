@@ -176,6 +176,24 @@ describe("Batch workflow with a provider batch API", () => {
     expect(batch).toMatchObject({ state: "failed", erroredCount: 2, errorMessage: "D1 is down" });
   });
 
+  it("sleeps before marking the batch failed, so the fail step runs in a new invocation", async () => {
+    const fake = new FakeBatchAdapter();
+    const { service, batchId } = await submittedBatch(fake, [2]);
+    const { step, names } = recordingStep();
+    const realDo = step.do.getMockImplementation()!;
+    step.do.mockImplementation(async (name: string, configOrCallback: unknown, maybeCallback?: () => Promise<unknown>) => {
+      if (name.startsWith("poll-")) throw new Error("Failed query", { cause: new Error("Too many API requests") });
+      return await realDo(name, configOrCallback, maybeCallback);
+    });
+
+    await expect(runBatchWorkflow(workflowParams(batchId), step, runnerDeps(fake))).rejects.toThrow("Failed query");
+    const { batch } = await service.getBatch(batchId);
+
+    expect(names.slice(-2)).toEqual(["fail-batch-wait", "fail-batch"]);
+    expect(step.sleep).toHaveBeenCalledWith("fail-batch-wait", 60_000);
+    expect(batch).toMatchObject({ state: "failed", errorMessage: "Failed query\nCaused by: Too many API requests" });
+  });
+
   it("cancels the provider batch, keeps finished results and ends cancelled", async () => {
     const fake = new FakeBatchAdapter();
     fake.pollsUntilDone = 2;

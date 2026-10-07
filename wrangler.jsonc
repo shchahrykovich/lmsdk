@@ -24,6 +24,9 @@
 		}
 	},
 	"upload_source_maps": true,
+	"limits": {
+		"subrequests": 1000000
+	},
 	"compatibility_flags": [
 		"nodejs_compat",
 		"global_fetch_strictly_public"

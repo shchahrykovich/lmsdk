@@ -102,4 +102,16 @@ export function classifySubmitStatus(status: number, message: string): Error {
   return new BatchHttpError(message, status);
 }
 
-export const errorText = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+const singleErrorText = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+export function errorText(error: unknown): string {
+  const parts: string[] = [];
+  const seen = new Set<unknown>();
+  let current: unknown = error;
+  while (current !== undefined && !seen.has(current)) {
+    seen.add(current);
+    parts.push(singleErrorText(current));
+    current = current instanceof Error ? current.cause : undefined;
+  }
+  return parts.join("\nCaused by: ");
+}

@@ -11,6 +11,7 @@ import { createProviderService } from "./projects";
 import { ManageResolver } from "./resolve";
 import { serializePrompt, serializePromptVersion } from "./serializers";
 import {
+  DECISIONS_PROVIDER,
   MANAGE_TAG,
   PromptBodySchema,
   PromptSchema,
@@ -41,6 +42,17 @@ const ensureProviderAndModel = (c: Context<HonoEnv>, provider: string, model: st
   }
   if (!match.models.some((item) => item.id === model)) {
     throw new ClientInputValidationError(`Unknown model "${model}" for provider "${provider}". See GET /api/v1/manage/providers`);
+  }
+};
+
+const ensureDecisionQuestions = (provider: string, body: PromptBody | Record<string, unknown>): void => {
+  if (provider !== DECISIONS_PROVIDER) return;
+  const questions = body.decision_questions;
+  const hasQuestions = typeof questions === "object" && questions !== null && Object.keys(questions).length > 0;
+  if (!hasQuestions) {
+    throw new ClientInputValidationError(
+      `Provider "${DECISIONS_PROVIDER}" needs body.decision_questions with at least one question`
+    );
   }
 };
 
@@ -129,6 +141,7 @@ export class ManageCreatePrompt extends OpenAPIRoute {
     const { params, body } = await this.getValidatedData<typeof this.schema>();
     const { projectId } = await new ManageResolver(c).project(params.project);
     ensureProviderAndModel(c, body.provider, body.model);
+    ensureDecisionQuestions(body.provider, body.body);
 
     const service = promptService(c);
     const prompt = await service.createPrompt(projectId, {
@@ -268,6 +281,8 @@ export class ManageCreatePromptVersion extends OpenAPIRoute {
     const provider = body.provider ?? prompt.provider;
     const model = body.model ?? prompt.model;
     ensureProviderAndModel(c, provider, model);
+    const versionBody = body.body ?? parseStoredBody(prompt.body);
+    ensureDecisionQuestions(provider, versionBody);
 
     const service = promptService(c);
     const { version } = await service.updatePrompt(
@@ -276,7 +291,7 @@ export class ManageCreatePromptVersion extends OpenAPIRoute {
         name: body.name,
         provider,
         model,
-        body: storedBody(provider, model, body.body ?? parseStoredBody(prompt.body)),
+        body: storedBody(provider, model, versionBody),
       },
       { activate: body.activate }
     );

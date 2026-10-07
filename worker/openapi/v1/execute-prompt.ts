@@ -192,7 +192,7 @@ export class V1ExecutePrompt extends OpenAPIRoute {
         },
       },
       "504": {
-        description: "The AI provider did not answer within the time limit (240 s for OpenRouter). The body has code \"provider_timeout\". The provider may still bill the call, so do not retry it automatically.",
+        description: "The AI provider did not answer within the time limit (240 s for OpenRouter, 60 s for OpenRouter Decisions). The body has code \"provider_timeout\". The provider may still bill the call, so do not retry it automatically.",
         content: {
           "application/json": {
             schema: ErrorResponse,
