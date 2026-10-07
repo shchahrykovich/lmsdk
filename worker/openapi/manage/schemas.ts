@@ -34,7 +34,7 @@ export const errorResponses = {
   "403": errorContent("The key does not have the manage permission this method needs"),
 };
 
-export const notFoundResponse = { "404": errorContent("A project, prompt, dataset or evaluation in the path was not found") };
+export const notFoundResponse = { "404": errorContent("A project, prompt, dataset, evaluation or batch in the path was not found") };
 
 export const conflictResponse = { "409": errorContent("A record with the same name or slug already exists") };
 

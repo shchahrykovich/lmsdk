@@ -3,7 +3,7 @@ import { manage, setupFixtures, type Fixtures } from "./helpers";
 import { setupApiKeyUser } from "../helpers";
 import { bodyFor, fillPath, manageOperations, type Operation } from "./openapi";
 
-const slugs = { project: "support", prompt: "classifier", dataset: "tickets", evaluation: "missing" };
+const slugs = { project: "support", prompt: "classifier", dataset: "tickets", evaluation: "missing", batch: "missing" };
 
 const call = (operation: Operation, key: string | undefined) =>
   manage(fillPath(operation.path, slugs), key, { method: operation.method, body: bodyFor(operation) });
@@ -17,8 +17,8 @@ describe("Manage API - permission matrix over every documented route", () => {
     operations = await manageOperations();
   });
 
-  it("finds the 17 documented manage operations", () => {
-    expect(operations).toHaveLength(17);
+  it("finds the 21 documented manage operations", () => {
+    expect(operations).toHaveLength(21);
   });
 
   it("returns 401 without a key on every route", async () => {

@@ -10,6 +10,7 @@ import tracesRouter from "../traces/traces.routes";
 import datasetsRouter from "../datasets/datasets.routes";
 import evaluationsRouter from "../evaluations/evaluations.routers";
 import usersRouter from "../users/users.routes";
+import batchesRouter from "../batches/batches.routes";
 import authRouter from "./auth.routes";
 import type {AuthenticatedUser} from "../middleware/auth";
 import {requireApiKey} from "../middleware/apikey.middleware";
@@ -104,6 +105,7 @@ export function createHonoApp(): Hono<HonoEnv> {
 	app.route("/api/projects", tracesRouter);
 	app.route("/api/projects", datasetsRouter);
 	app.route("/api/projects", evaluationsRouter);
+	app.route("/api/projects", batchesRouter);
 	app.route("/api/providers", providersRouter);
 	app.route("/api/users", usersRouter);
 

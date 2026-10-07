@@ -16,7 +16,13 @@ import { ProjectId } from "../shared/project-id";
 import { buildExecuteRequest } from "../execution/prompt-renderer";
 import { errorText, type BatchAdapter } from "./adapters/batch-adapter";
 import { hasNativeBatch, PACED_ITEM_MAX_BYTES, type BatchAdapterFactory } from "./adapters/adapter-factory";
-import { BatchRepository, TERMINAL_BATCH_STATES, type BatchState } from "./batch.repository";
+import {
+  ACTIVE_BATCH_STATES,
+  BatchRepository,
+  TERMINAL_BATCH_STATES,
+  type BatchState,
+  type BatchWithPrompt,
+} from "./batch.repository";
 import { BatchItemRepository, type BatchItemStatus } from "./batch-item.repository";
 import { BatchFilesRepository } from "./batch-files.repository";
 import { itemKey, newPartKey } from "./batch-item-key";
@@ -38,13 +44,32 @@ export interface BatchWorkflowParams {
 
 export type StartBatchWorkflow = (instanceId: string, params: BatchWorkflowParams) => Promise<void>;
 
+export type StopBatchWorkflow = (instanceId: string) => Promise<void>;
+
+export type BatchWorkflowStatus = (instanceId: string) => Promise<string>;
+
 export interface BatchServiceDeps {
   db: DrizzleD1Database;
   files: BatchFilesRepository;
   adapters: BatchAdapterFactory;
   startWorkflow: StartBatchWorkflow;
+  stopWorkflow?: StopBatchWorkflow;
+  workflowStatus?: BatchWorkflowStatus;
   now?: () => Date;
 }
+
+export interface ProjectBatchesPage {
+  batches: BatchWithPrompt[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export const FINISHED_BY_HAND_ERROR = JSON.stringify({
+  code: "finished_by_hand",
+  message: "The batch was finished by hand before this item had a result",
+});
 
 export interface CreateBatchInput {
   version?: number;
@@ -214,6 +239,61 @@ export class BatchService {
     return await this.requireBatch(batchId);
   }
 
+  async finish(batchId: EntityId<number>): Promise<Batch> {
+    const batch = await this.requireBatch(batchId);
+    if (isTerminalState(batch.state)) {
+      return batch;
+    }
+    if (batch.state === "draft") {
+      throw new ConflictError("The batch is a draft and has not started, so there is nothing to finish. Cancel it instead.");
+    }
+    await this.stopWorkflow(batch);
+    await this.closeOpenShards(batchId, batch);
+    const now = this.now();
+    await this.items.markPending(batchId, { status: "cancelled", error: FINISHED_BY_HAND_ERROR, at: now });
+    await this.batches.refreshTotals(batchId);
+    const state: BatchState = batch.cancelRequestedAt ? "cancelled" : "finished";
+    for (const from of ACTIVE_BATCH_STATES) {
+      await this.batches.transitionState(batchId, from, state, { finishedAt: now, resultsExpireAt: resultsExpireAt(now) });
+    }
+    return await this.requireBatch(batchId);
+  }
+
+  async workflowStatus(batch: Batch): Promise<string | null> {
+    if (!batch.workflowId) {
+      return null;
+    }
+    if (!this.deps.workflowStatus) {
+      return "unknown";
+    }
+    try {
+      return await this.deps.workflowStatus(batch.workflowId);
+    } catch {
+      return "unknown";
+    }
+  }
+
+  async listProjectBatches(
+    projectId: ProjectId,
+    page: number,
+    pageSize: number,
+    states?: readonly BatchState[]
+  ): Promise<ProjectBatchesPage> {
+    const [batches, total] = await Promise.all([
+      this.batches.listByProject(projectId, { offset: (page - 1) * pageSize, limit: pageSize, states }),
+      this.batches.countByProject(projectId, states),
+    ]);
+    return { batches, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
+  }
+
+  async getProjectBatch(batchId: EntityId<number>): Promise<{ batch: BatchWithPrompt; shards: BatchShard[] }> {
+    const batch = await this.batches.findWithPrompt(batchId);
+    if (!batch) {
+      throw new NotFoundError("Batch not found");
+    }
+    return { batch, shards: await this.batches.listShards(batchId) };
+  }
+
   async getBatch(batchId: EntityId<number>): Promise<{ batch: Batch; shards: BatchShard[] }> {
     const batch = await this.requireBatch(batchId);
     return { batch, shards: await this.batches.listShards(batchId) };
@@ -347,6 +427,33 @@ export class BatchService {
     await this.batches.update(batchId, { workflowId: instanceId });
   }
 
+  private async stopWorkflow(batch: Batch): Promise<void> {
+    if (!batch.workflowId || !this.deps.stopWorkflow) return;
+    try {
+      await this.deps.stopWorkflow(batch.workflowId);
+    } catch (error) {
+      console.warn("[BatchService] Could not stop the batch workflow", { batchId: batch.id, error: errorText(error) });
+    }
+  }
+
+  private async closeOpenShards(batchId: EntityId<number>, batch: Batch): Promise<void> {
+    const open = (await this.batches.listShards(batchId)).filter((shard) => !TERMINAL_SHARD_STATES.includes(shard.state));
+    for (const shard of open) {
+      if (shard.state === "submitted" && shard.providerBatchId) {
+        await this.cancelProviderBatch(batch, shard);
+      }
+      await this.batches.updateShard(batchId, shard.id, { state: "cancelled" });
+    }
+  }
+
+  private async cancelProviderBatch(batch: Batch, shard: BatchShard): Promise<void> {
+    try {
+      await this.deps.adapters(batch.provider).cancel(shard.providerBatchId!);
+    } catch (error) {
+      console.error("[BatchService] Provider cancel failed", { batchId: batch.id, shardId: shard.id, error: errorText(error) });
+    }
+  }
+
   private async cancelSubmittedShards(
     batchId: EntityId<number>,
     batch: Batch,
@@ -369,3 +476,5 @@ export class BatchService {
 }
 
 export const isTerminalState = (state: string): boolean => (TERMINAL_BATCH_STATES as readonly string[]).includes(state as BatchState);
+
+const TERMINAL_SHARD_STATES: readonly string[] = ["imported", "failed", "cancelled"];

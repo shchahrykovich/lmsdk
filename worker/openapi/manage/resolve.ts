@@ -10,6 +10,7 @@ import type { DataSet, Evaluation, Project, Prompt } from "../../db/schema";
 import { ProjectId } from "../../shared/project-id";
 import { EntityId } from "../../shared/entity-id";
 import { NotFoundError } from "../../shared/errors";
+import { batchServiceFor } from "../../batches/batch-service.factory";
 
 const NUMERIC_ID = /^\d+$/;
 
@@ -75,5 +76,14 @@ export class ManageResolver {
     }
 
     return { evaluation, evaluationId: new EntityId(evaluation.id, projectId) };
+  }
+
+  async batch(projectId: ProjectId, id: string): Promise<{ batchId: EntityId<number> }> {
+    if (!isNumericId(id)) {
+      throw new NotFoundError("Batch not found");
+    }
+    const batchId = new EntityId(Number(id), projectId);
+    await batchServiceFor(this.c.env).requireBatch(batchId);
+    return { batchId };
   }
 }

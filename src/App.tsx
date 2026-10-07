@@ -17,6 +17,8 @@ import DatasetDetail from './pages/DatasetDetail'
 import Evaluations from './pages/Evaluations'
 import EvaluationWizard from './pages/EvaluationWizard'
 import EvaluationDetail from './pages/EvaluationDetail'
+import Batches from './pages/Batches'
+import BatchDetail from './pages/BatchDetail'
 import Users from './pages/Users'
 import SignIn from './pages/SignIn'
 import SignUp from './pages/SignUp'
@@ -69,6 +71,8 @@ function App(): React.ReactNode {
           <Route path="/projects/:slug/evaluations" element={<Evaluations />} />
           <Route path="/projects/:slug/evaluations/new" element={<EvaluationWizard />} />
           <Route path="/projects/:slug/evaluations/:evaluationId" element={<EvaluationDetail />} />
+          <Route path="/projects/:slug/batches" element={<Batches />} />
+          <Route path="/projects/:slug/batches/:batchId" element={<BatchDetail />} />
           <Route path="/api-keys" element={<ApiKeys />} />
           <Route path="/users" element={<Users />} />
         </Route>

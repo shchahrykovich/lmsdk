@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { env } from "cloudflare:test";
-import { manage, setupFixtures, type Fixtures } from "./helpers";
+import { manage, seedSubmittedBatch, setupFixtures, type Fixtures } from "./helpers";
 import { bodyFor, fillPath, manageOperations, type Operation } from "./openapi";
 
-const TABLES = ["Projects", "Prompts", "PromptVersions", "PromptRouters", "DataSets", "DataSetRecords", "Evaluations", "EvaluationPrompts"];
+const TABLES = ["Projects", "Prompts", "PromptVersions", "PromptRouters", "DataSets", "DataSetRecords", "Evaluations", "EvaluationPrompts", "Batches", "BatchItems"];
 
 const snapshotTenant1 = async () => {
   const rows: Record<string, unknown[]> = {};
@@ -26,7 +26,9 @@ describe("Manage API - another tenant's ids are not reachable", () => {
       body: { name: "Tenant 1 eval", dataset: "tickets", prompts: [{ prompt: "classifier", version: 1 }] },
     });
     const { evaluation } = await created.json<{ evaluation: { id: number } }>();
+    const batch = await seedSubmittedBatch(1, f.tenant1.project.id, f.tenant1.prompt.id);
     tenant1Ids = {
+      batch: batch.id,
       project: f.tenant1.project.id,
       prompt: f.tenant1.prompt.id,
       dataset: f.tenant1.dataSet.id,

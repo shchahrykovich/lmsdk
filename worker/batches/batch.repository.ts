@@ -1,20 +1,32 @@
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import type { BatchItem as DrizzleBatchItem } from "drizzle-orm/batch";
-import { and, asc, desc, eq, inArray, isNotNull, lt, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, getTableColumns, inArray, isNotNull, lt, sql, type SQL } from "drizzle-orm";
 import {
   batches,
   batchItems,
   batchShards,
+  prompts,
   type Batch,
   type BatchShard,
   type NewBatch,
   type NewBatchShard,
 } from "../db/schema";
 import type { EntityId } from "../shared/entity-id";
+import type { ProjectId } from "../shared/project-id";
 
 export type BatchState = "draft" | "submitting" | "running" | "finished" | "failed" | "cancelled";
 
 export const TERMINAL_BATCH_STATES: readonly BatchState[] = ["finished", "failed", "cancelled"];
+
+export const ACTIVE_BATCH_STATES: readonly BatchState[] = ["submitting", "running"];
+
+export type BatchWithPrompt = Batch & { promptName: string | null; promptSlug: string | null };
+
+export interface ProjectBatchPage {
+  offset: number;
+  limit: number;
+  states?: readonly BatchState[];
+}
 
 const itemCount = (batchId: SQL | number, status: string) =>
   sql<number>`(SELECT COUNT(*) FROM ${batchItems} WHERE ${batchItems.batchId} = ${batchId} AND ${batchItems.status} = ${status})`;
@@ -72,6 +84,38 @@ export class BatchRepository {
       )
       .orderBy(desc(batches.id))
       .limit(limit);
+  }
+
+  async findWithPrompt(batchId: EntityId<number>): Promise<BatchWithPrompt | undefined> {
+    const [batch] = await this.selectWithPrompt().where(batchId.toWhereClause(batches)).limit(1);
+    return batch;
+  }
+
+  async listByProject(projectId: ProjectId, page: ProjectBatchPage): Promise<BatchWithPrompt[]> {
+    return await this.selectWithPrompt()
+      .where(this.projectScope(projectId, page.states))
+      .orderBy(desc(batches.id))
+      .limit(page.limit)
+      .offset(page.offset);
+  }
+
+  async countByProject(projectId: ProjectId, states?: readonly BatchState[]): Promise<number> {
+    const [row] = await this.db.select({ total: count() }).from(batches).where(this.projectScope(projectId, states));
+    return row?.total ?? 0;
+  }
+
+  private selectWithPrompt() {
+    return this.db
+      .select({ ...getTableColumns(batches), promptName: prompts.name, promptSlug: prompts.slug })
+      .from(batches)
+      .leftJoin(
+        prompts,
+        and(eq(prompts.id, batches.promptId), eq(prompts.tenantId, batches.tenantId), eq(prompts.projectId, batches.projectId))
+      );
+  }
+
+  private projectScope(projectId: ProjectId, states?: readonly BatchState[]): SQL | undefined {
+    return and(projectId.toWhereClause(batches), states && states.length > 0 ? inArray(batches.state, [...states]) : undefined);
   }
 
   buildAddTotalsStatement(batchId: EntityId<number>, items: number, bytes: number): DrizzleBatchItem<"sqlite"> {

@@ -18,6 +18,7 @@ import {
   Network,
   Database,
   FlaskConical,
+  Layers,
   Home,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -263,6 +264,11 @@ export default function AppLayout(): React.ReactNode {
               name: "Evaluations",
               icon: FlaskConical,
               path: `/projects/${currentProjectSlug}/evaluations`,
+            },
+            {
+              name: "Batches",
+              icon: Layers,
+              path: `/projects/${currentProjectSlug}/batches`,
             },
           ]
         : [],

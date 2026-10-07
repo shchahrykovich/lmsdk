@@ -6,7 +6,7 @@ import { seedProject } from "../helpers/seed";
 import { PromptService } from "../../../worker/prompts/prompt.service";
 import { ProjectId } from "../../../worker/shared/project-id";
 import { EntityId } from "../../../worker/shared/entity-id";
-import { BatchService, type BatchWorkflowParams } from "../../../worker/batches/batch.service";
+import { BatchService, type BatchServiceDeps, type BatchWorkflowParams } from "../../../worker/batches/batch.service";
 import { BatchRunnerService, type BatchRunnerDeps } from "../../../worker/batches/batch-runner.service";
 import { BatchFilesRepository } from "../../../worker/batches/batch-files.repository";
 import { readLines } from "../../../worker/batches/streams";
@@ -129,7 +129,7 @@ export class FakeBatchAdapter implements BatchAdapter {
   }
 }
 
-export function createBatchService(adapter: BatchAdapter, now?: () => Date) {
+export function createBatchService(adapter: BatchAdapter, now?: () => Date, extra: Partial<BatchServiceDeps> = {}) {
   const startWorkflow = vi.fn(async (_id: string, _params: BatchWorkflowParams) => undefined);
   const service = new BatchService({
     db: drizzle(env.DB),
@@ -137,6 +137,7 @@ export function createBatchService(adapter: BatchAdapter, now?: () => Date) {
     adapters: () => adapter,
     startWorkflow,
     ...(now ? { now } : {}),
+    ...extra,
   });
   return { service, startWorkflow };
 }

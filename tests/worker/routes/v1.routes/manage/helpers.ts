@@ -4,7 +4,10 @@ import app from "../../../../../worker/index";
 import { applyMigrations } from "../../../helpers/db-setup";
 import { seedDataSet, seedProject, seedPrompt } from "../../../helpers/seed";
 import { ProjectId } from "../../../../../worker/shared/project-id";
+import { EntityId } from "../../../../../worker/shared/entity-id";
+import type { Batch } from "../../../../../worker/db/schema";
 import { createApiKeyForUser, setupApiKeyUser } from "../helpers";
+import { FakeBatchAdapter, createBatchService } from "../../../batches/batch-fixtures";
 
 export const MODEL = "gpt-5-nano";
 
@@ -22,6 +25,26 @@ export const createWorkflowMock = (status = "running") => ({
 
 export type WorkflowMock = ReturnType<typeof createWorkflowMock>;
 
+export const createBatchWorkflowMock = (status = "running") => {
+  const terminate = vi.fn(async () => undefined);
+  return {
+    create: vi.fn(async ({ id }: { id: string }) => ({ id })),
+    get: vi.fn(async () => ({ status: async () => ({ status }), terminate })),
+    terminate,
+  };
+};
+
+export type BatchWorkflowMock = ReturnType<typeof createBatchWorkflowMock>;
+
+export async function seedSubmittedBatch(tenantId: number, projectId: number, promptId: number): Promise<Batch> {
+  const { service } = createBatchService(new FakeBatchAdapter());
+  const prompt = new EntityId(promptId, new ProjectId(projectId, tenantId, "seed"));
+  const { batch } = await service.createBatch(prompt, {});
+  const batchId = new EntityId(batch.id, prompt.getProjectId());
+  await service.addItems(batchId, [{ custom_id: "ticket-1", variables: { ticket: "x" } }]);
+  return await service.submit(batchId);
+}
+
 const executionCtx = {
   waitUntil: (promise: Promise<unknown>) => promise,
   passThroughOnException: () => {},
@@ -31,7 +54,7 @@ const executionCtx = {
 export const manage = (
   path: string,
   key: string | undefined,
-  options: { method?: string; body?: unknown; workflow?: WorkflowMock } = {}
+  options: { method?: string; body?: unknown; workflow?: WorkflowMock; batchWorkflow?: BatchWorkflowMock } = {}
 ) => {
   const headers = new Headers({ "Content-Type": "application/json" });
   if (key !== undefined) {
@@ -44,7 +67,11 @@ export const manage = (
       headers,
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
     },
-    { ...env, EVALUATION_WORKFLOW: options.workflow ?? createWorkflowMock() },
+    {
+      ...env,
+      EVALUATION_WORKFLOW: options.workflow ?? createWorkflowMock(),
+      BATCH_WORKFLOW: options.batchWorkflow ?? createBatchWorkflowMock(),
+    },
     executionCtx as unknown as ExecutionContext
   );
 };

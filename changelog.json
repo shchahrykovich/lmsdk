@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.1.22",
+    "date": "2026-10-07",
+    "changes": [
+      "Batches page per project: state, progress, cost, provider batches and items of every batch, with filters for active, finished, failed and cancelled",
+      "Cancel a batch, or finish a stuck batch by hand, from the UI and the Management API. Finish keeps the results that arrived and marks the other items cancelled",
+      "Management API: list and get batches with the status of their background run, cancel and finish them"
+    ]
+  },
+  {
     "version": "0.1.21",
     "date": "2026-10-05",
     "changes": [

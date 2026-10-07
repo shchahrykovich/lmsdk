@@ -61,6 +61,8 @@ export const validBodies: Record<string, unknown> = {
     dataset: "tickets",
     prompts: [{ prompt: "classifier", version: 1 }],
   },
+  "POST /api/v1/manage/projects/{project}/batches/{batch}/cancel": {},
+  "POST /api/v1/manage/projects/{project}/batches/{batch}/finish": {},
 };
 
 export const bodyFor = (operation: Operation): unknown => validBodies[`${operation.method} ${operation.path}`];

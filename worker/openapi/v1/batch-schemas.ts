@@ -1,9 +1,21 @@
 import { z } from "zod";
 import type { Batch, BatchShard } from "../../db/schema";
 import type { ResultItem } from "../../batches/batch.service";
+import { ACTIVE_BATCH_STATES, type BatchState, type BatchWithPrompt } from "../../batches/batch.repository";
 
 export const BATCH_STATES = ["draft", "submitting", "running", "finished", "failed", "cancelled"] as const;
 export const ITEM_STATUSES = ["pending", "succeeded", "errored", "expired", "cancelled"] as const;
+export const BATCH_STATE_FILTERS = [...BATCH_STATES, "active"] as const;
+
+export type BatchStateFilter = (typeof BATCH_STATE_FILTERS)[number];
+
+export const statesFor = (filter?: BatchStateFilter): readonly BatchState[] | undefined => {
+  if (!filter) return undefined;
+  return filter === "active" ? ACTIVE_BATCH_STATES : [filter];
+};
+
+export const isBatchStateFilter = (value: string): value is BatchStateFilter =>
+  (BATCH_STATE_FILTERS as readonly string[]).includes(value);
 
 const UsageSchema = z
   .object({
@@ -52,6 +64,21 @@ export const BatchSchema = z.object({
   finished_at: z.string().nullable(),
   results_expire_at: z.string().nullable().describe("After this time the batch and its results are deleted"),
 });
+
+export const ProjectBatchSchema = BatchSchema.extend({
+  prompt: z.object({
+    id: z.number(),
+    name: z.string().nullable(),
+    slug: z.string().nullable(),
+  }),
+});
+
+export const WorkflowStatusSchema = z
+  .string()
+  .nullable()
+  .describe(
+    "Status of the background run: queued, running, waiting, paused, errored, terminated, complete, unknown. Null when the batch was never submitted. A batch in submitting or running whose run is errored, terminated or complete is stuck: finish it."
+  );
 
 export const BatchResultItemSchema = z.object({
   custom_id: z.string(),
@@ -115,6 +142,13 @@ export function serializeBatch(batch: Batch, shards: BatchShard[] = []): z.infer
     submitted_at: iso(batch.submittedAt),
     finished_at: iso(batch.finishedAt),
     results_expire_at: iso(batch.resultsExpireAt),
+  };
+}
+
+export function serializeProjectBatch(row: BatchWithPrompt, shards: BatchShard[] = []): z.infer<typeof ProjectBatchSchema> {
+  return {
+    ...serializeBatch(row, shards),
+    prompt: { id: row.promptId, name: row.promptName, slug: row.promptSlug },
   };
 }
 

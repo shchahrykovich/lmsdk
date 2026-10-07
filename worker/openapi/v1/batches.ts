@@ -1,15 +1,13 @@
 import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { Context } from "hono";
-import { drizzle } from "drizzle-orm/d1";
 import type { HonoEnv } from "../../routes/app";
 import { ManageResolver } from "../manage/resolve";
 import { EntityId } from "../../shared/entity-id";
 import { ClientInputValidationError, NotFoundError } from "../../shared/errors";
 import { BatchService, MAX_ITEMS_PER_CALL, BATCH_RESULTS_RETENTION_DAYS } from "../../batches/batch.service";
-import { BatchFilesRepository } from "../../batches/batch-files.repository";
-import { BatchProviderNotConfiguredError, createBatchAdapterFactory } from "../../batches/adapters/adapter-factory";
-import { providerConfigFromEnv } from "../../providers/provider-factory";
+import { BatchProviderNotConfiguredError } from "../../batches/adapters/adapter-factory";
+import { batchServiceFor } from "../../batches/batch-service.factory";
 import { UnprocessableEntityError } from "../../shared/errors";
 import { ErrorResponse } from "./schemas";
 import {
@@ -50,14 +48,7 @@ const conflict = { "409": json(ErrorResponse, "The batch is not in a state that 
 const RETENTION = `Results are kept for ${BATCH_RESULTS_RETENTION_DAYS} days after the batch ends, then the batch and its results are deleted.`;
 
 export function createBatchService(c: Context<HonoEnv>): BatchService {
-  return new BatchService({
-    db: drizzle(c.env.DB),
-    files: new BatchFilesRepository(c.env.PRIVATE_FILES),
-    adapters: createBatchAdapterFactory(providerConfigFromEnv(c.env)),
-    startWorkflow: async (id, params) => {
-      await c.env.BATCH_WORKFLOW.create({ id, params });
-    },
-  });
+  return batchServiceFor(c.env);
 }
 
 async function resolvePrompt(c: Context<HonoEnv>, params: z.infer<typeof promptParams>) {
