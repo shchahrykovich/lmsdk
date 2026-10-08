@@ -1,11 +1,19 @@
 import {useState, useEffect, type JSX} from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import ProjectPageHeader from "@/components/ProjectPageHeader";
 import { Button } from "@/components/ui/button";
-import { ChevronsDownUp, ChevronsUpDown, Maximize2 } from "lucide-react";
+import { ChevronsDownUp, ChevronsUpDown, Maximize2, RotateCcw } from "lucide-react";
 import EvaluationFullScreenDialog from "@/components/EvaluationFullScreenDialog";
 import EvaluationResultsTable from "@/components/EvaluationResultsTable";
 import EvaluationActivityPanel from "@/components/EvaluationActivityPanel";
+import EvaluationSummaryCard from "@/components/EvaluationSummaryCard";
+import {
+  saveComparisonReview,
+  saveEvaluationSummary,
+  withSavedReview,
+  type ComparisonPairKey,
+  type ComparisonReview,
+} from "@/lib/evaluation-review";
 import { isActiveEvaluationState, type EvaluationActivity, type VersionLabels } from "@/lib/evaluation-activity";
 
 const ACTIVITY_REFRESH_MS = 5000;
@@ -21,6 +29,8 @@ interface Evaluation {
   durationMs: number | null;
   inputSchema: string;
   outputSchema: string;
+  summary: string | null;
+  baseEvaluationId: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -50,6 +60,7 @@ interface EvaluationDetails {
   evaluation: Evaluation;
   prompts: Prompt[];
   results: ResultRow[];
+  comparisons: ComparisonReview[];
 }
 
 interface Project {
@@ -64,6 +75,7 @@ interface Project {
 
 export default function EvaluationDetail(): JSX.Element {
   const { slug, evaluationId } = useParams<{ slug: string; evaluationId: string }>();
+  const navigate = useNavigate();
   const [details, setDetails] = useState<EvaluationDetails | null>(null);
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
@@ -149,7 +161,21 @@ export default function EvaluationDetail(): JSX.Element {
     );
   }
 
-  const { evaluation, prompts, results } = details;
+  const { evaluation, prompts, results, comparisons } = details;
+  const rerunPath = `/projects/${slug}/evaluations/new?reuse=${evaluation.id}`;
+
+  const handleSaveSummary = async (summary: string | null) => {
+    const saved = await saveEvaluationSummary(project.id, evaluation.id, summary);
+    setDetails((prev) => (prev ? { ...prev, evaluation: { ...prev.evaluation, summary: saved } } : prev));
+  };
+
+  const handleSaveComparison = async (
+    key: ComparisonPairKey,
+    review: { description: string | null; score: number | null }
+  ) => {
+    const saved = await saveComparisonReview(project.id, evaluation.id, key, review);
+    setDetails((prev) => (prev ? { ...prev, comparisons: withSavedReview(prev.comparisons, saved) } : prev));
+  };
   const versionLabels: VersionLabels = Object.fromEntries(
     prompts.map((prompt) => [prompt.versionId, `${prompt.promptName} v${prompt.version}`])
   );
@@ -163,6 +189,25 @@ export default function EvaluationDetail(): JSX.Element {
       />
 
       <div className="flex-1 overflow-y-auto px-8 py-6 space-y-4">
+        <div className="flex justify-end">
+          <Button variant="outline" size="sm" className="gap-2" asChild>
+            <a
+              href={rerunPath}
+              onClick={(event) => {
+                if (event.metaKey || event.ctrlKey) {
+                  return;
+                }
+                event.preventDefault();
+                void navigate(rerunPath);
+              }}
+              title="Start a new evaluation that reuses the results of this one"
+            >
+              <RotateCcw className="h-4 w-4" />
+              Re-run with a new version
+            </a>
+          </Button>
+        </div>
+        <EvaluationSummaryCard summary={evaluation.summary} onSave={handleSaveSummary} />
         {activity && (
           <EvaluationActivityPanel
             state={evaluation.state}
@@ -231,6 +276,8 @@ export default function EvaluationDetail(): JSX.Element {
         setCurrentRecordIndex={setCurrentRecordIndex}
         results={results}
         prompts={prompts}
+        comparisons={comparisons}
+        onSaveComparison={handleSaveComparison}
       />
     </div>
   );

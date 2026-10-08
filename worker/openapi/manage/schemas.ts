@@ -188,7 +188,22 @@ export const EvaluationSchema = z.object({
   datasetId: z.number().nullable(),
   workflowId: z.string().nullable(),
   durationMs: z.number().nullable(),
+  summary: z.string().nullable().describe("Written description of the evaluation result"),
+  baseEvaluationId: z.number().nullable().describe("Evaluation whose results were reused, if any"),
   createdAt: z.string(),
+});
+
+export const EvaluationComparisonSchema = z.object({
+  recordId: z.number(),
+  leftVersionId: z.number(),
+  rightVersionId: z.number(),
+  description: z.string().nullable(),
+  score: z
+    .number()
+    .int()
+    .nullable()
+    .describe("-2 left much better, -1 left better, 0 equal, 1 right better, 2 right much better"),
+  updatedAt: z.string(),
 });
 
 export const RecordsBodySchema = z.object({
@@ -204,3 +219,4 @@ export type PromptDto = z.infer<typeof PromptSchema>;
 export type PromptVersionDto = z.infer<typeof PromptVersionSchema>;
 export type DataSetDto = z.infer<typeof DataSetSchema>;
 export type EvaluationDto = z.infer<typeof EvaluationSchema>;
+export type EvaluationComparisonDto = z.infer<typeof EvaluationComparisonSchema>;

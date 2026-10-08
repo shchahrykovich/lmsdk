@@ -3,7 +3,7 @@ import { env } from "cloudflare:test";
 import { manage, seedSubmittedBatch, setupFixtures, type Fixtures } from "./helpers";
 import { bodyFor, fillPath, manageOperations, type Operation } from "./openapi";
 
-const TABLES = ["Projects", "Prompts", "PromptVersions", "PromptRouters", "DataSets", "DataSetRecords", "Evaluations", "EvaluationPrompts", "Batches", "BatchItems"];
+const TABLES = ["Projects", "Prompts", "PromptVersions", "PromptRouters", "DataSets", "DataSetRecords", "Evaluations", "EvaluationPrompts", "EvaluationComparisons", "Batches", "BatchItems"];
 
 const snapshotTenant1 = async () => {
   const rows: Record<string, unknown[]> = {};

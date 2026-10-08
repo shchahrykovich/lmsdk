@@ -66,6 +66,7 @@ const validateCreateEvaluationRequest = (body: {
   type?: unknown;
   datasetId?: unknown;
   prompts?: unknown;
+  baseEvaluationId?: unknown;
 }):
   | { error: string; status: 400 }
   | {
@@ -73,8 +74,9 @@ const validateCreateEvaluationRequest = (body: {
       type: "run" | "comparison";
       datasetId: number;
       prompts: { promptId: number; versionId: number }[];
+      baseEvaluationId?: number;
     } => {
-  const { name, type, datasetId, prompts } = body;
+  const { name, type, datasetId, prompts, baseEvaluationId } = body;
 
   if (!name || typeof name !== "string" || !name.trim()) {
     return { error: "Name is required", status: 400 };
@@ -105,13 +107,85 @@ const validateCreateEvaluationRequest = (body: {
     return { error: "Maximum of 3 prompts allowed", status: 400 };
   }
 
+  const base = parseBaseEvaluationId(baseEvaluationId);
+  if (!base.valid) {
+    return { error: "Valid base evaluation ID is required", status: 400 };
+  }
+
   return {
     name: name.trim(),
     type: evaluationType,
     datasetId: parsedDatasetId,
     prompts: parsedPrompts,
+    ...(base.baseEvaluationId === undefined ? {} : { baseEvaluationId: base.baseEvaluationId }),
   };
 };
+
+const parseBaseEvaluationId = (value: unknown): { valid: boolean; baseEvaluationId?: number } => {
+  if (value === undefined || value === null || value === "") return { valid: true };
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? { valid: true, baseEvaluationId: parsed } : { valid: false };
+};
+
+const parseNullableText = (value: unknown, field: string): string | null => {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string") {
+    throw new ClientInputValidationError(`${field} must be a string or null`);
+  }
+  return value;
+};
+
+const parseNullableScore = (value: unknown): number | null => {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "number") {
+    throw new ClientInputValidationError("score must be a number or null");
+  }
+  return value;
+};
+
+const parsePositiveInteger = (value: unknown, field: string): number => {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new ClientInputValidationError(`Valid ${field} is required`);
+  }
+  return parsed;
+};
+
+/**
+ * PATCH /api/projects/:projectId/evaluations/:evaluationId
+ * Update the written summary of the evaluation result
+ */
+evaluations.patch("/:projectId/evaluations/:evaluationId", async (c) => {
+  const evaluationId = EntityId.parse(c, "evaluationId");
+  const body = await c.req.json<{ summary?: unknown }>();
+  const summary = parseNullableText(body.summary, "summary");
+
+  const evaluation = await new EvaluationService(c.env.DB).updateSummary(evaluationId, summary);
+  return c.json({ evaluation });
+});
+
+/**
+ * PUT /api/projects/:projectId/evaluations/:evaluationId/comparisons
+ * Save the manual description and score of one record for one pair of prompt versions
+ */
+evaluations.put("/:projectId/evaluations/:evaluationId/comparisons", async (c) => {
+  const evaluationId = EntityId.parse(c, "evaluationId");
+  const body = await c.req.json<Record<string, unknown>>();
+
+  const comparison = await new EvaluationService(c.env.DB).saveComparison(
+    evaluationId,
+    {
+      recordId: parsePositiveInteger(body.recordId, "recordId"),
+      leftVersionId: parsePositiveInteger(body.leftVersionId, "leftVersionId"),
+      rightVersionId: parsePositiveInteger(body.rightVersionId, "rightVersionId"),
+    },
+    {
+      description: parseNullableText(body.description, "description"),
+      score: parseNullableScore(body.score),
+    }
+  );
+  return c.json({ comparison });
+});
 
 /**
  * POST /api/projects/:projectId/evaluations

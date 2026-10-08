@@ -61,6 +61,14 @@ export const validBodies: Record<string, unknown> = {
     dataset: "tickets",
     prompts: [{ prompt: "classifier", version: 1 }],
   },
+  "PATCH /api/v1/manage/projects/{project}/evaluations/{evaluation}": { summary: "v2 wins on short tickets" },
+  "PUT /api/v1/manage/projects/{project}/evaluations/{evaluation}/comparisons": {
+    recordId: 1,
+    leftVersionId: 1,
+    rightVersionId: 2,
+    description: "Right is shorter",
+    score: 1,
+  },
   "POST /api/v1/manage/projects/{project}/batches/{batch}/cancel": {},
   "POST /api/v1/manage/projects/{project}/batches/{batch}/finish": {},
 };

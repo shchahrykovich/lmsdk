@@ -11,7 +11,13 @@ import {
   ManageSetActiveVersion,
 } from "./prompts";
 import { ManageAddRecords, ManageCreateDataSet, ManageGetDataSet } from "./datasets";
-import { ManageCreateEvaluation, ManageGetEvaluation, ManageListEvaluations } from "./evaluations";
+import {
+  ManageCreateEvaluation,
+  ManageGetEvaluation,
+  ManageListEvaluations,
+  ManageSaveEvaluationComparison,
+  ManageUpdateEvaluation,
+} from "./evaluations";
 import { ManageCancelBatch, ManageFinishBatch, ManageGetBatch, ManageListBatches } from "./batches";
 
 export const MANAGE_BASE_PATH = "/api/v1/manage";
@@ -40,6 +46,8 @@ export function registerManageRoutes(openapi: HonoOpenAPIRouterType<HonoEnv>): v
   openapi.get(`${project}/evaluations`, ManageListEvaluations);
   openapi.post(`${project}/evaluations`, ManageCreateEvaluation);
   openapi.get(`${project}/evaluations/:evaluation`, ManageGetEvaluation);
+  openapi.patch(`${project}/evaluations/:evaluation`, ManageUpdateEvaluation);
+  openapi.put(`${project}/evaluations/:evaluation/comparisons`, ManageSaveEvaluationComparison);
 
   openapi.get(`${project}/batches`, ManageListBatches);
   openapi.get(`${project}/batches/:batch`, ManageGetBatch);

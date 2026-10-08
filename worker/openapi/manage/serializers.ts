@@ -1,5 +1,6 @@
 import type { DataSet, Evaluation, Project, Prompt, PromptVersion } from "../../db/schema";
-import type { DataSetDto, EvaluationDto, ProjectDto, PromptDto, PromptVersionDto } from "./schemas";
+import type { ComparisonView } from "../../evaluations/evaluation.service";
+import type { DataSetDto, EvaluationComparisonDto, EvaluationDto, ProjectDto, PromptDto, PromptVersionDto } from "./schemas";
 
 const parseJson = (value: string | null | undefined): unknown => {
   if (!value) {
@@ -59,7 +60,14 @@ export const serializeEvaluation = (evaluation: Evaluation): EvaluationDto => ({
   datasetId: evaluation.datasetId,
   workflowId: evaluation.workflowId,
   durationMs: evaluation.durationMs,
+  summary: evaluation.summary,
+  baseEvaluationId: evaluation.baseEvaluationId,
   createdAt: toIso(evaluation.createdAt),
+});
+
+export const serializeComparison = (comparison: ComparisonView): EvaluationComparisonDto => ({
+  ...comparison,
+  updatedAt: toIso(comparison.updatedAt),
 });
 
 export const parseResult = parseJson;

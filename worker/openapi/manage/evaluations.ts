@@ -8,8 +8,15 @@ import { PromptService } from "../../prompts/prompt.service";
 import { PromptVersionId } from "../../prompts/prompt-version-id";
 import { ClientInputValidationError, NotFoundError } from "../../shared/errors";
 import { ManageResolver } from "./resolve";
-import { parseResult, serializeEvaluation } from "./serializers";
+import { parseResult, serializeComparison, serializeEvaluation } from "./serializers";
 import {
+  COMPARISON_DESCRIPTION_MAX_LENGTH,
+  COMPARISON_SCORE_MAX,
+  COMPARISON_SCORE_MIN,
+  SUMMARY_MAX_LENGTH,
+} from "../../evaluations/evaluation-review-limits";
+import {
+  EvaluationComparisonSchema,
   EvaluationSchema,
   MANAGE_TAG,
   SlugOrId,
@@ -77,6 +84,8 @@ export class ManageCreateEvaluation extends OpenAPIRoute {
       "Each record x version is one paid model call.",
       "Poll GET .../evaluations/{evaluation} for the results.",
       "A repeat with the same name returns 409.",
+      "Set reuseResultsFrom to copy results from an earlier evaluation on the same dataset:",
+      "calls for a prompt version that the earlier evaluation already ran are not sent again.",
     ].join(" "),
     security: manageSecurity,
     request: {
@@ -91,6 +100,9 @@ export class ManageCreateEvaluation extends OpenAPIRoute {
             .min(1)
             .max(MAX_PROMPTS_PER_EVALUATION)
             .describe("1 to 3 prompt versions to compare, by prompt slug or id and version number"),
+          reuseResultsFrom: SlugOrId.optional().describe(
+            "Slug or id of an earlier evaluation on the same dataset. Its results are copied for the prompt versions both evaluations share, so only the other versions are run."
+          ),
         })
       ),
     },
@@ -119,6 +131,8 @@ export class ManageCreateEvaluation extends OpenAPIRoute {
       prompts.push({ promptId: prompt.id, versionId: version.id });
     }
 
+    const base = body.reuseResultsFrom ? await resolver.evaluation(projectId, body.reuseResultsFrom) : undefined;
+
     const evaluation = await new EvaluationService(c.env.DB).createAndStartEvaluation(
       projectId,
       {
@@ -126,6 +140,7 @@ export class ManageCreateEvaluation extends OpenAPIRoute {
         type: body.type ?? (prompts.length > 1 ? "comparison" : "run"),
         datasetId: dataSet.id,
         prompts,
+        ...(base ? { baseEvaluationId: base.evaluation.id } : {}),
       },
       c.env.EVALUATION_WORKFLOW
     );
@@ -158,8 +173,11 @@ export class ManageGetEvaluation extends OpenAPIRoute {
               ),
             })
           ),
+          comparisons: z
+            .array(EvaluationComparisonSchema)
+            .describe("Manual reviews: one per record and pair of prompt versions that someone reviewed"),
         }),
-        "The evaluation, the status of its background run, and one entry per record with results"
+        "The evaluation, the status of its background run, one entry per record with results, and the manual reviews"
       ),
       ...errorResponses,
       ...notFoundResponse,
@@ -187,6 +205,86 @@ export class ManageGetEvaluation extends OpenAPIRoute {
         variables: parseResult(record.variables),
         outputs: record.outputs.map((output) => ({ ...output, result: parseResult(output.result) })),
       })),
+      comparisons: details.comparisons.map(serializeComparison),
     });
+  }
+}
+
+const evaluationParams = z.object({ project: SlugOrId, evaluation: SlugOrId });
+
+export class ManageUpdateEvaluation extends OpenAPIRoute {
+  schema = {
+    tags: [MANAGE_TAG],
+    summary: "Update the evaluation summary",
+    description: "Sets the written description of the evaluation result. Send null or an empty string to clear it. Safe to repeat.",
+    security: manageSecurity,
+    request: {
+      params: evaluationParams,
+      body: jsonBody(z.object({ summary: z.string().max(SUMMARY_MAX_LENGTH).nullable() })),
+    },
+    responses: {
+      "200": jsonContent(z.object({ evaluation: EvaluationSchema }), "The updated evaluation"),
+      ...errorResponses,
+      ...notFoundResponse,
+    },
+  };
+
+  async handle(c: Context<HonoEnv>): Promise<Response> {
+    const { params, body } = await this.getValidatedData<typeof this.schema>();
+    const resolver = new ManageResolver(c);
+    const { projectId } = await resolver.project(params.project);
+    const { evaluationId } = await resolver.evaluation(projectId, params.evaluation);
+    const evaluation = await new EvaluationService(c.env.DB).updateSummary(evaluationId, body.summary);
+    return c.json({ evaluation: serializeEvaluation(evaluation) });
+  }
+}
+
+export class ManageSaveEvaluationComparison extends OpenAPIRoute {
+  schema = {
+    tags: [MANAGE_TAG],
+    summary: "Save a manual review of one comparison",
+    description: [
+      "Sets the manual description and score for one record and one pair of prompt versions.",
+      "Use the versionId values from GET .../evaluations/{evaluation}.",
+      "The score compares the right version with the left one.",
+      "A repeat replaces the earlier review. Null clears a field.",
+    ].join(" "),
+    security: manageSecurity,
+    request: {
+      params: evaluationParams,
+      body: jsonBody(
+        z.object({
+          recordId: z.number().int().positive(),
+          leftVersionId: z.number().int().positive(),
+          rightVersionId: z.number().int().positive(),
+          description: z.string().max(COMPARISON_DESCRIPTION_MAX_LENGTH).nullable(),
+          score: z
+            .number()
+            .int()
+            .min(COMPARISON_SCORE_MIN)
+            .max(COMPARISON_SCORE_MAX)
+            .nullable()
+            .describe("-2 left much better, -1 left better, 0 equal, 1 right better, 2 right much better"),
+        })
+      ),
+    },
+    responses: {
+      "200": jsonContent(z.object({ comparison: EvaluationComparisonSchema }), "The saved review"),
+      ...errorResponses,
+      ...notFoundResponse,
+    },
+  };
+
+  async handle(c: Context<HonoEnv>): Promise<Response> {
+    const { params, body } = await this.getValidatedData<typeof this.schema>();
+    const resolver = new ManageResolver(c);
+    const { projectId } = await resolver.project(params.project);
+    const { evaluationId } = await resolver.evaluation(projectId, params.evaluation);
+    const comparison = await new EvaluationService(c.env.DB).saveComparison(
+      evaluationId,
+      { recordId: body.recordId, leftVersionId: body.leftVersionId, rightVersionId: body.rightVersionId },
+      { description: body.description, score: body.score }
+    );
+    return c.json({ comparison: serializeComparison(comparison) });
   }
 }

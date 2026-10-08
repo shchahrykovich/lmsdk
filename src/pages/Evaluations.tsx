@@ -21,6 +21,7 @@ interface Evaluation {
   durationMs: number | null;
   inputSchema: string;
   outputSchema: string;
+  summary: string | null;
   createdAt: string;
   updatedAt: string;
   datasetName: string | null;
@@ -226,6 +227,11 @@ export default function Evaluations(): React.ReactNode {
                       <div className="text-sm font-medium text-foreground">
                         {evaluation.name}
                       </div>
+                      {evaluation.summary && (
+                        <div className="text-xs text-muted-foreground max-w-md truncate" title={evaluation.summary}>
+                          {evaluation.summary}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-muted-foreground">

@@ -228,6 +228,18 @@ export class EvaluationRepository {
     return evaluation;
   }
 
+  async updateSummary(
+    entityId: EntityId,
+    summary: string | null
+  ): Promise<Evaluation | undefined> {
+    const [evaluation] = await this.db
+      .update(evaluations)
+      .set({ summary, updatedAt: new Date() })
+      .where(entityId.toWhereClause(evaluations))
+      .returning();
+    return evaluation;
+  }
+
   async delete(
     entityId: EntityId
   ): Promise<Evaluation | undefined> {

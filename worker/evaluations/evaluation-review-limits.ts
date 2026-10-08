@@ -1,0 +1,4 @@
+export const SUMMARY_MAX_LENGTH = 20000;
+export const COMPARISON_DESCRIPTION_MAX_LENGTH = 5000;
+export const COMPARISON_SCORE_MIN = -2;
+export const COMPARISON_SCORE_MAX = 2;

@@ -5,6 +5,7 @@ export type ActivityEventType =
   | "call_started"
   | "call_succeeded"
   | "call_failed"
+  | "results_reused"
   | "finished"
   | "failed";
 
@@ -15,6 +16,8 @@ export interface ActivityEventDetails {
   model?: string;
   durationMs?: number;
   error?: string;
+  reusedCalls?: number;
+  baseEvaluationId?: number;
 }
 
 export interface ActivityEvent {
@@ -32,6 +35,7 @@ export interface ActivityProgress {
   succeededCalls: number;
   sentAttempts: number;
   failedAttempts: number;
+  reusedCalls?: number;
   lastEventAt: string | null;
 }
 
@@ -88,6 +92,8 @@ export function describeEvent(event: ActivityEvent, labels: VersionLabels): stri
       return withDuration(`Answer for record #${event.recordId} from ${versionLabel(event, labels)}`, details.durationMs, " in ");
     case "call_failed":
       return describeFailedCall(event, labels);
+    case "results_reused":
+      return `Reused ${plural(details.reusedCalls ?? 0, "result")} from evaluation #${details.baseEvaluationId ?? "?"}`;
     case "finished":
       return withDuration("Finished", details.durationMs, " in ");
     case "failed":
@@ -95,13 +101,16 @@ export function describeEvent(event: ActivityEvent, labels: VersionLabels): stri
   }
 }
 
+const doneCalls = (progress: ActivityProgress): number => progress.succeededCalls + (progress.reusedCalls ?? 0);
+
 export function describeProgress(progress: ActivityProgress): string {
-  const done = `${progress.succeededCalls} of ${plural(progress.totalCalls, "call")} done`;
+  const reused = progress.reusedCalls ? ` (${progress.reusedCalls} reused)` : "";
+  const done = `${doneCalls(progress)} of ${plural(progress.totalCalls, "call")} done${reused}`;
   return progress.failedAttempts > 0 ? `${done} · ${plural(progress.failedAttempts, "failed attempt")}` : done;
 }
 
 export const progressPercent = (progress: ActivityProgress): number =>
-  progress.totalCalls > 0 ? Math.min(100, Math.round((progress.succeededCalls / progress.totalCalls) * 100)) : 0;
+  progress.totalCalls > 0 ? Math.min(100, Math.round((doneCalls(progress) / progress.totalCalls) * 100)) : 0;
 
 function waitingStatus(event: ActivityEvent, labels: VersionLabels, waitedMs: number): ActivityStatus {
   const call = `record #${event.recordId} from ${versionLabel(event, labels)}`;

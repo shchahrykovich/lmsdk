@@ -1,8 +1,9 @@
 /* eslint-disable sonarjs/function-return-type */
 import type * as React from "react";
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import ProjectPageHeader from "@/components/ProjectPageHeader";
+import EvaluationReuseSelect, { NO_REUSE, type ReusableEvaluation } from "@/components/EvaluationReuseSelect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -58,9 +59,21 @@ const createSelection = (promptId: string, versionId: string): PromptSelection =
   versionId,
 });
 
+const MAX_PROMPTS = 3;
+
+const withBasePrompts = (selections: PromptSelection[], base: ReusableEvaluation): PromptSelection[] => {
+  const present = new Set(selections.map((selection) => selection.versionId));
+  const missing = base.prompts
+    .filter((prompt) => !present.has(String(prompt.versionId)))
+    .map((prompt) => createSelection(String(prompt.promptId), String(prompt.versionId)));
+  return [...selections, ...missing].slice(0, MAX_PROMPTS);
+};
+
 export default function EvaluationWizard(): React.ReactNode {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const reuseParam = searchParams.get("reuse");
   const [project, setProject] = useState<Project | null>(null);
   const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
@@ -68,6 +81,9 @@ export default function EvaluationWizard(): React.ReactNode {
   const [name, setName] = useState("");
   const [datasetId, setDatasetId] = useState("");
   const [selections, setSelections] = useState<PromptSelection[]>([]);
+  const [pastEvaluations, setPastEvaluations] = useState<ReusableEvaluation[]>([]);
+  const [baseEvaluationId, setBaseEvaluationId] = useState(NO_REUSE);
+  const [reuseParamApplied, setReuseParamApplied] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedPromptId, setSelectedPromptId] = useState("");
   const [selectedVersionId, setSelectedVersionId] = useState("");
@@ -83,8 +99,21 @@ export default function EvaluationWizard(): React.ReactNode {
     if (project) {
       void fetchPrompts(project.id);
       void fetchDatasets(project.id);
+      void fetchPastEvaluations(project.id);
     }
   }, [project]);
+
+  useEffect(() => {
+    if (reuseParamApplied || !reuseParam || pastEvaluations.length === 0) {
+      return;
+    }
+    setReuseParamApplied(true);
+    const base = pastEvaluations.find((evaluation) => evaluation.id === Number(reuseParam));
+    if (base?.datasetId) {
+      setDatasetId(String(base.datasetId));
+      applyBase(base);
+    }
+  }, [reuseParam, reuseParamApplied, pastEvaluations]);
 
   // Auto-generate evaluation name when dataset or prompts change
   useEffect(() => {
@@ -182,6 +211,55 @@ export default function EvaluationWizard(): React.ReactNode {
     }
   };
 
+  const fetchPastEvaluations = async (projectId: number) => {
+    try {
+      const response = await fetch(`/api/projects/${projectId}/evaluations?page=1&pageSize=100`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch evaluations: ${response.statusText}`);
+      }
+      const data = (await response.json()) as { evaluations?: ReusableEvaluation[] };
+      setPastEvaluations(data.evaluations ?? []);
+    } catch (err) {
+      console.error("Error fetching evaluations:", err);
+    }
+  };
+
+  const reusableEvaluations = useMemo(
+    () => pastEvaluations.filter((evaluation) => datasetId && evaluation.datasetId === Number(datasetId)),
+    [pastEvaluations, datasetId]
+  );
+
+  const applyBase = (base: ReusableEvaluation) => {
+    setBaseEvaluationId(String(base.id));
+    setSelections((prev) => withBasePrompts(prev, base));
+    if (project) {
+      for (const promptId of new Set(base.prompts.map((prompt) => prompt.promptId))) {
+        if (!promptVersions[promptId]) {
+          void fetchPromptVersions(project.id, promptId);
+        }
+      }
+    }
+  };
+
+  const baseVersionIds = useMemo(() => {
+    const base = pastEvaluations.find((evaluation) => evaluation.id === Number(baseEvaluationId));
+    return new Set(base?.prompts.map((prompt) => String(prompt.versionId)) ?? []);
+  }, [pastEvaluations, baseEvaluationId]);
+
+  const handleDatasetChange = (value: string) => {
+    setDatasetId(value);
+    setBaseEvaluationId(NO_REUSE);
+  };
+
+  const handleBaseChange = (value: string) => {
+    const base = pastEvaluations.find((evaluation) => evaluation.id === Number(value));
+    if (base) {
+      applyBase(base);
+    } else {
+      setBaseEvaluationId(NO_REUSE);
+    }
+  };
+
   const fetchPromptVersions = async (projectId: number, promptId: number) => {
     try {
       const response = await fetch(
@@ -258,6 +336,7 @@ export default function EvaluationWizard(): React.ReactNode {
               promptId: Number(selection.promptId),
               versionId: Number(selection.versionId),
             })),
+            ...(baseEvaluationId === NO_REUSE ? {} : { baseEvaluationId: Number(baseEvaluationId) }),
           }),
         }
       );
@@ -336,7 +415,7 @@ export default function EvaluationWizard(): React.ReactNode {
 
           <div className="space-y-2">
             <Label htmlFor="dataset-select">Dataset</Label>
-            <Select value={datasetId} onValueChange={setDatasetId}>
+            <Select value={datasetId} onValueChange={handleDatasetChange}>
               <SelectTrigger id="dataset-select">
                 <SelectValue placeholder="Select a dataset" />
               </SelectTrigger>
@@ -356,6 +435,13 @@ export default function EvaluationWizard(): React.ReactNode {
             </Select>
           </div>
 
+          <EvaluationReuseSelect
+            evaluations={reusableEvaluations}
+            value={baseEvaluationId}
+            onChange={handleBaseChange}
+            disabled={!datasetId}
+          />
+
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-medium text-foreground">Prompts</h2>
@@ -363,13 +449,13 @@ export default function EvaluationWizard(): React.ReactNode {
                 variant="outline"
                 size="sm"
                 onClick={handleOpenDialog}
-                disabled={selections.length >= 3}
+                disabled={selections.length >= MAX_PROMPTS}
               >
                 <Plus size={16} />
                 Add prompt
               </Button>
             </div>
-            {selections.length >= 3 && (
+            {selections.length >= MAX_PROMPTS && (
               <div className="text-xs text-muted-foreground">
                 Maximum of 3 prompts reached
               </div>
@@ -403,6 +489,13 @@ export default function EvaluationWizard(): React.ReactNode {
                           ? `v${version.version} • ${version.name}`
                           : "Unknown version"}
                       </div>
+                      {baseEvaluationId !== NO_REUSE && (
+                        <div className="text-xs mt-1 text-muted-foreground">
+                          {baseVersionIds.has(selection.versionId)
+                            ? "Results reused from the chosen evaluation"
+                            : "Will run on every record"}
+                        </div>
+                      )}
                     </div>
 
                     <Button

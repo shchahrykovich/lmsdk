@@ -52,14 +52,16 @@ describe("EvaluationWorkflow - execution logs", () => {
     expect(await readFile(`${logs[0].logPath}/variables.json`)).toEqual({ word: "zinc" });
   });
 
-  it("writes a failed log row when the provider call fails, and still fails the step", async () => {
+  it("writes a failed log row for each failed provider call, and still fails the step", async () => {
     mockResponsesCreate.mockRejectedValue(new Error("The model `gpt-4o-mini` does not exist"));
 
     await expect(runWorkflow(fixture.payload)).rejects.toThrow("does not exist");
 
     const logs = await readLogs();
-    expect(logs).toHaveLength(1);
-    expect(logs[0]).toMatchObject({ promptId: fixture.promptId, isSuccess: 0, errorMessage: "The model `gpt-4o-mini` does not exist" });
+    expect(logs).toHaveLength(2);
+    for (const log of logs) {
+      expect(log).toMatchObject({ promptId: fixture.promptId, isSuccess: 0, errorMessage: "The model `gpt-4o-mini` does not exist" });
+    }
   });
 
   it("keeps the result when the log files cannot be saved, so the paid call is not repeated", async () => {

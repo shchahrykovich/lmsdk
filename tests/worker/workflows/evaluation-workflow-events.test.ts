@@ -48,21 +48,17 @@ describe("EvaluationWorkflow - activity events", () => {
 
     await runWorkflow(fixture.payload);
 
-    const [first, second] = fixture.recordIds;
     const call = { attempt: 1, provider: "openai", model: "gpt-4o-mini" };
     const events = await readEvents();
-    expect(events.map(({ type, recordId }) => [type, recordId])).toEqual([
-      ["started", null],
-      ["call_started", first],
-      ["call_succeeded", first],
-      ["call_started", second],
-      ["call_succeeded", second],
-      ["finished", null],
-    ]);
-    expect(events[0].details).toEqual({ totalCalls: 2 });
-    expect(events[1]).toMatchObject({ versionId: fixture.versionId, details: call });
-    expect(events[2].details).toMatchObject({ attempt: 1, durationMs: expect.any(Number) });
-    expect(events[5].details).toEqual({ durationMs: expect.any(Number) });
+    expect(events[0]).toMatchObject({ type: "started", details: { totalCalls: 2 } });
+    expect(events[events.length - 1]).toMatchObject({ type: "finished", details: { durationMs: expect.any(Number) } });
+    expect(events).toHaveLength(6);
+    for (const recordId of fixture.recordIds) {
+      const callEvents = events.filter((event) => event.recordId === recordId);
+      expect(callEvents.map((event) => event.type)).toEqual(["call_started", "call_succeeded"]);
+      expect(callEvents[0]).toMatchObject({ versionId: fixture.versionId, details: call });
+      expect(callEvents[1].details).toMatchObject({ attempt: 1, durationMs: expect.any(Number) });
+    }
   });
 
   it("numbers each retry, records every error, and marks the evaluation failed at the end", async () => {
@@ -71,18 +67,23 @@ describe("EvaluationWorkflow - activity events", () => {
     await expect(runWorkflow(fixture.payload, { step: retryingStep(3) })).rejects.toThrow("400 Invalid value");
 
     const events = await readEvents();
-    expect(events.map(({ type, details }) => [type, details.attempt ?? null])).toEqual([
-      ["started", null],
-      ["call_started", 1],
-      ["call_failed", 1],
-      ["call_started", 2],
-      ["call_failed", 2],
-      ["call_started", 3],
-      ["call_failed", 3],
-      ["failed", null],
-    ]);
-    expect(events[2].details).toMatchObject({ error: "400 Invalid value: 'disabled'." });
-    expect(events[7].details).toMatchObject({ error: "400 Invalid value: 'disabled'.", durationMs: expect.any(Number) });
+    expect(events[0].type).toBe("started");
+    expect(events[events.length - 1]).toMatchObject({
+      type: "failed",
+      details: { error: "400 Invalid value: 'disabled'.", durationMs: expect.any(Number) },
+    });
+    for (const recordId of fixture.recordIds) {
+      const callEvents = events.filter((event) => event.recordId === recordId);
+      expect(callEvents.map(({ type, details }) => [type, details.attempt])).toEqual([
+        ["call_started", 1],
+        ["call_failed", 1],
+        ["call_started", 2],
+        ["call_failed", 2],
+        ["call_started", 3],
+        ["call_failed", 3],
+      ]);
+      expect(callEvents[1].details).toMatchObject({ error: "400 Invalid value: 'disabled'." });
+    }
     expect(await readState(fixture.payload.evaluationId)).toBe("failed");
   });
 

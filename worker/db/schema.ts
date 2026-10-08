@@ -257,6 +257,8 @@ export const evaluations = sqliteTable("Evaluations", {
   durationMs: integer("durationMs"),
   inputSchema: text("inputSchema").notNull().default("{}"),
   outputSchema: text("outputSchema").notNull().default("{}"),
+  summary: text("summary"),
+  baseEvaluationId: integer("baseEvaluationId"),
   createdAt: integer("createdAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
   updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 }, (table) => ({
@@ -316,6 +318,23 @@ export const evaluationEvents = sqliteTable("EvaluationEvents", {
   createdAt: integer("createdAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 }, (table) => ({
   evaluationIdx: index("EvaluationEvents_tenantId_projectId_evaluationId_idx").on(table.tenantId, table.projectId, table.evaluationId),
+}));
+
+export const evaluationComparisons = sqliteTable("EvaluationComparisons", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  tenantId: integer("tenantId").notNull(),
+  projectId: integer("projectId").notNull(),
+  evaluationId: integer("evaluationId").notNull(),
+  dataSetRecordId: integer("dataSetRecordId").notNull(),
+  leftVersionId: integer("leftVersionId").notNull(),
+  rightVersionId: integer("rightVersionId").notNull(),
+  description: text("description"),
+  score: integer("score"),
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+}, (table) => ({
+  pairUnique: uniqueIndex("EvaluationComparisons_evaluationId_record_pair_key").on(table.evaluationId, table.dataSetRecordId, table.leftVersionId, table.rightVersionId),
+  evaluationIdx: index("EvaluationComparisons_tenantId_projectId_evaluationId_idx").on(table.tenantId, table.projectId, table.evaluationId),
 }));
 
 
@@ -450,6 +469,7 @@ export type NewEvaluationPrompt = typeof evaluationPrompts.$inferInsert;
 export type EvaluationResult = typeof evaluationResults.$inferSelect;
 export type NewEvaluationResult = typeof evaluationResults.$inferInsert;
 export type EvaluationEventRow = typeof evaluationEvents.$inferSelect;
+export type EvaluationComparison = typeof evaluationComparisons.$inferSelect;
 export type NewEvaluationEventRow = typeof evaluationEvents.$inferInsert;
 export type Batch = typeof batches.$inferSelect;
 export type NewBatch = typeof batches.$inferInsert;

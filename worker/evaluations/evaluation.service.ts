@@ -1,16 +1,27 @@
 import { drizzle } from "drizzle-orm/d1";
-import type { Evaluation } from "../db/schema";
+import type { Evaluation, EvaluationComparison } from "../db/schema";
 import { EvaluationRepository, WORKFLOW_START_PENDING } from "./repositories/evaluation.repository";
 import { EvaluationPromptRepository } from "./repositories/evaluation-prompt.repository";
 import { EvaluationResultRepository } from "./repositories/evaluation-result.repository";
 import { EvaluationEventRepository } from "./repositories/evaluation-event.repository";
+import {
+  EvaluationComparisonRepository,
+  type ComparisonKey,
+  type ComparisonReview,
+} from "./repositories/evaluation-comparison.repository";
 import type { EvaluationEvent, NewEvaluationEvent } from "./evaluation-event";
+import {
+  COMPARISON_DESCRIPTION_MAX_LENGTH,
+  COMPARISON_SCORE_MAX,
+  COMPARISON_SCORE_MIN,
+  SUMMARY_MAX_LENGTH,
+} from "./evaluation-review-limits";
 import { DataSetRecordRepository } from "../datasets/dataset-record.repository";
 import { DataSetRepository } from "../datasets/dataset.repository";
 import { PromptRepository } from "../prompts/prompt.repository";
 import { EntityId } from "../shared/entity-id";
 import { ProjectId } from "../shared/project-id";
-import { ClientInputValidationError, ConflictError, conflictOnDuplicate } from "../shared/errors";
+import { ClientInputValidationError, ConflictError, NotFoundError, conflictOnDuplicate } from "../shared/errors";
 import type { EvaluationWorkflowParams } from "../workflows/evaluation.workflow";
 
 export type EvaluationWorkflowBinding = Workflow<EvaluationWorkflowParams>;
@@ -25,6 +36,7 @@ export interface CreateEvaluationInput {
   type: "run" | "comparison";
   datasetId: number;
   prompts: CreateEvaluationPromptInput[];
+  baseEvaluationId?: number;
 }
 
 export interface EvaluationProgress {
@@ -32,6 +44,7 @@ export interface EvaluationProgress {
   succeededCalls: number;
   sentAttempts: number;
   failedAttempts: number;
+  reusedCalls: number;
   lastEventAt: Date | null;
 }
 
@@ -42,6 +55,24 @@ export interface EvaluationActivity {
 
 const ACTIVITY_EVENT_LIMIT = 100;
 
+export interface ComparisonView {
+  recordId: number;
+  leftVersionId: number;
+  rightVersionId: number;
+  description: string | null;
+  score: number | null;
+  updatedAt: Date;
+}
+
+const toComparisonView = (row: EvaluationComparison): ComparisonView => ({
+  recordId: row.dataSetRecordId,
+  leftVersionId: row.leftVersionId,
+  rightVersionId: row.rightVersionId,
+  description: row.description,
+  score: row.score,
+  updatedAt: row.updatedAt,
+});
+
 export class EvaluationService {
   private repository: EvaluationRepository;
   private promptRepository: EvaluationPromptRepository;
@@ -50,6 +81,7 @@ export class EvaluationService {
   private recordRepository: DataSetRecordRepository;
   private datasetRepository: DataSetRepository;
   private promptRepo: PromptRepository;
+  private comparisonRepository: EvaluationComparisonRepository;
 
   constructor(db: D1Database) {
     this.repository = new EvaluationRepository(db);
@@ -59,6 +91,7 @@ export class EvaluationService {
     this.recordRepository = new DataSetRecordRepository(db);
     this.datasetRepository = new DataSetRepository(db);
     this.promptRepo = new PromptRepository(drizzle(db));
+    this.comparisonRepository = new EvaluationComparisonRepository(db);
   }
 
   async getEvaluations(
@@ -226,6 +259,7 @@ export class EvaluationService {
             durationMs: null,
             inputSchema: "{}",
             outputSchema: "{}",
+            baseEvaluationId: input.baseEvaluationId ?? null,
           },
           input.prompts
         ),
@@ -249,6 +283,20 @@ export class EvaluationService {
           `Version ${prompt.versionId} of prompt ${prompt.promptId} not found in this project`
         );
       }
+    }
+
+    if (input.baseEvaluationId !== undefined) {
+      await this.ensureReusableBase(projectId, input.baseEvaluationId, input.datasetId);
+    }
+  }
+
+  private async ensureReusableBase(projectId: ProjectId, baseEvaluationId: number, datasetId: number): Promise<void> {
+    const base = await this.repository.findById(new EntityId(baseEvaluationId, projectId));
+    if (!base) {
+      throw new ClientInputValidationError("Evaluation to reuse results from not found in this project");
+    }
+    if (base.datasetId !== datasetId) {
+      throw new ClientInputValidationError("Evaluation to reuse results from must use the same dataset");
     }
   }
 
@@ -285,7 +333,12 @@ export class EvaluationService {
     const toKey = (prompts: { promptId: number; versionId: number }[]) =>
       prompts.map((prompt) => `${prompt.promptId}:${prompt.versionId}`).sort((a, b) => a.localeCompare(b)).join(",");
     const stored = await this.promptRepository.listByEvaluation(entityId);
-    return existing.datasetId === input.datasetId && existing.type === input.type && toKey(stored) === toKey(input.prompts);
+    return (
+      existing.datasetId === input.datasetId &&
+      existing.type === input.type &&
+      existing.baseEvaluationId === (input.baseEvaluationId ?? null) &&
+      toKey(stored) === toKey(input.prompts)
+    );
   }
 
   private async startWorkflow(entityId: EntityId, workflow: EvaluationWorkflowBinding): Promise<Evaluation> {
@@ -375,6 +428,12 @@ export class EvaluationService {
     await this.eventRepository.create(entityId, event);
   }
 
+  async reuseBaseResults(entityId: EntityId, baseEvaluationId: number, datasetId: number): Promise<number> {
+    const reusedCalls = await this.resultRepository.copyFromEvaluation(entityId, baseEvaluationId, datasetId);
+    await this.eventRepository.create(entityId, { type: "results_reused", details: { reusedCalls, baseEvaluationId } });
+    return reusedCalls;
+  }
+
   async nextCallAttempt(entityId: EntityId, call: { recordId: number; versionId: number }): Promise<number> {
     return (await this.eventRepository.countCallStarts(entityId, call)) + 1;
   }
@@ -396,10 +455,11 @@ export class EvaluationService {
       return undefined;
     }
 
-    const [events, counts, totalCalls] = await Promise.all([
+    const [events, counts, totalCalls, reusedCalls] = await Promise.all([
       this.eventRepository.listLatest(entityId, ACTIVITY_EVENT_LIMIT),
       this.eventRepository.countByType(entityId),
       this.countCalls(entityId, evaluation),
+      this.eventRepository.sumReusedCalls(entityId),
     ]);
 
     return {
@@ -409,6 +469,7 @@ export class EvaluationService {
         succeededCalls: counts.call_succeeded ?? 0,
         sentAttempts: counts.call_started ?? 0,
         failedAttempts: counts.call_failed ?? 0,
+        reusedCalls,
         lastEventAt: events[0]?.createdAt ?? null,
       },
     };
@@ -440,6 +501,46 @@ export class EvaluationService {
     return evaluation;
   }
 
+  async updateSummary(entityId: EntityId, summary: string | null): Promise<Evaluation> {
+    const normalized = summary?.trim() ? summary : null;
+    if (normalized && normalized.length > SUMMARY_MAX_LENGTH) {
+      throw new ClientInputValidationError(`Summary must be at most ${SUMMARY_MAX_LENGTH} characters`);
+    }
+    const evaluation = await this.repository.updateSummary(entityId, normalized);
+    if (!evaluation) {
+      throw new NotFoundError("Evaluation not found");
+    }
+    return evaluation;
+  }
+
+  async saveComparison(entityId: EntityId, key: ComparisonKey, review: ComparisonReview): Promise<ComparisonView> {
+    const evaluation = await this.repository.findById(entityId);
+    if (!evaluation) {
+      throw new NotFoundError("Evaluation not found");
+    }
+    await this.ensureComparablePair(entityId, evaluation, key);
+    const saved = await this.comparisonRepository.upsert(entityId, key, normalizeReview(review));
+    return toComparisonView(saved);
+  }
+
+  private async ensureComparablePair(entityId: EntityId, evaluation: Evaluation, key: ComparisonKey): Promise<void> {
+    if (key.leftVersionId === key.rightVersionId) {
+      throw new ClientInputValidationError("A comparison needs two different prompt versions");
+    }
+    const versionIds = new Set((await this.promptRepository.listByEvaluation(entityId)).map((prompt) => prompt.versionId));
+    if (!versionIds.has(key.leftVersionId) || !versionIds.has(key.rightVersionId)) {
+      throw new ClientInputValidationError("Both prompt versions must be part of this evaluation");
+    }
+    const record = await this.recordRepository.findById(new EntityId(key.recordId, entityId.getProjectId()));
+    if (record?.dataSetId !== (evaluation.datasetId ?? undefined)) {
+      throw new ClientInputValidationError(`Record ${key.recordId} is not in the dataset of this evaluation`);
+    }
+  }
+
+  async listComparisons(entityId: EntityId): Promise<ComparisonView[]> {
+    return (await this.comparisonRepository.listByEvaluation(entityId)).map(toComparisonView);
+  }
+
   async deleteEvaluation(entityId: EntityId): Promise<void> {
     const evaluation = await this.repository.delete(entityId);
 
@@ -458,6 +559,7 @@ export class EvaluationService {
       variables: string;
       outputs: { promptId: number; versionId: number; result: string; durationMs: number | null }[];
     }[];
+    comparisons: ComparisonView[];
   } | null> {
     const evaluation = await this.repository.findById(entityId);
 
@@ -546,6 +648,7 @@ export class EvaluationService {
       evaluation,
       prompts,
       results: recordsData,
+      comparisons: await this.listComparisons(entityId),
     };
   }
 
@@ -556,4 +659,20 @@ export class EvaluationService {
       .filter(Boolean)
       .join("-");
   }
+}
+
+function normalizeReview(review: ComparisonReview): ComparisonReview {
+  const description = review.description?.trim() ? review.description : null;
+  if (description && description.length > COMPARISON_DESCRIPTION_MAX_LENGTH) {
+    throw new ClientInputValidationError(
+      `Description must be at most ${COMPARISON_DESCRIPTION_MAX_LENGTH} characters`
+    );
+  }
+  const { score } = review;
+  if (score !== null && (!Number.isInteger(score) || score < COMPARISON_SCORE_MIN || score > COMPARISON_SCORE_MAX)) {
+    throw new ClientInputValidationError(
+      `Score must be an integer from ${COMPARISON_SCORE_MIN} to ${COMPARISON_SCORE_MAX}, or null`
+    );
+  }
+  return { description, score };
 }

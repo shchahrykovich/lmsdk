@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.1.23",
+    "date": "2026-10-08",
+    "changes": [
+      "Evaluations run up to 10 model calls at the same time, so a run finishes much faster",
+      "Reuse results from an earlier evaluation on the same dataset: prompt versions it already ran are copied, only new versions call the model. Use the Re-run button on an evaluation page",
+      "Result summary: a free-text description of each evaluation, shown on the evaluation page and in the list",
+      "Manual review in the full-screen comparison: a description and a score from -2 to +2 for each record and each pair of prompt versions",
+      "Management API: reuseResultsFrom when starting an evaluation, PATCH the summary, PUT a manual review, and the reviews in GET results"
+    ]
+  },
+  {
     "version": "0.1.22",
     "date": "2026-10-07",
     "changes": [

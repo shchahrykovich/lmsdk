@@ -43,6 +43,14 @@ export class EvaluationEventRepository {
     return Object.fromEntries(rows.map((row) => [row.type, row.total]));
   }
 
+  async sumReusedCalls(evaluationId: EntityId): Promise<number> {
+    const rows = await this.db
+      .select({ details: evaluationEvents.details })
+      .from(evaluationEvents)
+      .where(and(this.byEvaluation(evaluationId), eq(evaluationEvents.type, "results_reused")));
+    return rows.reduce((total, row) => total + (parseDetails(row.details).reusedCalls ?? 0), 0);
+  }
+
   async countCallStarts(
     evaluationId: EntityId,
     call: { recordId: number; versionId: number }

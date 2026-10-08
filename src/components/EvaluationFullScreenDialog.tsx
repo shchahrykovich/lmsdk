@@ -11,6 +11,13 @@ import {
 import { normalizeOutput, generateDiffHtml } from "@/lib/diff-utils";
 import "diff2html/bundles/css/diff2html.min.css";
 import { formatDuration } from "@/lib/format";
+import EvaluationComparisonReviewForm from "@/components/EvaluationComparisonReviewForm";
+import {
+  findReview,
+  isTypingTarget,
+  type ComparisonPairKey,
+  type ComparisonReview,
+} from "@/lib/evaluation-review";
 
 interface Prompt {
   promptId: number;
@@ -40,6 +47,11 @@ interface EvaluationFullScreenDialogProps {
   readonly setCurrentRecordIndex: (index: number) => void;
   readonly results: ResultRow[];
   readonly prompts: Prompt[];
+  readonly comparisons: readonly ComparisonReview[];
+  readonly onSaveComparison: (
+    key: ComparisonPairKey,
+    review: { description: string | null; score: number | null }
+  ) => Promise<void>;
 }
 
 export default function EvaluationFullScreenDialog({
@@ -49,6 +61,8 @@ export default function EvaluationFullScreenDialog({
   setCurrentRecordIndex,
   results,
   prompts,
+  comparisons,
+  onSaveComparison,
 }: EvaluationFullScreenDialogProps): JSX.Element {
   const [activeComparison, setActiveComparison] = useState(0);
 
@@ -62,6 +76,9 @@ export default function EvaluationFullScreenDialog({
     if (!isOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isTypingTarget(e.target)) {
+        return;
+      }
       if (e.key === "ArrowLeft" && currentRecordIndex > 0) {
         setCurrentRecordIndex(currentRecordIndex - 1);
       } else if (e.key === "ArrowRight" && currentRecordIndex < results.length - 1) {
@@ -225,12 +242,14 @@ const formatOutputDuration = (durationMs: number | null): string =>
 
                   const leftContent = normalizeOutput(extractContent(leftOutput.result));
                   const rightContent = normalizeOutput(extractContent(rightOutput.result));
-                  const diffHtml = generateDiffHtml(
-                    leftContent,
-                    rightContent,
-                    `${leftPrompt.promptName} (v${leftPrompt.version})`,
-                    `${rightPrompt.promptName} (v${rightPrompt.version})`
-                  );
+                  const leftLabel = `${leftPrompt.promptName} (v${leftPrompt.version})`;
+                  const rightLabel = `${rightPrompt.promptName} (v${rightPrompt.version})`;
+                  const diffHtml = generateDiffHtml(leftContent, rightContent, leftLabel, rightLabel);
+                  const pairKey: ComparisonPairKey = {
+                    recordId: results[currentRecordIndex].recordId,
+                    leftVersionId: leftPrompt.versionId,
+                    rightVersionId: rightPrompt.versionId,
+                  };
 
                   return (
                     <div className="space-y-2">
@@ -250,6 +269,13 @@ const formatOutputDuration = (durationMs: number | null): string =>
                           {formatOutputDuration(rightOutput.durationMs)}
                         </span>
                       </div>
+                      <EvaluationComparisonReviewForm
+                        key={`${pairKey.recordId}-${pairKey.leftVersionId}-${pairKey.rightVersionId}`}
+                        leftLabel={leftLabel}
+                        rightLabel={rightLabel}
+                        review={findReview(comparisons, pairKey)}
+                        onSave={(review) => onSaveComparison(pairKey, review)}
+                      />
                     </div>
                   );
                 })()}

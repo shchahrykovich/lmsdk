@@ -40,6 +40,9 @@ const activity = (events: ActivityEvent[], progress: Partial<EvaluationActivity[
 describe("describeEvent", () => {
   it("describes the start and the end of the run", () => {
     expect(describeEvent(event({ type: "started", details: { totalCalls: 20 } }), labels)).toBe("Started: 20 calls to run");
+    expect(describeEvent(event({ type: "results_reused", details: { reusedCalls: 12, baseEvaluationId: 7 } }), labels)).toBe(
+      "Reused 12 results from evaluation #7"
+    );
     expect(describeEvent(event({ type: "finished", details: { durationMs: 291779 } }), labels)).toBe("Finished in 4m 52s");
     expect(describeEvent(event({ type: "failed", details: { durationMs: 312000, error: "400 Invalid value" } }), labels))
       .toBe("Failed after 5m 12s: 400 Invalid value");
@@ -69,6 +72,13 @@ describe("describeProgress", () => {
   it("gives the share of finished calls for the progress bar", () => {
     expect(progressPercent(activity([], { succeededCalls: 5 }).progress)).toBe(25);
     expect(progressPercent(activity([], { totalCalls: 0 }).progress)).toBe(0);
+  });
+
+  it("counts results reused from an earlier evaluation as done", () => {
+    const progress = activity([], { succeededCalls: 4, reusedCalls: 10 }).progress;
+
+    expect(describeProgress(progress)).toBe("14 of 20 calls done (10 reused)");
+    expect(progressPercent(progress)).toBe(70);
   });
 });
 

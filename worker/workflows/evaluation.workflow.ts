@@ -14,6 +14,10 @@ import { buildExecuteRequest } from "../execution/prompt-renderer";
 import {drizzle} from "drizzle-orm/d1";
 import {EntityId} from "../shared/entity-id";
 import {ProjectId} from "../shared/project-id";
+import { runWithConcurrency } from "../shared/run-with-concurrency";
+
+const EVALUATION_CONCURRENCY = 10;
+const RECORD_BATCH_SIZE = 10;
 
 export interface EvaluationWorkflowDeps {
   db: D1Database;
@@ -128,165 +132,50 @@ async function runEvaluationSteps(
     promptIds: evaluationPrompts.map((p) => p.promptId),
   });
 
-  const outputSchema: { fields: Record<string, { type: string }> } = { fields: {} };
-  let lastRecordId: number | undefined;
+  const { baseEvaluationId, datasetId } = evaluation;
+  if (baseEvaluationId) {
+    await step.do("reuse-base-results", async () => {
+      const reused = await evaluationService.reuseBaseResults(evaluationId, baseEvaluationId, datasetId);
+      console.log("[EvaluationWorkflow] Reused results from the base evaluation", { baseEvaluationId, reused });
+    });
+  }
+
+  const outputSchema: OutputSchema = { fields: {} };
+  const datasetEntityId = new EntityId(datasetId, projectId);
   let totalRecordsProcessed = 0;
   let totalExecutions = 0;
 
-  const datasetEntityId = new EntityId(evaluation.datasetId, projectId);
+  async function* plannedCalls(): AsyncGenerator<PlannedCall> {
+    let lastRecordId: number | undefined;
+    while (true) {
+      const records = await recordRepository.listBatchByDataSet(datasetEntityId, RECORD_BATCH_SIZE, lastRecordId);
+      console.log("[EvaluationWorkflow] Retrieved dataset records batch", { count: records.length, afterId: lastRecordId });
+      if (records.length === 0) return;
 
-  while (true) {
-    const records = await recordRepository.listBatchByDataSet(
-      datasetEntityId,
-      10,
-      lastRecordId
-    );
-
-    console.log("[EvaluationWorkflow] Retrieved dataset records batch", {
-      count: records.length,
-      afterId: lastRecordId,
-    });
-
-    if (records.length === 0) {
-      console.log("[EvaluationWorkflow] No more records to process");
-      break;
-    }
-
-    totalRecordsProcessed += records.length;
-
-    for (const record of records) {
-      const variables = parseVariables(record.variables);
-      console.log("[EvaluationWorkflow] Processing record", {
-        recordId: record.id,
-        variableKeys: Object.keys(variables),
-      });
-
-      for (const evaluationPrompt of evaluationPrompts) {
-        totalExecutions++;
-        console.log("[EvaluationWorkflow] Executing prompt for record", {
-          recordId: record.id,
-          promptId: evaluationPrompt.promptId,
-          versionId: evaluationPrompt.versionId,
-          executionNumber: totalExecutions,
-        });
-
-        await step.do(
-          `execute-${record.id}-${evaluationPrompt.promptId}-${evaluationPrompt.versionId}`,
-          async () => {
-            console.log("[EvaluationWorkflow] Step: execute prompt", {
-              recordId: record.id,
-              promptId: evaluationPrompt.promptId,
-              versionId: evaluationPrompt.versionId,
-            });
-
-            const version = await promptService.getPromptVersionById(
-							projectId,
-              evaluationPrompt.versionId
-            );
-
-            if (!version) {
-              console.error("[EvaluationWorkflow] Prompt version not found", {
-                versionId: evaluationPrompt.versionId,
-              });
-              throw new Error("Prompt version not found");
-            }
-
-            console.log("[EvaluationWorkflow] Retrieved prompt version", {
-              versionId: version.id,
-              provider: version.provider,
-              model: version.model,
-              slug: version.slug,
-            });
-
-            const promptBody = parsePromptBody(version.body);
-            if (!promptBody || promptBody.messages.length === 0) {
-              console.error("[EvaluationWorkflow] Prompt body is missing messages");
-              throw new Error("Prompt body is missing messages");
-            }
-
-            console.log("[EvaluationWorkflow] Parsed prompt body", {
-              messageCount: promptBody.messages.length,
-              hasResponseFormat: !!promptBody.response_format,
-              proxy: promptBody.proxy,
-            });
-
-            console.log("[EvaluationWorkflow] Executing prompt with provider", {
-              provider: version.provider,
-              model: version.model,
-            });
-
-            const call = {
-              recordId: record.id,
-              promptId: evaluationPrompt.promptId,
-              versionId: evaluationPrompt.versionId,
-            };
-            const attempt = await nextAttemptSafely(evaluationService, evaluationId, call);
-            await recordEventSafely(() => evaluationService.recordEvent(evaluationId, {
-              type: "call_started",
-              ...call,
-              details: { attempt, provider: version.provider, model: version.model },
-            }));
-
-            const logContext = {
-              tenantId: payload.tenantId,
-              projectId: payload.projectId,
-              promptId: evaluationPrompt.promptId,
-              version: version.version,
-            };
-            const result = await runCallWithEvents({ evaluationService, evaluationId, call, attempt }, () =>
-              executePromptWithLog(deps, logContext, version.provider, buildExecuteRequest(version, promptBody, variables))
-            );
-
-            console.log("[EvaluationWorkflow] Prompt execution completed", {
-              model: result.model,
-              durationMs: result.duration_ms,
-              hasUsage: !!result.usage,
-              contentLength: result.content.length,
-            });
-
-            const resultPayload = {
-              content: result.content,
-              model: result.model,
-            };
-
-            await resultRepository.create({
-              tenantId: payload.tenantId,
-              projectId: payload.projectId,
-              evaluationId: payload.evaluationId,
-              dataSetRecordId: record.id,
-              promptId: evaluationPrompt.promptId,
-              versionId: evaluationPrompt.versionId,
-              result: JSON.stringify(resultPayload),
-              durationMs: result.duration_ms ?? null,
-              stats: JSON.stringify({ usage: result.usage }),
-            });
-
-            console.log("[EvaluationWorkflow] Saved evaluation result", {
-              recordId: record.id,
-              promptId: evaluationPrompt.promptId,
-              versionId: evaluationPrompt.versionId,
-            });
-
-            mergeOutputSchema(outputSchema, result.content, promptBody.response_format);
-
-            console.log("[EvaluationWorkflow] Merged output schema", {
-              fieldCount: Object.keys(outputSchema.fields).length,
-            });
-
-						const entityId = new EntityId(payload.evaluationId, projectId);
-            await evaluationService.updateOutputSchema(
-							entityId,
-              JSON.stringify(outputSchema)
-            );
-
-            console.log("[EvaluationWorkflow] Updated output schema");
-          }
-        );
+      totalRecordsProcessed += records.length;
+      const stored = baseEvaluationId
+        ? await step.do(`stored-results-after-${lastRecordId ?? 0}`, async () =>
+            await describeStoredResults(promptService, resultRepository, evaluationId, records.map((record) => record.id))
+          )
+        : [];
+      const storedKeys = new Set(stored.map((item) => callKey(item.recordId, item.versionId)));
+      for (const item of stored) {
+        mergeFields(outputSchema, item.fields);
       }
-    }
 
-    lastRecordId = records[records.length - 1]?.id;
+      yield* callsToRun(records, evaluationPrompts, storedKeys);
+      lastRecordId = records[records.length - 1]?.id;
+    }
   }
+
+  await runWithConcurrency(plannedCalls(), EVALUATION_CONCURRENCY, async (planned) => {
+    totalExecutions++;
+    const fields = await step.do(
+      `execute-${planned.recordId}-${planned.promptId}-${planned.versionId}`,
+      async () => await executeCall(deps, payload, { promptService, evaluationService, resultRepository, evaluationId }, planned)
+    );
+    mergeFields(outputSchema, fields);
+  });
 
   console.log("[EvaluationWorkflow] Completed all executions", {
     totalRecordsProcessed,
@@ -304,6 +193,7 @@ async function runEvaluationSteps(
 
 		const projectId = new ProjectId(payload.projectId, payload.tenantId, payload.userId);
 		const entityId = new EntityId(payload.evaluationId, projectId);
+    await evaluationService.updateOutputSchema(entityId, JSON.stringify(outputSchema));
     await evaluationService.finishEvaluation(
 			entityId,
       durationMs
@@ -319,6 +209,126 @@ async function runEvaluationSteps(
     totalExecutions,
   });
 }
+
+interface PlannedCall {
+  recordId: number;
+  variables: Record<string, unknown>;
+  promptId: number;
+  versionId: number;
+}
+
+interface CallServices {
+  promptService: PromptService;
+  evaluationService: EvaluationService;
+  resultRepository: EvaluationResultRepository;
+  evaluationId: EntityId;
+}
+
+type OutputFields = Record<string, string>;
+
+interface StoredCallFields {
+  recordId: number;
+  versionId: number;
+  fields: OutputFields;
+}
+
+const callKey = (recordId: number, versionId: number): string => `${recordId}:${versionId}`;
+
+const callsToRun = (
+  records: { id: number; variables: string }[],
+  evaluationPrompts: { promptId: number; versionId: number }[],
+  storedKeys: Set<string>
+): PlannedCall[] =>
+  records.flatMap((record) => {
+    const variables = parseVariables(record.variables);
+    return evaluationPrompts
+      .filter((prompt) => !storedKeys.has(callKey(record.id, prompt.versionId)))
+      .map((prompt) => ({ recordId: record.id, variables, promptId: prompt.promptId, versionId: prompt.versionId }));
+  });
+
+async function loadPromptBody(promptService: PromptService, projectId: ProjectId, versionId: number) {
+  const version = await promptService.getPromptVersionById(projectId, versionId);
+  if (!version) {
+    console.error("[EvaluationWorkflow] Prompt version not found", { versionId });
+    throw new Error("Prompt version not found");
+  }
+  const promptBody = parsePromptBody(version.body);
+  if (!promptBody || promptBody.messages.length === 0) {
+    console.error("[EvaluationWorkflow] Prompt body is missing messages");
+    throw new Error("Prompt body is missing messages");
+  }
+  return { version, promptBody };
+}
+
+async function executeCall(
+  deps: EvaluationWorkflowDeps,
+  payload: EvaluationWorkflowParams,
+  { promptService, evaluationService, resultRepository, evaluationId }: CallServices,
+  planned: PlannedCall
+): Promise<OutputFields> {
+  const { version, promptBody } = await loadPromptBody(promptService, evaluationId.getProjectId(), planned.versionId);
+
+  const call = { recordId: planned.recordId, promptId: planned.promptId, versionId: planned.versionId };
+  const attempt = await nextAttemptSafely(evaluationService, evaluationId, call);
+  await recordEventSafely(() => evaluationService.recordEvent(evaluationId, {
+    type: "call_started",
+    ...call,
+    details: { attempt, provider: version.provider, model: version.model },
+  }));
+
+  const logContext = {
+    tenantId: payload.tenantId,
+    projectId: payload.projectId,
+    promptId: planned.promptId,
+    version: version.version,
+  };
+  const result = await runCallWithEvents({ evaluationService, evaluationId, call, attempt }, () =>
+    executePromptWithLog(deps, logContext, version.provider, buildExecuteRequest(version, promptBody, planned.variables))
+  );
+
+  await resultRepository.create({
+    tenantId: payload.tenantId,
+    projectId: payload.projectId,
+    evaluationId: payload.evaluationId,
+    dataSetRecordId: planned.recordId,
+    promptId: planned.promptId,
+    versionId: planned.versionId,
+    result: JSON.stringify({ content: result.content, model: result.model }),
+    durationMs: result.duration_ms ?? null,
+    stats: JSON.stringify({ usage: result.usage }),
+  });
+
+  console.log("[EvaluationWorkflow] Saved evaluation result", { ...call, durationMs: result.duration_ms });
+  return outputFields(result.content, promptBody.response_format);
+}
+
+async function describeStoredResults(
+  promptService: PromptService,
+  resultRepository: EvaluationResultRepository,
+  evaluationId: EntityId,
+  recordIds: number[]
+): Promise<StoredCallFields[]> {
+  const stored = await resultRepository.listForRecords(evaluationId, recordIds);
+  const responseFormats = new Map<number, ResponseFormat | undefined>();
+  for (const versionId of new Set(stored.map((item) => item.versionId))) {
+    const { promptBody } = await loadPromptBody(promptService, evaluationId.getProjectId(), versionId);
+    responseFormats.set(versionId, promptBody.response_format);
+  }
+  return stored.map((item) => ({
+    recordId: item.dataSetRecordId,
+    versionId: item.versionId,
+    fields: outputFields(storedContent(item.result), responseFormats.get(item.versionId)),
+  }));
+}
+
+const storedContent = (raw: string): string => {
+  try {
+    const parsed = JSON.parse(raw) as { content?: unknown } | null;
+    return typeof parsed?.content === "string" ? parsed.content : "";
+  } catch {
+    return "";
+  }
+};
 
 export class EvaluationWorkflow extends WorkflowEntrypoint<Env, EvaluationWorkflowParams> {
   async run(
@@ -424,30 +434,31 @@ const parseVariables = (rawVariables: string): Record<string, unknown> => {
   }
 };
 
-const mergeOutputSchema = (
-  schema: { fields: Record<string, { type: string }> },
-  content: string,
-  responseFormat?: ResponseFormat
-) => {
+interface OutputSchema {
+  fields: Record<string, { type: string }>;
+}
+
+const outputFields = (content: string, responseFormat?: ResponseFormat): OutputFields => {
   const parsed = parseOutputContent(content, responseFormat);
   if (!parsed) {
-    mergeField(schema, "value", "string");
-    return;
+    return { value: "string" };
   }
 
   if (Array.isArray(parsed)) {
-    mergeField(schema, "value", "array");
-    return;
+    return { value: "array" };
   }
 
-  if (parsed && typeof parsed === "object") {
-    for (const [key, value] of Object.entries(parsed)) {
-      mergeField(schema, key, inferType(value));
-    }
-    return;
+  if (typeof parsed === "object") {
+    return Object.fromEntries(Object.entries(parsed).map(([key, value]) => [key, inferType(value)]));
   }
 
-  mergeField(schema, "value", inferType(parsed));
+  return { value: inferType(parsed) };
+};
+
+const mergeFields = (schema: OutputSchema, fields: OutputFields) => {
+  for (const [key, type] of Object.entries(fields)) {
+    mergeField(schema, key, type);
+  }
 };
 
 const parseOutputContent = (
@@ -471,7 +482,7 @@ const inferType = (value: unknown): string => {
 };
 
 const mergeField = (
-  schema: { fields: Record<string, { type: string }> },
+  schema: OutputSchema,
   key: string,
   type: string
 ) => {

@@ -8,7 +8,7 @@ import type { BatchWorkflowParams } from "../batches/batch.service";
 import type { EntityId } from "../shared/entity-id";
 import { providerConfigFromEnv } from "../providers/provider-factory";
 
-const NATIVE_DELAYS_SECONDS = [30, 60, 120, 300, 600, 900];
+const NATIVE_DELAYS_SECONDS = [30, 60, 120, 300];
 const PACED_DELAYS_SECONDS = [15, 30, 60, 120];
 const NO_RETRY = { retries: { limit: 0, delay: 1000 } };
 const FAIL_BATCH_WAIT_MS = 60_000;

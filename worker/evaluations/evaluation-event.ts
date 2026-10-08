@@ -3,6 +3,7 @@ export type EvaluationEventType =
   | "call_started"
   | "call_succeeded"
   | "call_failed"
+  | "results_reused"
   | "finished"
   | "failed";
 
@@ -13,6 +14,8 @@ export interface EvaluationEventDetails {
   model?: string;
   durationMs?: number;
   error?: string;
+  reusedCalls?: number;
+  baseEvaluationId?: number;
 }
 
 export interface NewEvaluationEvent {

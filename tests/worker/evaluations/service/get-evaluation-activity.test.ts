@@ -46,6 +46,7 @@ describe("EvaluationService.getEvaluationActivity", () => {
       succeededCalls: 0,
       sentAttempts: 2,
       failedAttempts: 1,
+      reusedCalls: 0,
       lastEventAt: new Date(1790423032 * 1000),
     });
   });
@@ -55,8 +56,19 @@ describe("EvaluationService.getEvaluationActivity", () => {
 
     expect(activity).toEqual({
       events: [],
-      progress: { totalCalls: 6, succeededCalls: 0, sentAttempts: 0, failedAttempts: 0, lastEventAt: null },
+      progress: { totalCalls: 6, succeededCalls: 0, sentAttempts: 0, failedAttempts: 0, reusedCalls: 0, lastEventAt: null },
     });
+  });
+
+  it("counts results reused from a base evaluation as reused calls", async () => {
+    await insertEvent(1, "started", 1790423020, '{"totalCalls":6}');
+    await insertEvent(2, "results_reused", 1790423021, '{"reusedCalls":3,"baseEvaluationId":7}');
+    await insertEvent(3, "call_succeeded", 1790423022, '{"attempt":1}');
+
+    const activity = await service.getEvaluationActivity(evaluationOf(1));
+
+    expect(activity?.progress).toMatchObject({ totalCalls: 6, succeededCalls: 1, reusedCalls: 3 });
+    expect(activity?.events[1]).toMatchObject({ type: "results_reused", details: { reusedCalls: 3, baseEvaluationId: 7 } });
   });
 
   it("returns undefined for an evaluation of another tenant", async () => {
