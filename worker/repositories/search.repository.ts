@@ -25,15 +25,33 @@ export class SearchRepository {
    * @param record - The search record to insert
    */
   async insert(record: SearchRecord): Promise<void> {
-    const { variableValue, logId, variablePath, tenantId, projectId, promptId, createdAt } = record;
+    await this.db.batch([this.searchRowStatement(record), this.variablePathStatement(record)]);
+  }
 
-    await this.db
+  private searchRowStatement(record: SearchRecord): D1PreparedStatement {
+    const { variableValue, logId, variablePath, tenantId, projectId, promptId, createdAt } = record;
+    return this.db
       .prepare(
         `INSERT INTO PromptExecutionLogsForSearch (variableValue, logId, variablePath, tenantId, projectId, promptId, createdAt)
          VALUES (?, ?, ?, ?, ?, ?, ?)`
       )
-      .bind(variableValue, logId, variablePath, tenantId, projectId, promptId, createdAt)
-      .run();
+      .bind(variableValue, logId, variablePath, tenantId, projectId, promptId, createdAt);
+  }
+
+  private variablePathStatement(record: SearchRecord): D1PreparedStatement {
+    return this.db
+      .prepare(
+        `INSERT OR IGNORE INTO PromptExecutionLogVariablePaths (tenantId, projectId, variablePath)
+         VALUES (?, ?, ?)`
+      )
+      .bind(record.tenantId, record.projectId, record.variablePath);
+  }
+
+  private uniqueVariablePathStatements(records: SearchRecord[]): D1PreparedStatement[] {
+    const unique = new Map(
+      records.map((record) => [JSON.stringify([record.tenantId, record.projectId, record.variablePath]), record])
+    );
+    return [...unique.values()].map((record) => this.variablePathStatement(record));
   }
 
   /**
@@ -44,18 +62,10 @@ export class SearchRepository {
     try {
       if (records.length === 0) return;
 
-      // Use a transaction for batch inserts
-      const statements = records.map((record) => {
-        const { variableValue, logId, variablePath, tenantId, projectId, promptId, createdAt } = record;
-        return this.db
-            .prepare(
-                `INSERT INTO PromptExecutionLogsForSearch (variableValue, logId, variablePath, tenantId, projectId, promptId, createdAt)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`
-            )
-            .bind(variableValue, logId, variablePath, tenantId, projectId, promptId, createdAt);
-      });
-
-      await this.db.batch(statements);
+      await this.db.batch([
+        ...records.map((record) => this.searchRowStatement(record)),
+        ...this.uniqueVariablePathStatements(records),
+      ]);
     } catch (error) {
       console.log(error);
     }
@@ -111,13 +121,20 @@ export class SearchRepository {
    * @param projectId - Project ID to delete records for
    */
   async deleteByProject(tenantId: number, projectId: number): Promise<void> {
-    await this.db
-      .prepare(
-        `DELETE FROM PromptExecutionLogsForSearch
-         WHERE projectId = ? AND tenantId = ?`
-      )
-      .bind(projectId, tenantId)
-      .run();
+    await this.db.batch([
+      this.db
+        .prepare(
+          `DELETE FROM PromptExecutionLogsForSearch
+           WHERE projectId = ? AND tenantId = ?`
+        )
+        .bind(projectId, tenantId),
+      this.db
+        .prepare(
+          `DELETE FROM PromptExecutionLogVariablePaths
+           WHERE tenantId = ? AND projectId = ?`
+        )
+        .bind(tenantId, projectId),
+    ]);
   }
 
   /**
@@ -132,8 +149,8 @@ export class SearchRepository {
   ): Promise<string[]> {
     const result = await this.db
       .prepare(
-        `SELECT DISTINCT variablePath
-         FROM PromptExecutionLogsForSearch
+        `SELECT variablePath
+         FROM PromptExecutionLogVariablePaths
          WHERE tenantId = ? AND projectId = ?
          ORDER BY variablePath ASC`
       )

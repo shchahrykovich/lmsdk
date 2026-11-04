@@ -31,6 +31,7 @@ const withLongContext = (base: TokenPrices, thresholdTokens: number, long: Token
 
 const OPENAI_LONG_CONTEXT = 272_000;
 const GEMINI_LONG_CONTEXT = 200_000;
+const CLAUDE_HAIKU_LONG_CONTEXT = 100_000;
 
 const openAILong = (standard: [TokenPrices, TokenPrices], batch: [TokenPrices, TokenPrices] | null): ModelPrice[] => [
   {
@@ -122,6 +123,16 @@ const ANTHROPIC_PRICES: Record<string, ModelPrice[]> = {
   "claude-opus-5": anthropic(5, 0.5, 25),
   "claude-sonnet-5-5": anthropic(2, 0.2, 10),
   "claude-sonnet-5": anthropic(2, 0.2, 10),
+  "claude-haiku-5-5": [
+    {
+      standard: withLongContext(flat(0.1, 0.01, 0.5, 0.125), CLAUDE_HAIKU_LONG_CONTEXT, flat(0.5, 0.05, 2.5, 0.625)),
+      batch: withLongContext(
+        flat(0.05, 0.005, 0.25, 0.0625),
+        CLAUDE_HAIKU_LONG_CONTEXT,
+        flat(0.25, 0.025, 1.25, 0.3125)
+      ),
+    },
+  ],
   "claude-haiku-4-5": anthropic(1, 0.1, 5),
 };
 

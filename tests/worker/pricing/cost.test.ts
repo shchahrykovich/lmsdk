@@ -77,6 +77,49 @@ describe("computeCost", () => {
     expect(cost).toBeCloseTo(0.4 * 1 + 0.5 * 0.1 + 0.1 * 1.25, 9);
   });
 
+  describe("Claude Haiku 5.5", () => {
+    const haikuCost = (tier: "standard" | "batch", promptTokens: number, cachedTokens = 0, cacheWriteTokens = 0) =>
+      computeCost({
+        provider: "anthropic",
+        model: "claude-haiku-5-5",
+        tier,
+        usage: {
+          prompt_tokens: promptTokens,
+          completion_tokens: 1_000_000,
+          total_tokens: promptTokens + 1_000_000,
+          cached_tokens: cachedTokens,
+          cache_creation_tokens: cacheWriteTokens,
+        },
+      });
+
+    it("uses the lower prices for a prompt of exactly 100,000 tokens", () => {
+      expect(haikuCost("standard", 100_000)).toBeCloseTo(0.1 * 0.1 + 0.5, 9);
+    });
+
+    it("uses the higher prices for a prompt over 100,000 tokens", () => {
+      expect(haikuCost("standard", 100_001)).toBeCloseTo(0.100001 * 0.5 + 2.5, 9);
+    });
+
+    it("counts cache reads and cache writes toward the 100,000 token threshold", () => {
+      expect(haikuCost("standard", 200_000, 100_000, 50_000)).toBeCloseTo(
+        0.05 * 0.5 + 0.1 * 0.05 + 0.05 * 0.625 + 2.5,
+        9
+      );
+    });
+
+    it("prices cache reads and cache writes at the lower rates under the threshold", () => {
+      expect(haikuCost("standard", 100_000, 50_000, 25_000)).toBeCloseTo(
+        0.025 * 0.1 + 0.05 * 0.01 + 0.025 * 0.125 + 0.5,
+        9
+      );
+    });
+
+    it("charges half the price on the batch tier on both sides of the threshold", () => {
+      expect(haikuCost("batch", 100_000)).toBeCloseTo(0.1 * 0.05 + 0.25, 9);
+      expect(haikuCost("batch", 200_000)).toBeCloseTo(0.2 * 0.25 + 1.25, 9);
+    });
+  });
+
   it("returns undefined for a model that is not in the price table", () => {
     const usage = { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 };
 

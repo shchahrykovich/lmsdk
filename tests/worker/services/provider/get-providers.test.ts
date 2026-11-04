@@ -58,6 +58,14 @@ describe("ProviderService - getProviders", () => {
     expect(anthropic!.models[0]).toEqual({ id: "claude-opus-5-5", name: "Claude Opus 5.5" });
   });
 
+  it("offers Claude Haiku 5.5 directly before Claude Haiku 4.5", () => {
+    const anthropic = providerService.getProviders().find((p) => p.id === "anthropic");
+    const ids = anthropic!.models.map((model) => model.id);
+
+    expect(anthropic!.models).toContainEqual({ id: "claude-haiku-5-5", name: "Claude Haiku 5.5" });
+    expect(ids.indexOf("claude-haiku-5-5")).toBe(ids.indexOf("claude-haiku-4-5") - 1);
+  });
+
   it("should offer the curated OpenRouter models in order", () => {
     const openRouter = providerService.getProviders().find((p) => p.id === "openrouter");
 

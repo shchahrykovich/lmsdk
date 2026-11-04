@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real, index, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, index, uniqueIndex, primaryKey } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
 // Tenants table
@@ -208,6 +208,14 @@ export const promptExecutionLogs = sqliteTable("PromptExecutionLogs", {
   traceIdIdx: index("PromptExecutionLogs_traceId_idx").on(table.tenantId, table.projectId, table.traceId),
 }));
 
+export const promptExecutionLogVariablePaths = sqliteTable("PromptExecutionLogVariablePaths", {
+  tenantId: integer("tenantId").notNull(),
+  projectId: integer("projectId").notNull(),
+  variablePath: text("variablePath").notNull(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.tenantId, table.projectId, table.variablePath] }),
+}));
+
 // DataSets table
 export const dataSets = sqliteTable("DataSets", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -303,6 +311,7 @@ export const evaluationResults = sqliteTable("EvaluationResults", {
   dataSetRecordIdIdx: index("EvaluationResults_dataSetRecordId_idx").on(table.dataSetRecordId),
   tenantIdIdx: index("EvaluationResults_tenantId_idx").on(table.tenantId),
   projectIdTenantIdIdx: index("EvaluationResults_projectId_tenantId_idx").on(table.projectId, table.tenantId),
+  tenantIdProjectIdEvaluationIdIdx: index("EvaluationResults_tenantId_projectId_evaluationId_idx").on(table.tenantId, table.projectId, table.evaluationId),
 }));
 
 export const evaluationEvents = sqliteTable("EvaluationEvents", {
