@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { APIConnectionTimeoutError } from "openai/core/error";
+import { APIConnectionTimeoutError, APIError } from "openai/core/error";
 import type {
   ChatCompletion,
   ChatCompletionCreateParamsNonStreaming,
@@ -15,6 +15,7 @@ import { ProviderTimeoutError } from "./provider-timeout-error";
 export const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 export const OPENROUTER_TIMEOUT_MS = 240_000;
 export const OPENROUTER_MAX_RETRIES = 0;
+const UPSTREAM_REASON_MAX_LENGTH = 500;
 
 type OpenRouterSettings = NonNullable<ExecuteRequest["openrouter_settings"]>;
 
@@ -26,7 +27,31 @@ type OpenRouterRequest = ChatCompletionCreateParamsNonStreaming & {
 interface OpenRouterErrorObject {
   code?: number | string;
   message?: string;
+  metadata?: { provider_name?: string; raw?: unknown };
 }
+
+interface UpstreamErrorBody {
+  error?: { message?: unknown };
+  message?: unknown;
+}
+
+const parseIfJson = (text: string): unknown => {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+};
+
+const rawAsText = (raw: unknown): string => (typeof raw === "string" ? raw : JSON.stringify(raw));
+
+const upstreamReason = (raw: unknown): string => {
+  const parsed = typeof raw === "string" ? parseIfJson(raw) : raw;
+  const body = (parsed ?? {}) as UpstreamErrorBody;
+  const message = body.error?.message ?? body.message;
+  const reason = typeof message === "string" ? message : rawAsText(raw);
+  return reason.slice(0, UPSTREAM_REASON_MAX_LENGTH);
+};
 
 type OpenRouterChoice = Omit<ChatCompletion["choices"][number], "finish_reason"> & {
   finish_reason: string | null;
@@ -102,7 +127,19 @@ export class OpenRouterProvider extends AIProvider {
     if (error instanceof APIConnectionTimeoutError) {
       return new ProviderTimeoutError("OpenRouter", OPENROUTER_TIMEOUT_MS);
     }
+    if (error instanceof APIError) {
+      this.addUpstreamReason(error);
+    }
     return error;
+  }
+
+  private addUpstreamReason(error: { message: string; error?: OpenRouterErrorObject }): void {
+    const metadata = error.error?.metadata;
+    if (metadata?.raw === undefined || metadata.raw === null) {
+      return;
+    }
+    const providerName = metadata.provider_name ? ` (${metadata.provider_name})` : "";
+    error.message = `${error.message}${providerName}: ${upstreamReason(metadata.raw)}`;
   }
 
   private buildResult(

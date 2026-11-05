@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { APIConnectionTimeoutError } from "openai/core/error";
+import { APIConnectionTimeoutError, APIError } from "openai/core/error";
 import { OpenRouterProvider } from "../../../worker/providers/openrouter-provider";
 import { ProviderTimeoutError } from "../../../worker/providers/provider-timeout-error";
 import type { ExecuteRequest } from "../../../worker/providers/base-provider";
@@ -370,6 +370,85 @@ describe("OpenRouterProvider", () => {
       await expect(provider.execute(baseRequest())).rejects.toBe(apiError);
 
       expect(logger.errors).toEqual([{ durationMs: expect.any(Number), errorMessage: "402 Insufficient credits" }]);
+    });
+
+    describe("when the upstream provider rejects the request", () => {
+      const GRAMMAR_ERROR = "The compiled grammar is too large, which would cause performance issues.";
+
+      const rejectionWith = (metadata?: Record<string, unknown>) =>
+        new APIError(
+          400,
+          { code: 400, message: "Provider returned error", ...(metadata ? { metadata } : {}) },
+          undefined,
+          new Headers()
+        );
+
+      it("adds the provider name and reason to the error it logs and throws", async () => {
+        const rejection = rejectionWith({
+          provider_name: "Anthropic",
+          raw: JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: GRAMMAR_ERROR } }),
+        });
+        mockChatCreate.mockRejectedValue(rejection);
+
+        const failure = await provider.execute(baseRequest()).catch((error: unknown) => error);
+
+        const expected = `400 Provider returned error (Anthropic): ${GRAMMAR_ERROR}`;
+        expect(failure).toBe(rejection);
+        expect(failure).toMatchObject({ status: 400, message: expected });
+        expect(logger.errors).toEqual([{ durationMs: expect.any(Number), errorMessage: expected }]);
+      });
+
+      it("reads the reason from a raw body that has a top-level message", async () => {
+        mockChatCreate.mockRejectedValue(
+          rejectionWith({ provider_name: "Amazon Bedrock", raw: JSON.stringify({ message: GRAMMAR_ERROR }) })
+        );
+
+        await expect(provider.execute(baseRequest())).rejects.toThrow(
+          `400 Provider returned error (Amazon Bedrock): ${GRAMMAR_ERROR}`
+        );
+      });
+
+      it("reads the reason from a raw value that is already an object", async () => {
+        mockChatCreate.mockRejectedValue(
+          rejectionWith({ provider_name: "Azure", raw: { error: { message: GRAMMAR_ERROR } } })
+        );
+
+        await expect(provider.execute(baseRequest())).rejects.toThrow(
+          `400 Provider returned error (Azure): ${GRAMMAR_ERROR}`
+        );
+      });
+
+      it("uses a raw value that is not JSON as the reason", async () => {
+        mockChatCreate.mockRejectedValue(rejectionWith({ provider_name: "Google", raw: "upstream rejected the schema" }));
+
+        await expect(provider.execute(baseRequest())).rejects.toThrow(
+          "400 Provider returned error (Google): upstream rejected the schema"
+        );
+      });
+
+      it("limits a very long raw value to 500 characters", async () => {
+        mockChatCreate.mockRejectedValue(rejectionWith({ provider_name: "Google", raw: "x".repeat(2000) }));
+
+        await provider.execute(baseRequest()).catch(() => undefined);
+
+        expect(logger.errors[0].errorMessage).toBe(`400 Provider returned error (Google): ${"x".repeat(500)}`);
+      });
+
+      it("leaves the message unchanged when OpenRouter sends no raw value", async () => {
+        mockChatCreate.mockRejectedValue(rejectionWith());
+
+        await provider.execute(baseRequest()).catch(() => undefined);
+
+        expect(logger.errors[0].errorMessage).toBe("400 Provider returned error");
+      });
+
+      it("omits the provider name when OpenRouter does not send one", async () => {
+        mockChatCreate.mockRejectedValue(rejectionWith({ raw: GRAMMAR_ERROR }));
+
+        await provider.execute(baseRequest()).catch(() => undefined);
+
+        expect(logger.errors[0].errorMessage).toBe(`400 Provider returned error: ${GRAMMAR_ERROR}`);
+      });
     });
 
     it("never writes the API key into a logged payload", async () => {
